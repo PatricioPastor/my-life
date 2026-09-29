@@ -131,6 +131,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* The landing is a fixed stage: no elastic overscroll or scroll chaining anywhere. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
     margin: 0;
