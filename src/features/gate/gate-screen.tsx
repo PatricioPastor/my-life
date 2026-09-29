@@ -70,11 +70,11 @@ export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }
             </label>
             <div
               className={cn(
-                "field relative flex w-[520px] max-w-full items-center gap-[14px] border-b border-ink-faint pb-[10px]",
+                "field relative flex w-[320px] max-w-full items-center gap-[10px] border-b border-ink-faint pb-2 sm:w-[520px] sm:gap-[14px] sm:pb-[10px]",
                 refused && "shake",
               )}
             >
-              <span aria-hidden="true" className="font-display text-[44px] leading-none font-black text-signal">
+              <span aria-hidden="true" className="font-display text-[26px] leading-none font-black text-signal sm:text-[44px]">
                 @
               </span>
               <input
@@ -90,13 +90,13 @@ export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }
                 maxLength={30}
                 disabled={status === "checking"}
                 aria-describedby="gate-status"
-                className="h-14 min-w-0 grow border-0 bg-transparent p-0 font-display text-[44px] leading-none font-black text-ink caret-signal outline-none"
+                className="h-11 min-w-0 grow border-0 bg-transparent p-0 font-display text-[26px] leading-none font-black text-ink caret-signal outline-none sm:h-14 sm:text-[44px]"
               />
               <button
                 type="submit"
                 aria-label="Enter"
                 disabled={!handle || status === "checking"}
-                className="press flex h-14 w-14 shrink-0 items-center justify-center border border-signal text-ink"
+                className="press flex h-11 w-11 shrink-0 items-center justify-center border border-signal text-ink sm:h-14 sm:w-14"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M2 8h11M9 3.5L13.5 8 9 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
@@ -129,7 +129,7 @@ export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }
         ) : (
           <div className="turn flex flex-col items-center gap-[14px]">
             <p className="m-0 text-xs tracking-[0.08em] text-ink-muted">Welcome</p>
-            <p className="m-0 max-w-full font-display text-[64px] leading-none font-black break-all text-ink">
+            <p className="m-0 max-w-full font-display text-[36px] leading-none font-black break-all text-ink sm:text-[64px]">
               @{handle}
             </p>
           </div>
