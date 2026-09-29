@@ -46,9 +46,9 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 
 ## Tasks
 
-- [ ] **T1 — Scaffold.** Next.js + Tailwind + ESLint + shadcn (aliases → `@/shared`) + Vitest; `typecheck` script; screaming-architecture folders; README section on structure; `.env.example`.
-  - Route: delegated direct (writer trigger: 2+ non-trivial files). Writer A.
-- [ ] **T2 — Sky.** Port the halftone WebGL2 sky from the canvas into `src/features/sky`: params/presets merge, seeded sparkle layout, `pushSparkle`, color helpers, drift, shaders, and a `HalftoneSky` client component with an imperative handle (`pulse`, `aim`) plus a WebGL-missing fallback.
+- [x] **T1 — Scaffold.** Next.js + Tailwind + ESLint + shadcn (aliases → `@/shared`) + Vitest; `typecheck` script; screaming-architecture folders; README section on structure; `.env.example`.
+  - Route: delegated direct (writer trigger: 2+ non-trivial files). Writer A. Commit `edfcc6f`.
+- [x] **T2 — Sky.** Commit `ba078d7`. Port the halftone WebGL2 sky from the canvas into `src/features/sky`: params/presets merge, seeded sparkle layout, `pushSparkle`, color helpers, drift, shaders, and a `HalftoneSky` client component with an imperative handle (`pulse`, `aim`) plus a WebGL-missing fallback.
   - Route: delegated direct. Writer A.
 - [ ] **T3 — Gate.** `src/features/gate`: handle normalization and validation, the gate state machine (idle, invalid, checking, denied, requested, granted), the `AccessPolicy` port with an env whitelist adapter and a server action, the ASCII tunnel canvas, and the gate screen UI.
   - Route: delegated direct. Writer B.
@@ -67,10 +67,32 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 
 - 2026-09-29: Remote `my-life` is empty and public, so there was nothing to clone. Local repo initialized with `main` (`78a60f7`) and `feat/landing-foundation`. Document created. This supersedes the paused draft in `theduck/odd/tasks/landing-foundation.md`.
 
+- 2026-09-29: T1 + T2 done by Writer A.
+  - shadcn `init` reset aliases to `@/components`; they were restored to `@/shared/*`.
+  - shadcn generated `cn` imported from an unrelated npm package `cn`; it was replaced with `clsx` + `tailwind-merge`.
+  - `typecheck` = `next typegen && tsc --noEmit`, because `LayoutProps` is a generated type.
+  - React Compiler stays enabled, as scaffolded.
+
 ## Verification evidence
 
-_Pending._
+- T1/T2 RED: new suites failed with `Failed to resolve import "./color"` (and likewise for `drift`, `sky-params`, `sparkles`, `shaders`), and `skyFallbackGradient is not a function`, before implementation.
+- Writer A, after T2: `pnpm lint` passed with no output; `pnpm typecheck` passed; `pnpm test` passed 35/35 across 7 files; `pnpm build` passed with `/` static.
+- Parent spot check: `pnpm test` passed 35/35; `pnpm typecheck` passed.
+- The WebGL sky has not been observed in a real browser yet (no dev server run; jsdom has no WebGL). The GLSL was checked byte-identical to the canvas prototype.
+- RDD slice `78a60f7..ba078d7`:
+  - Assessed medium, `slice_budget_reached`.
+  - Consent granted by the user.
+  - One lens (`review-reliability`) → **approved**.
+  - Acknowledged; authority burned (lineage `review-08f5119bf5d9eaeb`).
+  - Reviewed boundary is now `ba078d7`.
+
+## Review follow-ups (advisory, not accepted yet)
+
+- `R3-anchors-never-relaid`: the renderer re-lays out sparkles only on seed change, not when the `anchors` prop changes.
+- `R3-context-loss-unrecoverable`: after `webglcontextlost` nothing rebuilds GL state and the fallback never shows, leaving a black canvas.
+- `R3-reduced-motion-stale-frame`: under reduced motion, changing the preset or pixel props, or `hidden` becoming false, does not repaint. `resize()` also paints while hidden.
+- `R3-renderer-untested`: `stop()` cleanup, `onDown` guards and seed relayout have no tests (mocked GL context or extracted handlers).
 
 ## Next step
 
-Writer A runs T1 + T2.
+Writer B runs T3 + T4.
