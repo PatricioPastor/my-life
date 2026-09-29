@@ -1,10 +1,5 @@
-import { HalftoneSky } from "@/features/sky"
+import { Journey } from "@/features/journey"
 
-// Temporary visual check for the sky; the journey replaces this.
 export default function Home() {
-  return (
-    <main className="h-svh w-full overflow-hidden">
-      <HalftoneSky />
-    </main>
-  )
+  return <Journey />
 }

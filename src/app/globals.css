@@ -7,9 +7,18 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-silkscreen), ui-monospace, monospace;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+  --font-display: var(--font-doto), var(--font-silkscreen), monospace;
+  --font-serif: var(--font-spectral), Georgia, serif;
+  --font-heading: var(--font-display);
+  /* Landing palette: the vars are set on the journey root from the active sky preset. */
+  --color-void: var(--void);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-dim: var(--ink-dim);
+  --color-signal: var(--signal);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -124,8 +133,165 @@
   }
   body {
     @apply bg-background text-foreground;
+    margin: 0;
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* Landing motion, ported from the design canvas. Curves and durations are exact. */
+@layer components {
+  .ui button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ui button:disabled {
+    cursor: default;
+    opacity: 0.3;
+  }
+  .ui button:focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: 6px;
+  }
+
+  .sky {
+    transition: transform 1150ms cubic-bezier(0.77, 0, 0.175, 1);
+  }
+  .veil {
+    transition: opacity 800ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .rise {
+    animation: rise 640ms cubic-bezier(0.23, 1, 0.32, 1) 360ms both;
+  }
+  .rise-late {
+    animation: rise 760ms cubic-bezier(0.23, 1, 0.32, 1) 520ms both;
+  }
+  .turn {
+    animation: turn 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+  .press {
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .row .mark {
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+  .row:focus-visible .mark {
+    opacity: 1;
+  }
+  .shift {
+    transition: transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .row:hover .mark {
+      opacity: 1;
+    }
+    .row:hover .shift {
+      transform: translateX(10px);
+    }
+  }
+
+  .gate {
+    transition:
+      opacity 1000ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 1400ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .gate input::placeholder {
+    color: inherit;
+    opacity: 0.55;
+  }
+  .field .bar {
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .field:focus-within .bar {
+    transform: scaleX(1);
+  }
+  .shake {
+    animation: shake 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sky,
+    .shift,
+    .press {
+      transition: none;
+    }
+    .rise,
+    .rise-late,
+    .turn {
+      animation-name: fade;
+    }
+    .gate {
+      transition: opacity 600ms ease;
+    }
+    .field .bar {
+      transition: none;
+    }
+    .shake {
+      animation: none;
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes turn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(3px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-5px);
+  }
+  40%,
+  60% {
+    transform: translateX(5px);
   }
 }
