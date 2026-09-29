@@ -50,9 +50,9 @@ Build the personal landing as a Next.js app that implements the approved Claude 
   - Route: delegated direct (writer trigger: 2+ non-trivial files). Writer A. Commit `edfcc6f`.
 - [x] **T2 — Sky.** Commit `ba078d7`. Port the halftone WebGL2 sky from the canvas into `src/features/sky`: params/presets merge, seeded sparkle layout, `pushSparkle`, color helpers, drift, shaders, and a `HalftoneSky` client component with an imperative handle (`pulse`, `aim`) plus a WebGL-missing fallback.
   - Route: delegated direct. Writer A.
-- [ ] **T3 — Gate.** `src/features/gate`: handle normalization and validation, the gate state machine (idle, invalid, checking, denied, requested, granted), the `AccessPolicy` port with an env whitelist adapter and a server action, the ASCII tunnel canvas, and the gate screen UI.
+- [x] **T3 — Gate.** Commit `e03372a`. `src/features/gate`: handle normalization and validation, the gate state machine (idle, invalid, checking, denied, requested, granted), the `AccessPolicy` port with an env whitelist adapter and a server action, the ASCII tunnel canvas, and the gate screen UI.
   - Route: delegated direct. Writer B.
-- [ ] **T4 — Journey.** `src/features/journey` reducer (gate → sky → place → entry, back, paging), `src/features/facets` content and place view, `src/features/reader` paginated reader, dive transitions, fonts (Doto, Silkscreen, Spectral), home route composition.
+- [x] **T4 — Journey.** Commit `8e477dc`. `src/features/journey` reducer (gate → sky → place → entry, back, paging), `src/features/facets` content and place view, `src/features/reader` paginated reader, dive transitions, fonts (Doto, Silkscreen, Spectral), home route composition.
   - Route: delegated direct. Writer B.
 - [ ] **T5 — Push.** Push `feat/landing-foundation` to `origin`.
 
@@ -72,6 +72,14 @@ Build the personal landing as a Next.js app that implements the approved Claude 
   - shadcn generated `cn` imported from an unrelated npm package `cn`; it was replaced with `clsx` + `tailwind-merge`.
   - `typecheck` = `next typegen && tsc --noEmit`, because `LayoutProps` is a generated type.
   - React Compiler stays enabled, as scaffolded.
+- 2026-09-29: T3 + T4 done by Writer B.
+  - A RED run caught a real bug: `" @Ana "` normalized to `@ana`. Whitespace is now stripped before `@`.
+  - The server action fails closed: an error shows denied.
+  - Metadata sets `robots: noindex, nofollow`, since the site is invitation-only.
+  - Layout is fluid rather than a fixed 1440×900 stage. Below 768px the list goes full width.
+  - Facet labels now ride the dive zoom with the canvas, which fixes a brief misalignment the prototype had.
+  - Reducers guard illegal transitions: `resolved` is only accepted while checking, and `facetOpened` only from the sky.
+  - Removed the unused create-next-app SVGs.
 
 ## Verification evidence
 
@@ -85,6 +93,21 @@ Build the personal landing as a Next.js app that implements the approved Claude 
   - One lens (`review-reliability`) → **approved**.
   - Acknowledged; authority burned (lineage `review-08f5119bf5d9eaeb`).
   - Reviewed boundary is now `ba078d7`.
+- T3/T4 RED: suites failed with `Failed to resolve import` for `./handle`, `./gate-machine`, `./env-whitelist-policy`, `./check-access`, `./content`, `./journey-machine`, `./theme` and `./reader` before implementation. Component smoke tests were written after the components.
+- Writer B, after T4:
+  - `pnpm lint` passed with no output.
+  - `pnpm typecheck` passed.
+  - `pnpm test` passed 109/109 across 17 files.
+  - `pnpm build` passed with `/` static.
+  - Canary check: `INSTAGRAM_WHITELIST=zz_canary_handle pnpm build`, then `.next/static` searched for the handle → 0 matches.
+- Parent spot check: `pnpm test` passed 109/109; `pnpm lint` passed. The only tracked `.env*` file is `.env.example`.
+- The gate, tunnel, sky and motion have still not been observed in a real browser.
+- RDD slice `ba078d7..8e477dc`:
+  - Assessed medium, `slice_budget_reached`.
+  - Consent granted by the user.
+  - One lens (`review-reliability`) → **approved**.
+  - Acknowledged; authority burned (lineage `review-751b67fd0ea0ee95`).
+  - Reviewed boundary is now `8e477dc`.
 
 ## Review follow-ups (advisory, not accepted yet)
 
@@ -92,7 +115,10 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 - `R3-context-loss-unrecoverable`: after `webglcontextlost` nothing rebuilds GL state and the fallback never shows, leaving a black canvas.
 - `R3-reduced-motion-stale-frame`: under reduced motion, changing the preset or pixel props, or `hidden` becoming false, does not repaint. `resize()` also paints while hidden.
 - `R3-renderer-untested`: `stop()` cleanup, `onDown` guards and seed relayout have no tests (mocked GL context or extracted handlers).
+- `R3-invite-request-not-sent` (product decision): "Ask for an invite" only flips local state, yet the UI says "Request sent." Nothing is actually sent. Either wire a real request channel or change the copy.
+- `R3-sky-hidden-reduced-motion-activated`: the journey is the first caller that turns `hidden` from true to false. Under reduced motion the sky may show a stale or blank frame after the gate. This is the same root cause as `R3-reduced-motion-stale-frame`.
+- `R3-tunnel-renderer-untested`: the tunnel renderer's draw loop, cleanup and wake guards are untested. Under reduced motion the tunnel never repaints on gate state changes.
 
 ## Next step
 
-Writer B runs T3 + T4.
+T5: push `feat/landing-foundation`. The remote is empty, so the first pushed branch becomes GitHub's default; decide whether `main` is pushed too.
