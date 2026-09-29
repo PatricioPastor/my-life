@@ -55,6 +55,13 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 - [x] **T4 — Journey.** Commit `8e477dc`. `src/features/journey` reducer (gate → sky → place → entry, back, paging), `src/features/facets` content and place view, `src/features/reader` paginated reader, dive transitions, fonts (Doto, Silkscreen, Spectral), home route composition.
   - Route: delegated direct. Writer B.
 - [x] **T5 — Push.** Pushed `main` (`78a60f7`, the default branch) and `feat/landing-foundation` to `origin` over HTTPS with the user's `gh` session. Nothing merged; no PR opened.
+  - Later that day, on the user's explicit request, `main` was fast-forwarded to `7343707` and pushed.
+- [x] **Whitelist configured locally.** 77 handles are in `.env.local` (gitignored, all valid, no duplicates). Production must set `INSTAGRAM_WHITELIST` in the hosting provider. The list is never committed, because the repo is public.
+- [x] **T6 — Request access via Instagram DM.** Done: the denied CTA is an `ig.me` link that copies the message; `requested` copy is honest. Resolves `R3-invite-request-not-sent`; the user chose DM over a database or email.
+  - In the denied state, the CTA opens a DM to the owner's Instagram (`patriciopastor_`) and copies a message that carries the visitor's handle.
+  - Copy must stay honest: never claim a request was sent.
+  - The DM itself proves account ownership.
+  - Branch `feat/request-access-dm`. Route: delegated direct (writer trigger: 2+ non-trivial files).
 
 ## Acceptance criteria
 
@@ -115,7 +122,7 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 - `R3-context-loss-unrecoverable`: after `webglcontextlost` nothing rebuilds GL state and the fallback never shows, leaving a black canvas.
 - `R3-reduced-motion-stale-frame`: under reduced motion, changing the preset or pixel props, or `hidden` becoming false, does not repaint. `resize()` also paints while hidden.
 - `R3-renderer-untested`: `stop()` cleanup, `onDown` guards and seed relayout have no tests (mocked GL context or extracted handlers).
-- `R3-invite-request-not-sent` (product decision): "Ask for an invite" only flips local state, yet the UI says "Request sent." Nothing is actually sent. Either wire a real request channel or change the copy.
+- `R3-invite-request-not-sent` (RESOLVED by T6: requests go through an Instagram DM and the copy no longer claims a send) (product decision): "Ask for an invite" only flips local state, yet the UI says "Request sent." Nothing is actually sent. Either wire a real request channel or change the copy.
 - `R3-sky-hidden-reduced-motion-activated`: the journey is the first caller that turns `hidden` from true to false. Under reduced motion the sky may show a stale or blank frame after the gate. This is the same root cause as `R3-reduced-motion-stale-frame`.
 - `R3-tunnel-renderer-untested`: the tunnel renderer's draw loop, cleanup and wake guards are untested. Under reduced motion the tunnel never repaints on gate state changes.
 

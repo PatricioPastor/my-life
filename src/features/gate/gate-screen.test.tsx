@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { GateScreen } from "./gate-screen"
 import type { GateState } from "./gate-machine"
 
@@ -11,6 +11,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function setup(state: GateState) {
@@ -45,16 +46,41 @@ describe("GateScreen", () => {
     expect(screen.getByRole("status").textContent).toBe("Use letters, numbers, periods or underscores.")
   })
 
-  it("offers an invite request when denied", () => {
-    const h = setup({ status: "denied", handle: "eve" })
+  it("offers an Instagram DM link when denied", () => {
+    setup({ status: "denied", handle: "eve" })
     expect(screen.getByRole("status").textContent).toBe("@eve isn’t on the list yet.")
-    fireEvent.click(screen.getByRole("button", { name: "Ask for an invite" }))
-    expect(h.onRequestInvite).toHaveBeenCalledTimes(1)
+    const link = screen.getByRole("link", { name: "Ask for access on Instagram" })
+    expect(link.getAttribute("href")).toBe("https://ig.me/m/patriciopastor_")
+    expect(link.getAttribute("target")).toBe("_blank")
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer")
   })
 
-  it("confirms a sent request", () => {
-    setup({ status: "requested", handle: "eve" })
-    expect(screen.getByRole("status").textContent).toBe("Request sent.")
+  it("copies the message on click and reports it", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText } })
+    const h = setup({ status: "denied", handle: "eve" })
+    fireEvent.click(screen.getByRole("link", { name: "Ask for access on Instagram" }))
+    expect(writeText).toHaveBeenCalledWith("Hi! I'd like access to your site. My Instagram is @eve.")
+    await waitFor(() => expect(h.onRequestInvite).toHaveBeenCalledWith(true))
+  })
+
+  it("still reports the request when the clipboard is unavailable", async () => {
+    vi.stubGlobal("navigator", {})
+    const h = setup({ status: "denied", handle: "eve" })
+    fireEvent.click(screen.getByRole("link", { name: "Ask for access on Instagram" }))
+    await waitFor(() => expect(h.onRequestInvite).toHaveBeenCalledWith(false))
+  })
+
+  it("tells the visitor to paste when the message was copied, without claiming anything was sent", () => {
+    setup({ status: "requested", handle: "eve", copied: true })
+    expect(screen.getByRole("status").textContent).toBe("Message copied. Paste it in the DM to @patriciopastor_.")
+    expect(screen.getByRole("link", { name: "Ask for access on Instagram" })).toBeTruthy()
+  })
+
+  it("tells the visitor to send the DM when nothing was copied", () => {
+    setup({ status: "requested", handle: "eve", copied: false })
+    expect(screen.getByRole("status").textContent).toBe("Send a DM to @patriciopastor_ from @eve.")
+    expect(screen.getByRole("link", { name: "Ask for access on Instagram" })).toBeTruthy()
   })
 
   it("welcomes a granted handle in place of the form", () => {

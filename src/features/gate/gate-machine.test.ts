@@ -55,13 +55,23 @@ describe("gateReducer: resolve", () => {
 })
 
 describe("gateReducer: request invite", () => {
-  it("moves denied to requested", () => {
-    expect(gateReducer(at("denied"), { type: "requestInvite" }).status).toBe("requested")
+  it("moves denied to requested and records whether the message was copied", () => {
+    expect(gateReducer(at("denied"), { type: "requestInvite", copied: true })).toEqual({
+      status: "requested",
+      handle: "ana",
+      copied: true,
+    })
+    expect(gateReducer(at("denied"), { type: "requestInvite", copied: false }).copied).toBe(false)
+  })
+
+  it("forgets the copy result once the visitor edits the handle", () => {
+    const requested = gateReducer(at("denied"), { type: "requestInvite", copied: true })
+    expect(gateReducer(requested, { type: "typed", raw: "bob" })).toEqual(at("idle", "bob"))
   })
 
   it("is a no-op elsewhere", () => {
     const s = at("idle")
-    expect(gateReducer(s, { type: "requestInvite" })).toBe(s)
+    expect(gateReducer(s, { type: "requestInvite", copied: true })).toBe(s)
   })
 })
 

@@ -3,6 +3,7 @@
 import type { FormEvent } from "react"
 import type { SkyPresetName } from "@/features/sky"
 import { cn } from "@/shared/lib/utils"
+import { OWNER_HANDLE, buildAccessRequest, copyToClipboard } from "./access/access-request"
 import { AsciiTunnel } from "./ascii-tunnel"
 import type { GateState, GateStatus } from "./gate-machine"
 
@@ -11,12 +12,12 @@ interface GateScreenProps {
   preset?: SkyPresetName
   onTyped: (raw: string) => void
   onSubmit: () => void
-  onRequestInvite: () => void
+  onRequestInvite: (copied: boolean) => void
 }
 
 const SHADOW = "[text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
 
-function statusText(status: GateStatus, handle: string): string {
+function statusText(status: GateStatus, handle: string, copied?: boolean): string {
   switch (status) {
     case "idle":
       return "Invitation only."
@@ -27,15 +28,23 @@ function statusText(status: GateStatus, handle: string): string {
     case "denied":
       return `@${handle} isn’t on the list yet.`
     case "requested":
-      return "Request sent."
+      return copied
+        ? `Message copied. Paste it in the DM to @${OWNER_HANDLE}.`
+        : `Send a DM to @${OWNER_HANDLE} from @${handle}.`
     case "granted":
       return ""
   }
 }
 
 export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }: GateScreenProps) {
-  const { status, handle } = state
+  const { status, handle, copied } = state
   const refused = status === "invalid" || status === "denied"
+  const request = buildAccessRequest(handle)
+
+  // The link navigates on its own; the copy is best effort and never blocks it.
+  const askForAccess = () => {
+    void copyToClipboard(request.message).then(onRequestInvite)
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -103,16 +112,18 @@ export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }
               role="status"
               className={cn("m-0 min-h-[18px] text-xs tracking-[0.06em]", refused ? "text-signal" : "text-ink-muted")}
             >
-              {statusText(status, handle)}
+              {statusText(status, handle, copied)}
             </p>
-            {status === "denied" && (
-              <button
-                type="button"
-                onClick={onRequestInvite}
-                className="press h-11 border border-ink-faint px-[18px] text-xs tracking-[0.08em] text-ink"
+            {(status === "denied" || status === "requested") && (
+              <a
+                href={request.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={askForAccess}
+                className="press inline-flex h-11 items-center border border-ink-faint px-[18px] text-xs tracking-[0.08em] text-ink"
               >
-                Ask for an invite
-              </button>
+                Ask for access on Instagram
+              </a>
             )}
           </form>
         ) : (

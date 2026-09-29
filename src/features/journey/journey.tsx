@@ -167,7 +167,7 @@ export function Journey({ preset = "crimson" }: JourneyProps) {
             preset={preset}
             onTyped={(raw) => dispatchGate({ type: "typed", raw })}
             onSubmit={() => dispatchGate({ type: "submit" })}
-            onRequestInvite={() => dispatchGate({ type: "requestInvite" })}
+            onRequestInvite={(copied) => dispatchGate({ type: "requestInvite", copied })}
           />
         </div>
       )}

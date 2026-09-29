@@ -54,8 +54,12 @@ describe("Journey gate flow", () => {
     await enter("eve")
     await act(() => vi.advanceTimersByTimeAsync(1200))
     expect(screen.getByRole("status").textContent).toBe("@eve isn’t on the list yet.")
-    fireEvent.click(screen.getByRole("button", { name: "Ask for an invite" }))
-    expect(screen.getByRole("status").textContent).toBe("Request sent.")
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    fireEvent.click(screen.getByRole("link", { name: "Ask for access on Instagram" }))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByRole("status").textContent).toBe("Message copied. Paste it in the DM to @patriciopastor_.")
+    expect(screen.getByRole("link", { name: "Ask for access on Instagram" })).toBeTruthy()
+    vi.unstubAllGlobals()
   })
 
   it("fails closed when the server action throws", async () => {
