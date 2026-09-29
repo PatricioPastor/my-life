@@ -54,7 +54,7 @@ Build the personal landing as a Next.js app that implements the approved Claude 
   - Route: delegated direct. Writer B.
 - [x] **T4 — Journey.** Commit `8e477dc`. `src/features/journey` reducer (gate → sky → place → entry, back, paging), `src/features/facets` content and place view, `src/features/reader` paginated reader, dive transitions, fonts (Doto, Silkscreen, Spectral), home route composition.
   - Route: delegated direct. Writer B.
-- [ ] **T5 — Push.** Push `feat/landing-foundation` to `origin`.
+- [x] **T5 — Push.** Pushed `main` (`78a60f7`, the default branch) and `feat/landing-foundation` to `origin` over HTTPS with the user's `gh` session. Nothing merged; no PR opened.
 
 ## Acceptance criteria
 
@@ -121,4 +121,6 @@ Build the personal landing as a Next.js app that implements the approved Claude 
 
 ## Next step
 
-T5: push `feat/landing-foundation`. The remote is empty, so the first pushed branch becomes GitHub's default; decide whether `main` is pushed too.
+1. See it in a real browser. Run `pnpm dev` with `INSTAGRAM_WHITELIST` in `.env.local`, then check the tunnel, the warp, the sky, the place and the reader.
+2. Decide on the review follow-ups, above all the "Ask for an invite" copy versus a real request channel.
+3. Open a PR from `feat/landing-foundation` to `main` when ready; the chain strategy gets decided then.
