@@ -529,7 +529,8 @@
     overflow: hidden;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
-    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 600ms backwards;
+    /* Fade and blur only: the stack is placed from where the stage rests, so a stage that travels would shift the first paragraph. */
+    animation: turn 900ms cubic-bezier(0.16, 1, 0.3, 1) 600ms backwards;
   }
   .rd-stack {
     position: absolute;

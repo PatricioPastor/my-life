@@ -91,3 +91,14 @@ describe("text sharpness rules", () => {
     expect(ob).toMatch(/-moz-osx-font-smoothing:\s*grayscale/)
   })
 })
+
+describe("first placement", () => {
+  it("does not move the stage while it arrives: the stack is placed from where the stage rests, so a travelling stage would make the first paragraph jump", () => {
+    const stage = rules(".rd-stage").find((r) => /animation:/.test(r))!
+    const name = /animation:\s*([a-z-]+)/.exec(stage)![1]!
+    const at = css.indexOf(`@keyframes ${name} {`)
+    expect(at, `keyframes ${name}`).toBeGreaterThanOrEqual(0)
+    const frames = css.slice(at, at + css.slice(at).search(/\r?\n}/))
+    expect(frames).not.toMatch(/transform/)
+  })
+})

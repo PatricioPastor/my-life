@@ -132,13 +132,7 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     fonts?.addEventListener?.("loadingdone", onFonts)
     void fonts?.ready?.then(onFonts)
     window.addEventListener("resize", onFonts)
-    // The stage rises in (a transform animation) while it is first measured: measure again where it really ends up.
-    const onRise = (e: AnimationEvent) => {
-      if (e.target === stageEl) measure.current()
-    }
-    stageEl.addEventListener("animationend", onRise)
     return () => {
-      stageEl.removeEventListener("animationend", onRise)
       observer?.disconnect()
       fonts?.removeEventListener?.("loadingdone", onFonts)
       window.removeEventListener("resize", onFonts)
