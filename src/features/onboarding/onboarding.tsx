@@ -1,7 +1,9 @@
 "use client"
 
-import { useRef, type ActionDispatch } from "react"
+import { useRef, useState, type ActionDispatch } from "react"
 import { MagneticCursor } from "@/features/cursor"
+import { STORY_TITLE as CTA_LABEL } from "./story"
+import { StoryView } from "./story-view"
 import type { OnboardingEvent, OnboardingPhase, OnboardingState } from "./onboarding-machine"
 
 interface OnboardingProps {
@@ -14,7 +16,6 @@ const PHRASES = {
   different: "pero narrada de una forma diferente",
 } as const
 
-export const CTA_LABEL = "¿por qué creé esto?"
 
 /** Which of the three lines is on stage for a phase (-1 while none is). */
 function activeLine(phase: OnboardingPhase): number {
@@ -33,6 +34,7 @@ function activeLine(phase: OnboardingPhase): number {
 
 export function Onboarding({ state, dispatch }: OnboardingProps) {
   const rootRef = useRef<HTMLDivElement>(null)
+  const [ctaRect, setCtaRect] = useState<DOMRect | null>(null)
   const { phase } = state
   const active = activeLine(phase)
   const lines = [state.greeting, PHRASES.life, PHRASES.different]
@@ -57,15 +59,22 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
           data-cursor-label={CTA_LABEL}
           tabIndex={ctaOn ? 0 : -1}
           aria-hidden={!ctaOn}
-          onClick={() => dispatch({ type: "cta" })}
+          onClick={(e) => {
+            setCtaRect(e.currentTarget.getBoundingClientRect())
+            dispatch({ type: "cta" })
+          }}
         >
           {CTA_LABEL}
         </button>
       </div>
 
-      {phase === "story" && (
-        <button type="button" className="ob-cta press" onClick={() => dispatch({ type: "enter" })}>
-          Continuar
+      {(phase === "story" || phase === "hardware") && (
+        <StoryView from={ctaRect} onContinue={() => dispatch({ type: "continue" })} />
+      )}
+
+      {phase === "hardware" && (
+        <button type="button" className="ob-continue press" onClick={() => dispatch({ type: "enter" })}>
+          Entrar
         </button>
       )}
 

@@ -64,7 +64,7 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 ## Tasks
 
 - [x] **T1 — Sequence and font.** Greeting and phrases machine, CTA, skip and remember, Gambarino through Fontshare, `.gitignore` for `resources/`.
-- [ ] **T2 — Story view.** Grain background, CTA→title morph, Gambarino body.
+- [x] **T2 — Story view.** Grain background, CTA→title morph, Gambarino body.
 - [ ] **T3 — Lazy loading, WebGL warm-up and hardware check.** Dynamic imports, offscreen compile, GPU classification with the suggestion, handoff to the gate.
 - [ ] **T4 — Deliver.** RDD per policy; push after the user approves.
 
@@ -79,6 +79,7 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 
 - 2026-09-30: Document created. The user chose the Fontshare API for Gambarino.
 - 2026-09-30: T1 done. Greeting, machine, storage and layer with tests; Gambarino via `https://api.fontshare.com/v2/css?f[]=gambarino@400&display=swap` (verified with curl: serves woff2 from cdn.fontshare.com); `/resources/` gitignored. Route: delegated writer (2+ non-trivial files).
+- 2026-09-30: T2 done. Story view with 160x90 grain at 12 fps (paused when hidden, static on reduced motion), FLIP title morph via Web Animations, Gambarino lorem body. Hardware phase temporarily has a plain Entrar stub until T3.
 
 ## Next step
 
