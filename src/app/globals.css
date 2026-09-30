@@ -340,7 +340,17 @@
   height: 22px;
   will-change: transform, width, height;
 }
-.mc-frame > i {
+.mc,
+.mc * {
+  pointer-events: none;
+  user-select: none;
+}
+.mc-body {
+  position: absolute;
+  inset: 0;
+  transition: scale 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.mc-body > i {
   position: absolute;
   display: block;
   background: var(--mc-ink);
@@ -385,11 +395,9 @@
 .mc[data-state="captured"] .mc-v {
   opacity: 0;
 }
-.mc[data-pressed="on"] .mc-frame {
+/* Press feedback: the inner box only, so the frame's position never moves. */
+.mc[data-pressed="on"] .mc-body {
   scale: 0.92;
-}
-.mc-frame {
-  transition: scale 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .mc-tip {
@@ -427,8 +435,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mc,
-  .mc-frame,
-  .mc-frame > i,
+  .mc-body,
+  .mc-body > i,
   .mc-tip {
     transition: none;
   }

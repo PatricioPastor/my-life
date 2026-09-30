@@ -1,7 +1,19 @@
 "use client"
 
 import { useEffect, useRef, useSyncExternalStore, type RefObject } from "react"
-import { placeTooltip, resolveMagnet, springProfile, stepSpring, type MagnetTarget, type Point, type SpringState } from "./magnet"
+import {
+  REST_FOLLOW,
+  placeTooltip,
+  resolveMagnet,
+  shouldForwardClick,
+  springProfile,
+  stepFollow,
+  stepSpring,
+  type FollowState,
+  type MagnetTarget,
+  type Point,
+  type SpringState,
+} from "./magnet"
 
 /** What the cursor reports when it captures (or lets go of) a `data-magnetic` element. */
 export interface CursorTarget {
@@ -23,8 +35,8 @@ const REDUCED_MOTION = "(prefers-reduced-motion: reduce)"
 const FREE_SIZE = 22
 const FRAME_PAD = 6
 const MIN_FRAME = 28
-// Rects are cached; they are re-read at most this often (plus on scroll, resize and DOM changes).
-const REMEASURE_MS = 120
+// The loop idles after this many frames with settled springs and unmoving targets.
+const STABLE_FRAMES = 30
 const FIELD = "input,textarea,select,[contenteditable='true']"
 
 function subscribeFine(notify: () => void) {
@@ -67,18 +79,25 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
     if (!stage || !root || !frame || !tip || !label || !key) return
     stage.dataset.cursor = "on"
 
+    const reducedQuery = typeof window.matchMedia === "function" ? window.matchMedia(REDUCED_MOTION) : null
+    let reduced = reducedQuery?.matches ?? false
+    const onReducedChange = (e: MediaQueryListEvent) => {
+      reduced = e.matches
+    }
+    reducedQuery?.addEventListener("change", onReducedChange)
+
     const ids = new WeakMap<Element, string>()
     let nextId = 0
     let items: Item[] = []
     let targets: MagnetTarget[] = []
-    let measuredAt = -Infinity
-    let dirty = true
+    let signature = ""
+    let stableFrames = 0
     let pointer: Point | null = null
+    let pressed = false
     let overField = false
     let shown = false
     let capturedId: string | null = null
-    let sx: SpringState = { x: 0, v: 0 }
-    let sy: SpringState = { x: 0, v: 0 }
+    let follow: FollowState = REST_FOLLOW
     let sw: SpringState = { x: FREE_SIZE, v: 0 }
     let sh: SpringState = { x: FREE_SIZE, v: 0 }
     let tipW = 0
@@ -87,8 +106,10 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
     let raf = 0
     let alive = true
 
-    const measure = (now: number) => {
+    // Reads only. Called at the top of a frame, before any style write, so it never forces a layout.
+    const measure = () => {
       items = []
+      let sig = ""
       for (const el of stage.querySelectorAll<HTMLElement>("[data-magnetic]")) {
         if ((el as HTMLButtonElement).disabled) continue
         const r = el.getBoundingClientRect()
@@ -98,6 +119,7 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
           id = String(nextId++)
           ids.set(el, id)
         }
+        sig += `${id}:${r.left.toFixed(1)},${r.top.toFixed(1)},${r.width.toFixed(1)},${r.height.toFixed(1)};`
         items.push({
           el,
           target: {
@@ -113,14 +135,14 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
         })
       }
       targets = items.map((i) => i.target)
-      measuredAt = now
-      dirty = false
+      stableFrames = sig === signature ? stableFrames + 1 : 0
+      signature = sig
     }
 
     const setShown = (on: boolean) => {
       if (on === shown) return
       shown = on
-      if (!on) delete root.dataset.snap
+      if (!on) follow = REST_FOLLOW
       root.dataset.visible = on ? "on" : "off"
     }
 
@@ -144,7 +166,8 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       if (!alive) return
       const dt = Math.min(Math.max((now - last) / 1000, 0), 0.05)
       last = now
-      if (dirty || now - measuredAt > REMEASURE_MS) measure(now)
+      // The press scales the target (`.press:active`); measuring through it would shift the capture.
+      if (!pressed) measure()
 
       const p = pointer
       const active = p && !overField
@@ -153,38 +176,32 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       if ((item?.target.id ?? null) !== capturedId) capture(item)
       setShown(!!active)
 
-      let gx = p?.x ?? 0
-      let gy = p?.y ?? 0
       let gw = FREE_SIZE
       let gh = FREE_SIZE
-      if (res) {
-        gx = res.point.x
-        gy = res.point.y
-      }
       if (item) {
         const r = item.target.rect
         gw = Math.max(r.width + FRAME_PAD * 2, MIN_FRAME)
         gh = Math.max(r.height + FRAME_PAD * 2, MIN_FRAME)
       }
 
-      const { omega, zeta } = springProfile(window.matchMedia?.(REDUCED_MOTION).matches ?? false)
-      if (active && root.dataset.snap !== "done") {
-        sx = { x: gx, v: 0 }
-        sy = { x: gy, v: 0 }
-        root.dataset.snap = "done"
+      const { omega } = springProfile(reduced)
+      const want = res ? res.point : (p ?? { x: 0, y: 0 })
+      let pos = p ?? want
+      if (p) {
+        const step = stepFollow(follow, p, want, dt, omega)
+        follow = step.follow
+        pos = step.position
       }
-      sx = stepSpring(sx, gx, dt, omega, zeta)
-      sy = stepSpring(sy, gy, dt, omega, zeta)
       sw = stepSpring(sw, gw, dt, omega, 1)
       sh = stepSpring(sh, gh, dt, omega, 1)
 
       frame.style.width = `${sw.x.toFixed(1)}px`
       frame.style.height = `${sh.x.toFixed(1)}px`
-      frame.style.transform = `translate3d(${(sx.x - sw.x / 2).toFixed(1)}px, ${(sy.x - sh.x / 2).toFixed(1)}px, 0)`
+      frame.style.transform = `translate3d(${(pos.x - sw.x / 2).toFixed(1)}px, ${(pos.y - sh.x / 2).toFixed(1)}px, 0)`
 
       if (item) {
         const place = placeTooltip(
-          { cx: sx.x, top: sy.x - sh.x / 2, bottom: sy.x + sh.x / 2 },
+          { cx: pos.x, top: pos.y - sh.x / 2, bottom: pos.y + sh.x / 2 },
           { width: tipW, height: tipH },
           { width: window.innerWidth, height: window.innerHeight },
         )
@@ -192,15 +209,18 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       }
 
       const settled =
-        Math.abs(sx.x - gx) < 0.05 && Math.abs(sy.x - gy) < 0.05 && Math.abs(sw.x - gw) < 0.05 && Math.abs(sh.x - gh) < 0.05 &&
-        Math.abs(sx.v) + Math.abs(sy.v) < 0.5
-      // A captured target keeps the loop alive so the frame follows the sky's parallax drift.
-      if (shown && (!settled || capturedId !== null)) raf = requestAnimationFrame(tick)
+        Math.abs(follow.ox.x - (want.x - (p?.x ?? 0))) < 0.05 && Math.abs(follow.oy.x - (want.y - (p?.y ?? 0))) < 0.05 &&
+        Math.abs(follow.ox.v) + Math.abs(follow.oy.v) < 0.5 &&
+        Math.abs(sw.x - gw) < 0.05 && Math.abs(sh.x - gh) < 0.05 && Math.abs(sw.v) + Math.abs(sh.v) < 0.5
+      // Idle once the pointer is still, the springs are at rest and the targets have stopped moving
+      // (the sky's parallax settles within a few hundred ms). Any pointer, scroll or DOM event wakes it.
+      if (shown && (!settled || (!pressed && stableFrames < STABLE_FRAMES))) raf = requestAnimationFrame(tick)
     }
 
     const wake = () => {
       if (alive && !raf && !document.hidden) {
         last = performance.now()
+        stableFrames = 0
         raf = requestAnimationFrame(tick)
       }
     }
@@ -221,33 +241,57 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       pointer = null
       wake()
     }
-    const onDown = () => {
+    const captured = () => (capturedId === null ? undefined : items.find((i) => i.target.id === capturedId))
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return
+      pressed = true
       root.dataset.pressed = "on"
+      // The reticle sits on the target, so this press belongs to it: keep the sky from reacting to
+      // the empty space the real pointer is over.
+      const item = captured()
+      const t = e.target as Node | null
+      if (item && t && !item.el.contains(t)) e.stopPropagation()
     }
     const onUp = () => {
+      pressed = false
       delete root.dataset.pressed
-    }
-    const invalidate = () => {
-      dirty = true
       wake()
     }
+    // What you see is what you click: the pull can leave the real pointer just outside the target.
+    const onClick = (e: MouseEvent) => {
+      const item = captured()
+      const t = e.target as Node | null
+      if (!item || !item.el.isConnected || !t || !stage.contains(t)) return
+      if (!shouldForwardClick({ capturedId, insideCaptured: item.el.contains(t), detail: e.detail })) return
+      e.preventDefault()
+      e.stopPropagation()
+      item.el.click()
+    }
+    const invalidate = () => wake()
 
     window.addEventListener("pointermove", onMove, { passive: true })
-    window.addEventListener("pointerdown", onDown, { passive: true })
+    window.addEventListener("pointerdown", onDown, { capture: true })
     window.addEventListener("pointerup", onUp, { passive: true })
+    window.addEventListener("pointercancel", onUp, { passive: true })
+    window.addEventListener("click", onClick, { capture: true })
     window.addEventListener("scroll", invalidate, { passive: true, capture: true })
     window.addEventListener("resize", invalidate)
     document.documentElement.addEventListener("mouseleave", onLeave)
-    const mo = new MutationObserver(invalidate)
+    const mo = new MutationObserver((records) => {
+      if (records.some((r) => !root.contains(r.target))) wake()
+    })
     mo.observe(stage, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-magnetic", "disabled"] })
 
     return () => {
       alive = false
       cancelAnimationFrame(raf)
       mo.disconnect()
+      reducedQuery?.removeEventListener("change", onReducedChange)
       window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerdown", onDown)
+      window.removeEventListener("pointerdown", onDown, { capture: true })
       window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
+      window.removeEventListener("click", onClick, { capture: true })
       window.removeEventListener("scroll", invalidate, { capture: true })
       window.removeEventListener("resize", invalidate)
       document.documentElement.removeEventListener("mouseleave", onLeave)
@@ -259,12 +303,15 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
   return (
     <div ref={rootRef} aria-hidden="true" className="mc" data-visible="off" data-state="free">
       <div ref={frameRef} className="mc-frame">
-        <i className="mc-h" />
-        <i className="mc-v" />
-        <i className="mc-c mc-tl" />
-        <i className="mc-c mc-tr" />
-        <i className="mc-c mc-bl" />
-        <i className="mc-c mc-br" />
+        {/* The press feedback lives on this inner box: scaling the positioned frame would scale its translation. */}
+        <div className="mc-body">
+          <i className="mc-h" />
+          <i className="mc-v" />
+          <i className="mc-c mc-tl" />
+          <i className="mc-c mc-tr" />
+          <i className="mc-c mc-bl" />
+          <i className="mc-c mc-br" />
+        </div>
       </div>
       <div ref={tipRef} className="mc-tip" data-tip="off">
         <span ref={labelRef} />

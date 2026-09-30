@@ -102,12 +102,12 @@ The cursor becomes part of the universe:
 
 ## Review follow-ups (advisory, not accepted yet)
 
-- `R4-cursor-captured-loop-never-idles`: while a star is captured the rAF loop keeps running, with `matchMedia` and rect re-measuring every ~120 ms. It should idle once the spring settles.
+- ~~`R4-cursor-captured-loop-never-idles`~~ resolved by the feel fixes below: the loop idles, `matchMedia` is read once, and rects are read at the top of each awake frame.
 - `R2-gate-submit-reducer-run-twice`: `onSubmit` predicts the next state with a manual reducer run before dispatching.
 - `R2-duplicated-integer-hash`: `hash01` is duplicated in `focus.ts` and `glitch-text.ts`; move it to one shared helper.
 - `R2-glitchframes-dead-in-production`: `glitchFrames` is tested but the panel uses its own loop.
 - `R2-settle-comment-contradicts-constant`: the comment says 1.2 s but `SETTLE_END` is 1.4.
-- `R2-snap-state-on-dataset`: the snap flag lives on a DOM dataset instead of a local.
+- ~~`R2-snap-state-on-dataset`~~ resolved: the snap is gone (the reticle is the pointer plus an offset that starts at zero).
 - `R3-reticle-field-hide-test-vacuous`: the field-hide test passes without the check. Show the reticle first.
 - `R3-context-panel-motion-path-untested`: only the reduced-motion path is tested.
 - `R3-sky-focus-wiring-untested`: `focus()` bounds, clock restart and uniform uploads are untested.
@@ -115,6 +115,29 @@ The cursor becomes part of the universe:
 - `R3-contenteditable-cursor-gap`: the CSS restores the native cursor for input, textarea and select, but not for `contenteditable`.
 - `R2-task-doc-next-step-stale`: fixed by this update.
 
+## Fixes after user feedback (2026-09-30)
+
+User report: the reticle "moves" on click, entering seems to need press-and-hold, and the reticle lags the mouse. Branch `fix/cursor-feel`. Evidence from a Playwright script (real `page.mouse`, GPU-backed Chromium, 1440x900):
+
+| Symptom | Root cause | Evidence before | Evidence after |
+| --- | --- | --- | --- |
+| Frame jumps on mousedown | The press feedback was the CSS `scale` property on `.mc-frame`, the same element that carries the positioning `translate3d`. `scale` is applied after the translate, so it multiplied the translation by 0.92 and shifted the frame by 8% of its coordinates toward the top-left. It is also why the frame looked "one button size" off at the reader pager. | Frame center on mousedown moved by 85 px (gate submit), 94 px (star) and 96 px (pager next). | 0 px in all three (frame identical before and during the press). |
+| Click "does not land" | The native cursor is hidden and the magnet pulls the reticle onto the target while the real pointer stays up to 22 px (stars) or 4 to 14 px (buttons, with hysteresis) outside it. The click hit the empty layer behind. | `elementFromPoint` was `div.absolute.inset-0`; the pager did not advance (3px and 14px off the edge). Clicks at the exact center worked. | The same clicks activate the captured target exactly once (page 2 to 3, 3 to 2); a click on the target itself is not doubled. |
+| Reticle lags | The whole position went through an underdamped spring (omega 24, zeta 0.78). | Distance pointer to reticle in a 1300 px/s sweep: median 80.7 px, max 87.3 px. | median 0 px, max 0.1 px. |
+
+Refuted candidates: the overlay never intercepted pointer events (`.mc` already had `pointer-events: none`; it is now explicit on every child), and no remount happens between mousedown and mouseup (centered clicks succeed). Parallax can still move a star under a still pointer while the lamp settles, so the layer now freezes while a target is captured.
+
+Fixes:
+
+- `stepFollow`: the reticle is the real pointer plus a critically damped magnetic offset. Free movement is exactly 1:1; only the pull, the release and the `[ ]` morph are eased (omega 28, no overshoot).
+- The press scale moved to an inner `.mc-body`, so it can never touch the frame's position. Measuring is skipped while pressed, so `.press:active` cannot shift the capture center.
+- `shouldForwardClick`: a window-capture click handler forwards a pointer click to the captured target once when it landed outside it (keyboard clicks, `detail === 0`, are untouched), and the matching pointerdown no longer reaches the sky (no stray sparkle). A target under the pointer now beats a held neighbour in `resolveMagnet`, so what you see is what you click.
+- Journey freezes the label-layer parallax while a target is captured.
+- The loop idles when the pointer is still, the springs are at rest and rects are stable for 30 frames; pointer, scroll, resize and DOM changes wake it. `matchMedia(reduced-motion)` is read once with a change listener, and rects are read before any style write in a frame.
+- Deviation: the cursor layer was not portaled to `document.body`. `.mc` is `position: fixed` inside an untransformed `main`, and the measured frame center matched the target center to 0 px before any press, so a portal would not change anything.
+
+RED (before the fix): `stepFollow`, `shouldForwardClick` and the click-forwarding, 1:1 movement, idling and press tests failed on missing exports or behaviour, 17 failures in total (for example `TypeError: stepFollow is not a function` and "expected 'held' to be 'under'"). GREEN: lint, typecheck, 320 tests and build pass; `/` stays static.
+
 ## Next step
 
-Feature delivered. Next, if the user wants: the cursor idle loop (performance), then the tests listed above.
+Feature delivered, with the feel fixes above on `fix/cursor-feel` (not pushed). Next, if the user wants: the remaining tests and cleanups listed above.

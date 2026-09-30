@@ -48,10 +48,18 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   const facet = findFacet(journey.facetId)
   const gateActive = screen === "gate"
 
+  // A star the reticle has captured must not drift out from under the pointer, so the parallax
+  // freezes while something is captured (which includes the press itself).
+  const capturedRef = useRef(false)
+  const onCapture = useCallback((target: CursorTarget | null) => {
+    capturedRef.current = target !== null
+    setCursorTarget(target)
+  }, [])
+
   // Stable, so the sky's render loop never re-subscribes; it moves the label layer without React state.
   const onLayerShift = useCallback((x: number, y: number) => {
     const layer = layerRef.current
-    if (layer) layer.style.transform = `translate(${x}px, ${y}px)`
+    if (layer && !capturedRef.current) layer.style.transform = `translate(${x}px, ${y}px)`
   }, [])
 
   // Checking: ask the server, and hold for the minimum beat. Failures deny (fail closed).
@@ -201,7 +209,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
           />
         </div>
       )}
-      <MagneticCursor stageRef={stageRef} onCapture={setCursorTarget} />
+      <MagneticCursor stageRef={stageRef} onCapture={onCapture} />
       <ContextPanel target={cursorTarget} />
     </main>
   )

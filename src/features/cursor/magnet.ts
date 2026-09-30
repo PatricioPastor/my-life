@@ -64,8 +64,9 @@ export function resolveMagnet(pointer: Point, targets: readonly MagnetTarget[], 
     const { pull, capture } = MAGNET[t.strength]
     const held = t.id === capturedId && distance <= capture + MAGNET.release
     if (distance > pull && !held) continue
-    // A held capture wins over a neighbour that is merely closer in the normalized sense.
-    const score = held ? -1 : distance / pull
+    // What you see is what you click: a target under the pointer wins, then a held capture, then the
+    // nearest in the normalized sense.
+    const score = (distance === 0 ? -2 : 0) + (held ? -1 : distance / pull)
     if (score < bestScore) {
       best = t
       bestDistance = distance
@@ -117,9 +118,45 @@ export function stepSpring(s: SpringState, target: number, dt: number, omega: nu
   }
 }
 
-/** Reduced motion keeps the reticle responsive but drops the overshoot. */
+/**
+ * The magnetic offset is always critically damped: quick, with no overshoot. Reduced motion is just
+ * a little snappier.
+ */
 export function springProfile(reduced: boolean): { omega: number; zeta: number } {
-  return reduced ? { omega: 30, zeta: 1 } : { omega: 24, zeta: 0.78 }
+  return reduced ? { omega: 40, zeta: 1 } : { omega: 28, zeta: 1 }
+}
+
+export interface FollowState {
+  /** The magnetic offset of the reticle from the real pointer, per axis. */
+  ox: SpringState
+  oy: SpringState
+}
+
+export const REST_FOLLOW: FollowState = { ox: { x: 0, v: 0 }, oy: { x: 0, v: 0 } }
+
+/**
+ * The reticle is the real pointer plus a smoothed magnetic offset. Free movement therefore has
+ * exactly zero lag: only the pull toward a target (and the release from it) is eased.
+ */
+export function stepFollow(
+  f: FollowState,
+  pointer: Point,
+  want: Point,
+  dt: number,
+  omega: number,
+): { follow: FollowState; position: Point } {
+  const ox = stepSpring(f.ox, want.x - pointer.x, dt, omega, 1)
+  const oy = stepSpring(f.oy, want.y - pointer.y, dt, omega, 1)
+  return { follow: { ox, oy }, position: { x: pointer.x + ox.x, y: pointer.y + oy.x } }
+}
+
+/**
+ * The native cursor is hidden, so the user clicks where the reticle is. A pointer click that lands
+ * outside the captured target (inside its capture zone) must still activate it, once. Clicks that
+ * already hit the target, and keyboard activation (detail 0), are left alone.
+ */
+export function shouldForwardClick(c: { capturedId: string | null; insideCaptured: boolean; detail: number }): boolean {
+  return c.capturedId !== null && !c.insideCaptured && c.detail > 0
 }
 
 const TIP_GAP = 12
