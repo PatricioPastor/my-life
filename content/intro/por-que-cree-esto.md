@@ -25,9 +25,9 @@ updated: 2026-09-30
 
 Desde hace tiempo que tengo una idea dando vueltas y si alguna vez hablamos, sabes que esas cosas a mi, me vuelven loco.
 
-Esa idea, nace de varias inquietudes. 
+Esa idea, nace de una pregunta. 
 
-> *"Como puedo contar una historia que se puedan apreciar todos los detalles"*
+> "¿Como puedo contar una historia y que se puedan apreciar **TODOS** los detalles?"
 
 Y ahí pensé: Que increíble sería, un lugar donde pueda narrar una historia, vincular videos que se muestren en cierto momento (o que quienes participen de la historia lo agreguen, por eso ingresar con un **Instagram** ), audios, fotos, puntos de vista y sea interactivo.
 
@@ -39,4 +39,4 @@ Y ahi dije listo, este tiene que ser el lugar; pero no solo para contar historia
 
 Si llegaste hasta acá, algo hemos compartido y por eso, quiero hacerte parte de este "Universo"
 
-## Pronto, vas a ver como :p.
+**Pronto, vas a ver como :p.**
