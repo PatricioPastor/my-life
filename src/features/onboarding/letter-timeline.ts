@@ -1,8 +1,10 @@
 /** Pure timeline for assembling a phrase letter by letter. No DOM, no clock: the same inputs always give the same output. */
 
 export interface TimelineOpts {
-  /** Time a fully formed phrase stays on screen. */
-  holdMs: number
+  /** Time a fully formed phrase stays on screen. Ignored when `cycleMs` is given. */
+  holdMs?: number
+  /** The whole phrase (enter + hold + exit) lasts exactly this long: the hold is whatever the enter and the exit leave over. */
+  cycleMs?: number
   /** Whether the phrase fades out again (the last phrase stays for the CTA). */
   exit: boolean
   /** Base left-to-right step between letters; it shrinks for long phrases so the assembly never outlasts the cap. */
@@ -44,13 +46,13 @@ export interface LetterTimeline {
 
 export const STEP_MS = 65
 export const JITTER_MS = 30
-/** The whole assembly of a phrase, whatever its length: a phrase cycle is about two seconds (enter + hold + exit). */
-export const ENTER_CAP_MS = 1000
-const DUR_MIN = 550
-const DUR_MAX = 700
-const EXIT_STAGGER_MS = 50
-const EXIT_DUR_MIN = 230
-const EXIT_DUR_MAX = 250
+/** The whole assembly of a phrase, whatever its length: the hold then fills the rest of the phrase cycle (see `cycleMs`). */
+export const ENTER_CAP_MS = 1300
+const DUR_MIN = 700
+const DUR_MAX = 900
+const EXIT_STAGGER_MS = 90
+const EXIT_DUR_MIN = 380
+const EXIT_DUR_MAX = 420
 
 /** FNV-1a: turns any seed into a 32-bit number. */
 function hash(seed: string | number): number {
@@ -110,7 +112,8 @@ export function letterTimeline(text: string, seed: string | number, opts: Timeli
   const moving = letters.filter((l) => !l.space)
   const enterMs = moving.reduce((m, l) => Math.max(m, l.delay + l.dur), 0)
   const exitMs = opts.exit ? moving.reduce((m, l) => Math.max(m, l.xdelay + l.xdur), 0) : 0
-  const holdMs = opts.holdMs
+  // With a cycle length the hold is what enter and exit leave over, so the total is exact whatever the phrase.
+  const holdMs = opts.cycleMs === undefined ? (opts.holdMs ?? 0) : Math.max(0, opts.cycleMs - enterMs - exitMs)
 
   return { letters, enterMs, holdMs, exitMs, exitAtMs: enterMs + holdMs, totalMs: enterMs + holdMs + exitMs }
 }

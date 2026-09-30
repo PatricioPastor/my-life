@@ -116,6 +116,14 @@ User: "la transición de la intro ... modificarlo a 2 segundos, sino tarda mucho
 - **Letters.** The assembly is capped at `ENTER_CAP_MS` = 1000 ms whatever the phrase length: stagger = `min(65 ms, (cap - 700) / letters)`, seeded jitter up to 30 ms and never above 60% of the stagger (the left-to-right order stays strict). Travel 550-700 ms with the same no-overshoot ease, exit stagger 0-50 ms and 230-250 ms per letter. Origins, rotations, blur and scale ranges are unchanged, and the letters still settle exactly.
 - **TDD.** Failing tests for the new totals, the cap, the squeezed stagger and the holds first; `letter-timeline.test.ts` and `phrases.test.ts`.
 
+## 3.2 seconds per phrase (2026-09-30)
+
+User: "mas duracion entre las frases, que toda la animación, dure 3.2 seg, queda muy rapida ahora".
+
+- **Cycle.** Every first-visit phrase now lasts exactly `CYCLE_MS` = 3200 ms. The hold is derived, not tuned: `holdMs = CYCLE_MS - enterMs - exitMs` (`cycleMs` option of `letterTimeline`, which stays pure and deterministic). Measured (enter / hold / exit = total): buenoniaa 1182 / 1532 / 486 = 3200 ms, buenanochee 1162.4 / 1544.6 / 493 = 3200 ms, "esta, es mi vida" 1206.7 / 1507.3 / 486 = 3200 ms. The last phrase has no exit: 1251.6 / 1948.4 / 0 = 3200 ms, then the CTA. A returning visitor's greeting is unchanged in rule: enter + 300 ms hold, no exit (buenoniaa 1182 + 300 = 1482 ms, buenanochee 1462.4 ms).
+- **Letters.** Slightly calmer: `ENTER_CAP_MS` = 1300 ms (stagger = `min(65 ms, (cap - 900) / letters)`), travel 700-900 ms, exit stagger 0-90 ms and 380-420 ms per letter. Origins, rotation, blur, scale, ease and the jitter rule are unchanged, and the letters still settle exactly.
+- **TDD.** Failing tests first (totals of exactly 3200 ms, hold over 1 s, new cap and exit bounds, returning greeting = enter + 300); `letter-timeline.test.ts` and `phrases.test.ts`.
+
 ## Next step
 
 T4: deliver (RDD per policy; push after the user approves).

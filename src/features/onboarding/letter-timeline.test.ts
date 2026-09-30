@@ -39,8 +39,12 @@ describe("letterTimeline", () => {
       expect(l.scale).toBeLessThanOrEqual(0.95)
       expect(l.blur).toBeGreaterThanOrEqual(4)
       expect(l.blur).toBeLessThanOrEqual(6)
-      expect(l.dur).toBeGreaterThanOrEqual(550)
-      expect(l.dur).toBeLessThanOrEqual(700)
+      expect(l.dur).toBeGreaterThanOrEqual(700)
+      expect(l.dur).toBeLessThanOrEqual(900)
+      expect(l.xdelay).toBeGreaterThanOrEqual(0)
+      expect(l.xdelay).toBeLessThanOrEqual(90)
+      expect(l.xdur).toBeGreaterThanOrEqual(380)
+      expect(l.xdur).toBeLessThanOrEqual(420)
     }
     // Irregular: not every letter starts on the same side.
     expect(new Set(moving.map((l) => Math.sign(l.dx))).size).toBe(2)
@@ -59,17 +63,29 @@ describe("letterTimeline", () => {
     const end = Math.max(...t.letters.filter((l) => !l.space).map((l) => l.delay + l.dur))
     expect(t.enterMs).toBe(end)
     expect(t.holdMs).toBe(700)
-    expect(t.exitMs).toBeGreaterThanOrEqual(230)
-    expect(t.exitMs).toBeLessThanOrEqual(300)
+    expect(t.exitMs).toBeGreaterThanOrEqual(380)
+    expect(t.exitMs).toBeLessThanOrEqual(510)
     expect(t.totalMs).toBe(t.enterMs + t.holdMs + t.exitMs)
     expect(t.exitAtMs).toBe(t.enterMs + t.holdMs)
   })
 
-  it("caps the assembly at about a second whatever the phrase length", () => {
+  it("caps the assembly at 1.3 s whatever the phrase length", () => {
     for (const text of ["buenoniaa", "buenanochee", "esta, es mi vida", "pero narrada de una forma diferente", "a".repeat(120)]) {
       for (const seed of ["a", "b", "c", text]) {
         expect(letterTimeline(text, seed, OPTS).enterMs, text).toBeLessThanOrEqual(ENTER_CAP_MS)
       }
+    }
+  })
+
+  it("derives the hold from a cycle length so the total is exact whatever the phrase", () => {
+    for (const text of ["ab", "buenoniaa", "esta, es mi vida", "pero narrada de una forma diferente"]) {
+      const withExit = letterTimeline(text, text, { cycleMs: 3200, exit: true })
+      expect(withExit.totalMs, text).toBe(3200)
+      expect(withExit.holdMs).toBe(3200 - withExit.enterMs - withExit.exitMs)
+      expect(withExit.exitAtMs).toBe(withExit.enterMs + withExit.holdMs)
+      const noExit = letterTimeline(text, text, { cycleMs: 3200, exit: false })
+      expect(noExit.exitMs).toBe(0)
+      expect(noExit.totalMs, text).toBe(3200)
     }
   })
 
