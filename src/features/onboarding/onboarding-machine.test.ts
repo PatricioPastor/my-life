@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { HOLD_MS, dueIn, initialOnboarding, journeyWanted, onboardingReducer, type OnboardingState } from "./onboarding-machine"
+import { dueIn, initialOnboarding, journeyWanted, onboardingReducer, type OnboardingState } from "./onboarding-machine"
+
+const D = { greeting: 4000, life: 5000, different: 4200 }
 
 const start = (returning = false, now = 0): OnboardingState =>
-  onboardingReducer(initialOnboarding, { type: "start", now, returning, greeting: "buenoniaa" })
+  onboardingReducer(initialOnboarding, { type: "start", now, returning, greeting: "buenoniaa", durations: D })
 
 describe("onboarding machine", () => {
   it("waits idle until started, then greets", () => {
@@ -12,23 +14,29 @@ describe("onboarding machine", () => {
     expect(s.greeting).toBe("buenoniaa")
   })
 
-  it("holds each text phase for 1500 ms and then moves on", () => {
+  it("holds each text phase for the duration its timeline gave it", () => {
     let s = start(false, 100)
-    s = onboardingReducer(s, { type: "tick", now: 100 + HOLD_MS - 1 })
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting - 1 })
     expect(s.phase).toBe("greeting")
-    s = onboardingReducer(s, { type: "tick", now: 100 + HOLD_MS })
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting })
     expect(s.phase).toBe("life")
-    s = onboardingReducer(s, { type: "tick", now: 100 + HOLD_MS * 2 - 1 })
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting + D.life - 1 })
     expect(s.phase).toBe("life")
-    s = onboardingReducer(s, { type: "tick", now: 100 + HOLD_MS * 2 })
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting + D.life })
     expect(s.phase).toBe("different")
-    s = onboardingReducer(s, { type: "tick", now: 100 + HOLD_MS * 3 })
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting + D.life + D.different - 1 })
+    expect(s.phase).toBe("different")
+    s = onboardingReducer(s, { type: "tick", now: 100 + D.greeting + D.life + D.different })
     expect(s.phase).toBe("cta")
   })
 
   it("keeps the CTA until it is clicked, however long it takes", () => {
     let s = start()
-    for (const t of [1500, 3000, 4500]) s = onboardingReducer(s, { type: "tick", now: t })
+    let now = 0
+    for (const d of [D.greeting, D.life, D.different]) {
+      now += d
+      s = onboardingReducer(s, { type: "tick", now })
+    }
     expect(s.phase).toBe("cta")
     s = onboardingReducer(s, { type: "tick", now: 999999 })
     expect(s.phase).toBe("cta")
@@ -55,7 +63,7 @@ describe("onboarding machine", () => {
   it("lets a returning visitor go from the greeting straight to done", () => {
     let s = start(true)
     expect(s.phase).toBe("greeting")
-    s = onboardingReducer(s, { type: "tick", now: HOLD_MS })
+    s = onboardingReducer(s, { type: "tick", now: D.greeting })
     expect(s.phase).toBe("done")
   })
 
@@ -71,7 +79,7 @@ describe("onboarding machine", () => {
 
   it("reports when the next timed step is due", () => {
     const s = start(false, 200)
-    expect(dueIn(s, 500)).toBe(1200)
+    expect(dueIn(s, 500)).toBe(D.greeting - 300)
     expect(dueIn(s, 5000)).toBe(0)
     expect(dueIn({ ...s, phase: "cta" }, 500)).toBeNull()
     expect(dueIn(initialOnboarding, 0)).toBeNull()

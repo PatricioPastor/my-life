@@ -5,6 +5,8 @@ import { MagneticCursor } from "@/features/cursor"
 import { STORY_TITLE as CTA_LABEL } from "./story"
 import { track } from "@/shared/analytics"
 import { HardwareStep } from "./hardware-step"
+import { PhraseLine } from "./phrase-line"
+import { DIFFERENT_PHRASE, LIFE_PHRASE, type PhraseKind } from "./phrases"
 import { StoryView } from "./story-view"
 import type { OnboardingEvent, OnboardingPhase, OnboardingState } from "./onboarding-machine"
 
@@ -13,11 +15,7 @@ interface OnboardingProps {
   dispatch: ActionDispatch<[OnboardingEvent]>
 }
 
-const PHRASES = {
-  life: "esta, es mi vida",
-  different: "pero narrada de una forma diferente",
-} as const
-
+const KINDS: PhraseKind[] = ["greeting", "life", "different"]
 
 /** Which of the three lines is on stage for a phase (-1 while none is). */
 function activeLine(phase: OnboardingPhase): number {
@@ -39,7 +37,8 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
   const [ctaRect, setCtaRect] = useState<DOMRect | null>(null)
   const { phase } = state
   const active = activeLine(phase)
-  const lines = [state.greeting, PHRASES.life, PHRASES.different]
+  // Before the machine starts the greeting stays empty, so SSR never guesses day or night.
+  const lines = [phase === "idle" ? "" : state.greeting, LIFE_PHRASE, DIFFERENT_PHRASE]
   const ctaOn = phase === "cta"
   const leaving = phase === "done"
 
@@ -48,9 +47,7 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
       <div className="ob-stage">
         <div className="ob-lines" aria-live="polite">
           {lines.map((text, i) => (
-            <p key={i} className="ob-line font-gambarino" data-on={i === active} aria-hidden={i !== active}>
-              {phase === "idle" ? "" : text}
-            </p>
+            <PhraseLine key={i} kind={KINDS[i]!} text={text} active={i === active} returning={state.returning} />
           ))}
         </div>
         <button

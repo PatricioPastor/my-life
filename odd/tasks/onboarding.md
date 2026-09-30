@@ -85,6 +85,16 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 - 2026-09-30: T3 done. Journey chunk lazy via next/dynamic (fetched on idle at mount, mounted at the hardware step so the gate is ready before Entrar); offscreen sky warm-up on idle during the story; GPU classification + browser steps; onboarding_completed/onboarding_skipped/hw_accel_suggested. Fixed: HeadlessChrome UA misread as Safari; `--font-gambarino` theme token; ghost magnet on the hidden story button.
 - 2026-09-30: Review follow-up: Gambarino stylesheet moved out of the render-blocking root head (preconnect kept) and awaited with an 800 ms cap; unknown GPU verdict is soft and silent; the renderer probe is light and off the render path.
 
+## Letter assembly (2026-09-30)
+
+User feedback: more time between phrases, and letters that form the sentence from irregular origins instead of the whole phrase appearing at once.
+
+- **Assembly.** Each phrase is split into letters (words stay `inline-block` / `nowrap`, spaces stay real spaces). Every letter is in its final place from the first frame at opacity 0, so nothing reflows. One `@keyframes ob-letter-in` driven by per-letter custom properties (`--dx --dy --rot --scale --blur --delay --dur`) animates only transform, opacity and filter to `none` (fully settled). `will-change` is set only while letters move (a `data-animating` flag flipped by timers, no per-frame JS).
+- **Timeline.** Pure `letter-timeline.ts` (seeded per phrase, mulberry32): offsets ±28–60 px, rotation ±8–18°, scale 0.85–0.95, blur 4–6 px, stagger 65 ms per character + 0–60 ms jitter (order preserved), travel 900–1200 ms, ease `cubic-bezier(0.22, 0.75, 0.3, 1)` (no overshoot). `phrases.ts` derives the phase durations; the machine receives them injected via `start` (nothing hard-coded to 1500 ms).
+- **Timings (enter + hold + exit = total).** greeting: 1613/1696 + 2000 + 631/637 = 4244/4333 ms (buenoniaa/buenanochee); "esta, es mi vida": 2081 + 2500 + 629 = 5210 ms; "pero narrada de una forma diferente": 3273 + 700 (a beat, then the CTA; it never exits) = 3973 ms. Exit: letters fade, blur 4 px and drift 3–6 px up over ~440–470 ms each with a 0–180 ms random stagger. Returning visitors: greeting 1613 + 600 hold, no exit (2213 ms).
+- **A11y / reduced motion.** Full sentence once in an `sr-only` span; letter spans `aria-hidden`. Reduced motion: opacity-only fade with a ~0.3x stagger, same holds.
+- **Evidence.** Vitest (letter-timeline, phrases, machine, component), Playwright on :3001 at 1440x900 (150/500/900 ms, formed, mid-exit, next phrase) and 390x844: fully formed letter rects match a non-animated baseline render with 0.000 px max diff (13 letters), computed opacity 1, no transform, `will-change: auto` at rest. Known trade-off: per-letter spans drop kerning between letters (visually negligible at this size).
+
 ## Next step
 
 T4: deliver (RDD per policy; push after the user approves).

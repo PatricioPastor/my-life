@@ -311,22 +311,29 @@
     text-wrap: balance;
     font-size: 1em;
     line-height: 1.04;
-    letter-spacing: 0.05em;
-    opacity: 0;
-    filter: blur(10px);
-    transition:
-      opacity 460ms cubic-bezier(0.55, 0, 1, 0.45),
-      filter 460ms cubic-bezier(0.55, 0, 1, 0.45),
-      letter-spacing 460ms cubic-bezier(0.55, 0, 1, 0.45);
-  }
-  .ob-line[data-on="true"] {
-    opacity: 1;
-    filter: blur(0);
     letter-spacing: -0.005em;
-    transition:
-      opacity 760ms cubic-bezier(0.16, 1, 0.3, 1) 200ms,
-      filter 760ms cubic-bezier(0.16, 1, 0.3, 1) 200ms,
-      letter-spacing 980ms cubic-bezier(0.16, 1, 0.3, 1) 200ms;
+  }
+  /* Words never break; each letter sits in its final place from the first frame (opacity 0), so nothing reflows. */
+  .ob-word {
+    display: inline-block;
+    white-space: nowrap;
+  }
+  .ob-letter {
+    display: inline-block;
+    opacity: 0;
+  }
+  /* Enter: each letter starts from its own irregular origin and settles exactly. Exit: a soft, slightly staggered fade. */
+  .ob-line[data-on="true"] .ob-letter {
+    animation: ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) both;
+  }
+  .ob-line[data-on="true"][data-exit="true"] .ob-letter {
+    animation:
+      ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) both,
+      ob-letter-out var(--xdur) cubic-bezier(0.55, 0, 1, 0.45) calc(var(--exit-at) + var(--xdelay)) forwards;
+  }
+  /* will-change lives only while letters move; the component flips this flag. */
+  .ob-line[data-animating="true"] .ob-letter {
+    will-change: transform, opacity, filter;
   }
   .ob-cta {
     padding: 14px 22px !important;
@@ -493,11 +500,14 @@
     .ob-continue {
       animation-name: fade;
     }
-    .ob-line,
-    .ob-line[data-on="true"] {
-      filter: none;
-      letter-spacing: -0.005em;
-      transition: opacity 400ms ease;
+    /* Fade only: a small stagger, no travel, rotation or blur. The holds stay the same. */
+    .ob-line[data-on="true"] .ob-letter {
+      animation: ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) both;
+    }
+    .ob-line[data-on="true"][data-exit="true"] .ob-letter {
+      animation:
+        ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) both,
+        ob-letter-fade-out 450ms ease-in calc(var(--exit-at) + var(--xdelay)) forwards;
     }
     .ob-cta,
     .ob-cta[data-on="true"] {
@@ -511,6 +521,46 @@
   }
 }
 
+@keyframes ob-letter-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(var(--scale));
+    filter: blur(var(--blur));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+@keyframes ob-letter-out {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, var(--xy), 0);
+    filter: blur(4px);
+  }
+}
+@keyframes ob-letter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ob-letter-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
 @keyframes ob-drift {
   from {
     transform: translate3d(-3%, -2%, 0);

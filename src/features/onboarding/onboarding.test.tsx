@@ -20,10 +20,34 @@ afterEach(() => {
 const at = (phase: OnboardingState["phase"]): OnboardingState => ({ ...initialOnboarding, phase, greeting: "buenanochee" })
 
 describe("Onboarding", () => {
-  it("exposes the greeting as text and marks only the current line active", () => {
+  it("exposes the greeting once as text and marks only the current line active", () => {
     render(<Onboarding state={at("greeting")} dispatch={vi.fn()} />)
-    expect(screen.getByText("buenanochee").getAttribute("data-on")).toBe("true")
-    expect(screen.getByText("esta, es mi vida", { ignore: "[aria-hidden=false]" }).getAttribute("aria-hidden")).toBe("true")
+    expect(screen.getByText("buenanochee").closest(".ob-line")!.getAttribute("data-on")).toBe("true")
+    const hidden = screen.getByText("esta, es mi vida").closest(".ob-line")!
+    expect(hidden.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("splits each phrase into aria-hidden letters, words kept whole", () => {
+    render(<Onboarding state={at("life")} dispatch={vi.fn()} />)
+    const line = screen.getByText("esta, es mi vida").closest(".ob-line")!
+    const letters = line.querySelectorAll(".ob-letter")
+    expect(letters.length).toBe("esta,esmivida".length)
+    expect(line.querySelectorAll(".ob-word").length).toBe(4)
+    for (const l of letters) expect(l.closest("[aria-hidden=true]")).toBeTruthy()
+    const first = letters[0] as HTMLElement
+    expect(first.style.getPropertyValue("--dx")).toMatch(/px$/)
+    expect(first.style.getPropertyValue("--delay")).toMatch(/ms$/)
+    expect(first.style.getPropertyValue("--dur")).toMatch(/ms$/)
+  })
+
+  it("renders the same origins on every render of a phrase", () => {
+    const { unmount } = render(<Onboarding state={at("life")} dispatch={vi.fn()} />)
+    const grab = () =>
+      Array.from(document.querySelectorAll(".ob-line")[1]!.querySelectorAll<HTMLElement>(".ob-letter")).map((l) => l.getAttribute("style"))
+    const a = grab()
+    unmount()
+    render(<Onboarding state={at("life")} dispatch={vi.fn()} />)
+    expect(grab()).toEqual(a)
   })
 
   it("shows the CTA as a real button only in the cta phase and reports its click", () => {
