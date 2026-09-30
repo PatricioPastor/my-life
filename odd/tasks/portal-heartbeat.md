@@ -63,7 +63,7 @@ Rework the entry portal (the ASCII tunnel of the gate). User feedback:
 
 - [x] **T1 — Heartbeat, smooth color and palette.** Pure modules plus the renderer wiring and the darker background. Route: delegated direct (writer trigger).
 - [x] **T2 — Glow and ASCII quality.** Bloom layer, orientation glyphs, grid and font, mobile bounds. Route: delegated direct.
-- [ ] **T3 — Deliver.** RDD per policy, then fast-forward `main` and push.
+- [x] **T3 — Deliver.** RDD approved; `main` fast-forwarded and pushed, as the user asked.
 
 ## Acceptance criteria
 
@@ -78,6 +78,29 @@ Rework the entry portal (the ASCII tunnel of the gate). User feedback:
 - 2026-09-30: T1 done: warm portal palette, bounded cyclic ring colors (period 1024, no throw), smooth quantized color blend, seeded heartbeat (lub-dub, gate profiles, surge and pulse band), darker depth with vignette, static reduced-motion frame that repaints on gate change. Route: delegated direct (writer).
 - 2026-09-30: T2 done: half-resolution CSS-blurred screen-blend bloom canvas driven by the beat, tangent glyphs on ring spines, viewport-aware bounded grid (<=12k cells), Silkscreen glyph font.
 
+## Verification evidence
+
+- Writer: `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` passed 181/181 across 25 files; `pnpm build` passed.
+- Parent spot check: `pnpm test` passed 181/181.
+- Screenshots:
+  - Headless Chromium at 1440×900 and 390×844, from `pnpm dev`.
+  - Seen: a near-black coffee background, warm rings with tangent glyphs, and a pulsing center glow. Silkscreen reads crisply.
+  - The bloom looked faint headless and is unverified in Safari. The reduced-motion frame was not captured.
+- RDD slice `477058f..f81921f`:
+  - Assessed medium, `slice_budget_reached`, 1052 lines.
+  - Consent granted by the user.
+  - `review-reliability` → **approved**.
+  - Acknowledged; authority burned (lineage `review-e951385dcefae165`).
+  - Reviewed boundary is now `f81921f`.
+
+## Review follow-ups (advisory, not accepted yet)
+
+- `R3-renderer-blend-key-wiring-untested`: the renderer's blend key (ring/next, step, level), the heartbeat bands and the glow crossfade are untested as wired.
+- `R3-refresh-path-untested`: `refresh()` repainting the reduced-motion frame on a gate change, and its no-op after `stop()` or while animating, are untested.
+- `R3-uint8-cycle-silent-wrap`: the ring cycle is stored in a `Uint8Array`, so a palette of more than 256 colors would wrap silently. It should validate or widen. Not reachable with 4 colors.
+- `R3-stale-next-step`: fixed by this update.
+
 ## Next step
 
-The writer runs T1 + T2.
+- [x] **T3 — Deliver.** RDD done. Fast-forward `main` and push, as the user asked.
+- Later: tune bloom strength in a real browser, including Safari, and decide on the follow-ups above.
