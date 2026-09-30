@@ -21,19 +21,19 @@ afterEach(() => {
 
 async function enter(handle: string) {
   render(<Journey />)
-  fireEvent.change(screen.getByLabelText("Enter with your Instagram"), { target: { value: handle } })
-  fireEvent.click(screen.getByRole("button", { name: "Enter" }))
+  fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: handle } })
+  fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 }
 
 describe("Journey gate flow", () => {
   it("holds checking for at least 1100 ms even when the server answers at once", async () => {
     checkHandle.mockResolvedValue({ status: "granted" })
     await enter("ana")
-    expect(screen.getByRole("status").textContent).toBe("Checking the list…")
+    expect(screen.getByRole("status").textContent).toBe("Revisando la lista…")
     await act(() => vi.advanceTimersByTimeAsync(1000))
-    expect(screen.getByRole("status").textContent).toBe("Checking the list…")
+    expect(screen.getByRole("status").textContent).toBe("Revisando la lista…")
     await act(() => vi.advanceTimersByTimeAsync(150))
-    expect(screen.getByText("Welcome")).toBeTruthy()
+    expect(screen.getByText("Hola")).toBeTruthy()
     expect(checkHandle).toHaveBeenCalledWith("ana")
   })
 
@@ -41,9 +41,9 @@ describe("Journey gate flow", () => {
     checkHandle.mockResolvedValue({ status: "granted" })
     await enter("ana")
     await act(() => vi.advanceTimersByTimeAsync(1200))
-    expect(screen.queryByRole("button", { name: "Stories" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Historias" })).toBeNull()
     await act(() => vi.advanceTimersByTimeAsync(1500))
-    expect(screen.getByRole("button", { name: "Stories" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
     expect(screen.getByText("@ana")).toBeTruthy()
     await act(() => vi.advanceTimersByTimeAsync(1300))
     expect(screen.queryByText("@ana")).toBeNull()
@@ -53,12 +53,12 @@ describe("Journey gate flow", () => {
     checkHandle.mockResolvedValue({ status: "denied" })
     await enter("eve")
     await act(() => vi.advanceTimersByTimeAsync(1200))
-    expect(screen.getByRole("status").textContent).toBe("@eve isn’t on the list yet.")
+    expect(screen.getByRole("status").textContent).toBe("@eve todavía no está en la lista.")
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
-    fireEvent.click(screen.getByRole("link", { name: "Ask for access on Instagram" }))
+    fireEvent.click(screen.getByRole("link", { name: "Pedir acceso por Instagram" }))
     await act(() => vi.advanceTimersByTimeAsync(0))
-    expect(screen.getByRole("status").textContent).toBe("Message copied. Paste it in the DM to @patriciopastor_.")
-    expect(screen.getByRole("link", { name: "Ask for access on Instagram" })).toBeTruthy()
+    expect(screen.getByRole("status").textContent).toBe("Mensaje copiado. Pégalo en el DM a @patriciopastor_.")
+    expect(screen.getByRole("link", { name: "Pedir acceso por Instagram" })).toBeTruthy()
     vi.unstubAllGlobals()
   })
 
@@ -66,7 +66,7 @@ describe("Journey gate flow", () => {
     checkHandle.mockRejectedValue(new Error("boom"))
     await enter("ana")
     await act(() => vi.advanceTimersByTimeAsync(1200))
-    expect(screen.getByRole("status").textContent).toBe("@ana isn’t on the list yet.")
+    expect(screen.getByRole("status").textContent).toBe("@ana todavía no está en la lista.")
   })
 
   it("clears its timers on unmount", async () => {
@@ -84,18 +84,18 @@ describe("Journey after the gate", () => {
     await act(() => vi.advanceTimersByTimeAsync(1200))
     await act(() => vi.advanceTimersByTimeAsync(1500))
 
-    fireEvent.click(screen.getByRole("button", { name: "Now" }))
-    expect(screen.getByRole("heading", { name: "Now" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Sky" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Cielo" })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole("button", { name: /\[Current focus\]/ }))
-    expect(screen.getByRole("heading", { name: "[Current focus]" })).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }))
-    expect(screen.getByText("2 of 3")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: /\[Foco actual\]/ }))
+    expect(screen.getByRole("heading", { name: "[Foco actual]" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
+    expect(screen.getByText("2 de 3")).toBeTruthy()
 
-    fireEvent.click(screen.getByRole("button", { name: "Now" }))
-    expect(screen.getByRole("heading", { name: "Now" })).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Sky" }))
-    expect(screen.getByRole("button", { name: "Stories" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
   })
 })

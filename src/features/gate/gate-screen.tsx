@@ -20,17 +20,17 @@ const SHADOW = "[text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
 function statusText(status: GateStatus, handle: string, copied?: boolean): string {
   switch (status) {
     case "idle":
-      return "Invitation only."
+      return "Solo con invitación."
     case "invalid":
-      return "Use letters, numbers, periods or underscores."
+      return "Usa letras, números, puntos o guiones bajos."
     case "checking":
-      return "Checking the list…"
+      return "Revisando la lista…"
     case "denied":
-      return `@${handle} isn’t on the list yet.`
+      return `@${handle} todavía no está en la lista.`
     case "requested":
       return copied
-        ? `Message copied. Paste it in the DM to @${OWNER_HANDLE}.`
-        : `Send a DM to @${OWNER_HANDLE} from @${handle}.`
+        ? `Mensaje copiado. Pégalo en el DM a @${OWNER_HANDLE}.`
+        : `Envía un DM a @${OWNER_HANDLE} desde @${handle}.`
     case "granted":
       return ""
   }
@@ -60,13 +60,13 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
         style={{ background: `radial-gradient(closest-side, ${rgba(PORTAL.deep, 0.88)}, transparent)` }}
       />
       <p className={cn("absolute top-10 left-12 m-0 text-xs tracking-[0.12em] text-ink-muted", SHADOW)}>
-        [Your name]
+        patriciopastor
       </p>
       <div className="absolute inset-x-0 top-[58%] flex flex-col items-center px-6">
         {status !== "granted" ? (
           <form onSubmit={submit} className="rise flex max-w-full flex-col items-center gap-[18px]">
             <label htmlFor="ig-handle" className="text-xs tracking-[0.08em] text-ink-muted">
-              Enter with your Instagram
+              Ingresa con tu Instagram
             </label>
             <div
               className={cn(
@@ -83,7 +83,7 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
                 type="text"
                 value={handle}
                 onChange={(e) => onTyped(e.target.value)}
-                placeholder="username"
+                placeholder="usuario"
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -94,7 +94,7 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
               />
               <button
                 type="submit"
-                aria-label="Enter"
+                aria-label="Entrar"
                 disabled={!handle || status === "checking"}
                 className="press flex h-11 w-11 shrink-0 items-center justify-center border border-signal text-ink sm:h-14 sm:w-14"
               >
@@ -122,13 +122,13 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
                 onClick={askForAccess}
                 className="press inline-flex h-11 items-center border border-ink-faint px-[18px] text-xs tracking-[0.08em] text-ink"
               >
-                Ask for access on Instagram
+                Pedir acceso por Instagram
               </a>
             )}
           </form>
         ) : (
           <div className="turn flex flex-col items-center gap-[14px]">
-            <p className="m-0 text-xs tracking-[0.08em] text-ink-muted">Welcome</p>
+            <p className="m-0 text-xs tracking-[0.08em] text-ink-muted">Hola</p>
             <p className="m-0 max-w-full font-display text-[36px] leading-none font-black break-all text-ink sm:text-[64px]">
               @{handle}
             </p>

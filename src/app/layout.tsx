@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Doto, Silkscreen, Spectral } from "next/font/google";
+import { resolveSiteUrl } from "@/shared/site/site-url";
 import "./globals.css";
 
 // Weights are the ones the design uses: Doto 600 (tunnel glyphs) and 900 (display),
@@ -23,17 +24,28 @@ const spectral = Spectral({
   style: ["normal", "italic"],
 });
 
+const TITLE = "patriciopastor";
+const DESCRIPTION = "Historias, escritos y proyectos de Patricio Pastor. Solo con invitación.";
+
 export const metadata: Metadata = {
-  title: "[Your name]",
-  description: "A personal landing, by invitation.",
+  metadataBase: new URL(resolveSiteUrl(process.env)),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, type: "website", locale: "es_AR", siteName: TITLE },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
   // Invitation-only site: keep it out of search indexes.
   robots: { index: false, follow: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0A0600",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${doto.variable} ${silkscreen.variable} ${spectral.variable} dark h-full antialiased`}
     >
       <body className="h-full">{children}</body>

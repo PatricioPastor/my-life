@@ -19,35 +19,35 @@ export interface Facet {
 // Placeholder copy from the design canvas; real content comes later.
 export const FACETS: readonly Facet[] = [
   {
-    id: "stories", name: "Stories", x: 0.21, y: 0.68, color: "gold",
+    id: "stories", name: "Historias", x: 0.21, y: 0.68, color: "gold",
     entries: [
-      { meta: "[Year]", title: "[Story title]" },
-      { meta: "[Year]", title: "[Story title]" },
-      { meta: "[Year]", title: "[Story title]" },
+      { meta: "[Año]", title: "[Título de la historia]" },
+      { meta: "[Año]", title: "[Título de la historia]" },
+      { meta: "[Año]", title: "[Título de la historia]" },
     ],
   },
   {
-    id: "writing", name: "Writing", x: 0.57, y: 0.79, color: "clay",
+    id: "writing", name: "Escritos", x: 0.57, y: 0.79, color: "clay",
     entries: [
-      { meta: "[Date]", title: "[Post title]" },
-      { meta: "[Date]", title: "[Post title]" },
-      { meta: "[Date]", title: "[Post title]" },
+      { meta: "[Fecha]", title: "[Título del escrito]" },
+      { meta: "[Fecha]", title: "[Título del escrito]" },
+      { meta: "[Fecha]", title: "[Título del escrito]" },
     ],
   },
   {
-    id: "projects", name: "Projects", x: 0.75, y: 0.45, color: "sandy",
+    id: "projects", name: "Proyectos", x: 0.75, y: 0.45, color: "sandy",
     entries: [
-      { meta: "[Role, year]", title: "[Project name]" },
-      { meta: "[Role, year]", title: "[Project name]" },
-      { meta: "[Role, year]", title: "[Project name]" },
+      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
+      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
+      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
     ],
   },
   {
-    id: "now", name: "Now", x: 0.39, y: 0.29, color: "bronze",
+    id: "now", name: "Ahora", x: 0.39, y: 0.29, color: "bronze",
     entries: [
-      { meta: "[Month]", title: "[Current focus]" },
-      { meta: "[Month]", title: "[Next commitment]" },
-      { meta: "[Month]", title: "[Reading or listening]" },
+      { meta: "[Mes]", title: "[Foco actual]" },
+      { meta: "[Mes]", title: "[Próximo compromiso]" },
+      { meta: "[Mes]", title: "[Leyendo o escuchando]" },
     ],
   },
 ]

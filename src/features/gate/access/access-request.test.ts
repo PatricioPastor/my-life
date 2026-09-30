@@ -13,7 +13,7 @@ describe("buildAccessRequest", () => {
 
   it("puts the visitor's normalized handle in the message", () => {
     expect(buildAccessRequest(" @Ana.B ").message).toBe(
-      "Hi! I'd like access to your site. My Instagram is @ana.b.",
+      "¡Hola! Me gustaría entrar a tu sitio. Mi Instagram es @ana.b.",
     )
   })
 })

@@ -123,13 +123,13 @@ export function Journey({ preset = "ember" }: JourneyProps) {
         <h1
           className={`rise pointer-events-none absolute top-10 left-12 m-0 text-xs font-normal tracking-[0.12em] text-ink-muted ${SHADOW}`}
         >
-          [Your name]
+          patriciopastor
         </h1>
       )}
 
       {screen === "place" && facet && (
         <div className="absolute inset-0">
-          <BackButton label="Sky" onClick={() => dispatch({ type: "back" })} />
+          <BackButton label="Cielo" onClick={() => dispatch({ type: "back" })} />
           <FacetPlace
             facet={facet}
             listSide={listSide}

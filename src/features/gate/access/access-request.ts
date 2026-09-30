@@ -11,7 +11,7 @@ export interface AccessRequest {
 export function buildAccessRequest(handle: string): AccessRequest {
   return {
     href: `https://ig.me/m/${OWNER_HANDLE}`,
-    message: `Hi! I'd like access to your site. My Instagram is @${normalizeHandle(handle)}.`,
+    message: `¡Hola! Me gustaría entrar a tu sitio. Mi Instagram es @${normalizeHandle(handle)}.`,
   }
 }
 

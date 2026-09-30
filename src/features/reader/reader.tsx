@@ -7,9 +7,9 @@ interface ReaderParagraph {
 
 // Placeholder copy from the design canvas.
 export const READER_PAGES: readonly (readonly ReaderParagraph[])[] = [
-  [{ text: "[Opening paragraph of the piece]" }, { text: "[Second paragraph]" }],
-  [{ text: "[The piece continues]" }, { text: "[Another paragraph]" }],
-  [{ text: "[Closing paragraph]" }, { text: "[Sign-off]", italic: true }],
+  [{ text: "[Párrafo inicial]" }, { text: "[Segundo párrafo]" }],
+  [{ text: "[El texto continúa]" }, { text: "[Otro párrafo]" }],
+  [{ text: "[Párrafo final]" }, { text: "[Firma]", italic: true }],
 ]
 
 interface ReaderProps {
@@ -51,8 +51,8 @@ export function Reader({ meta, title, page, onPrev, onNext }: ReaderProps) {
           ))}
         </div>
       </div>
-      <nav aria-label="Pages" className="flex items-center justify-between">
-        <button type="button" aria-label="Previous page" disabled={page === 0} onClick={onPrev} className={pageButton}>
+      <nav aria-label="Páginas" className="flex items-center justify-between">
+        <button type="button" aria-label="Página anterior" disabled={page === 0} onClick={onPrev} className={pageButton}>
           <Chevron d={CHEVRON_L} />
         </button>
         <div className="flex items-center gap-4">
@@ -62,10 +62,10 @@ export function Reader({ meta, title, page, onPrev, onNext }: ReaderProps) {
             ))}
           </div>
           <span className="text-xs tracking-[0.06em] text-ink-muted">
-            {page + 1} of {count}
+            {page + 1} de {count}
           </span>
         </div>
-        <button type="button" aria-label="Next page" disabled={page === count - 1} onClick={onNext} className={pageButton}>
+        <button type="button" aria-label="Página siguiente" disabled={page === count - 1} onClick={onNext} className={pageButton}>
           <Chevron d={CHEVRON_R} />
         </button>
       </nav>
