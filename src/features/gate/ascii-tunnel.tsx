@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { createTunnelRenderer } from "./create-tunnel-renderer"
+import { createTunnelRenderer, type TunnelRenderer } from "./create-tunnel-renderer"
 import type { GateStatus } from "./gate-machine"
 
 interface AsciiTunnelProps {
@@ -12,12 +12,15 @@ interface AsciiTunnelProps {
 
 export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const rendererRef = useRef<TunnelRenderer | null>(null)
 
   // The loop reads the gate through a getter, so a state change never restarts the canvas.
   const live = useRef({ gate })
   useEffect(() => {
     live.current = { gate }
-  })
+    // A static (reduced motion) frame has no loop to notice the change, so repaint it.
+    rendererRef.current?.refresh()
+  }, [gate])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -27,7 +30,11 @@ export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
       getGate: () => live.current.gate,
       seed,
     })
-    return () => renderer?.stop()
+    rendererRef.current = renderer
+    return () => {
+      renderer?.stop()
+      rendererRef.current = null
+    }
   }, [seed])
 
   return <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full" />

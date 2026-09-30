@@ -1,29 +1,33 @@
 import { rgba } from "@/shared/lib/color"
-import { PALETTE } from "@/shared/lib/palette"
 import type { GateStatus } from "./gate-machine"
+import { blendStep, createBlendCache, smooth } from "./color-blend"
+import { createHeartbeat } from "./heartbeat"
+import { PORTAL } from "./portal-palette"
 import { createRingColorSequence } from "./ring-colors"
-import { dimTint, nextRingIndex, ringDepth } from "./tunnel-math"
+import { DIM_SHARE, mixHex, ringDepth } from "./tunnel-math"
 
 export interface TunnelOptions {
   /** Read every frame, so a state change never restarts the loop. */
   getGate: () => GateStatus
-  /** Seeds the ring colors; by default drawn once per visit so every visit paints its own sequence. */
+  /** Seeds the ring colors and the heartbeat; by default drawn once per visit so every visit paints its own. */
   seed?: number
 }
 
 export interface TunnelRenderer {
+  /** Repaints the current frame; the only way a static (reduced motion) tunnel reacts to a gate change. */
+  refresh: () => void
   stop: () => void
 }
 
 const RAMP = " .:-=+*#%@"
 const CW = 10
 const CH = 16
-
-// Ring colors: Porcelain, Periwinkle and Sunflower Gold. School Bus Yellow stays out (UI details only).
-const RING_PALETTE = [PALETTE.ink, PALETTE.periwinkle, PALETTE.gold] as const
-// Each ring color has exactly two levels: full for bright glyphs, and a fixed dim tint for faint ones and wall dots.
-const DIM_PALETTE = RING_PALETTE.map(dimTint)
+const BLEND_STEPS = 6
 const FULL_FROM = 0.36
+/** Radius (short-side fraction) where a wave starts and where it leaves the screen. */
+const WAVE_FROM = 0.03
+const WAVE_TO = 0.9
+const BIRTH_RADIUS = 0.03
 
 function hash(a: number, b: number): number {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0
@@ -36,6 +40,17 @@ function hash(a: number, b: number): number {
 // a stall when refused, a warp when the door opens.
 function targetSpeed(gate: GateStatus): number {
   return gate === "granted" ? 7 : gate === "checking" ? 1.6 : gate === "denied" ? 0.16 : gate === "requested" ? 0.35 : 0.55
+}
+
+// Extra speed a beat adds at full surge: the tunnel is "expelled" forward on every beat.
+function surgeSpeed(gate: GateStatus): number {
+  return gate === "granted" ? 2 : gate === "checking" ? 2.6 : gate === "denied" ? 0.5 : gate === "requested" ? 0.9 : 1.6
+}
+
+interface Band {
+  center: number
+  invWidth: number
+  gain: number
 }
 
 /**
@@ -66,9 +81,14 @@ export function createTunnelRenderer(
   let raf = 0
   let visible = true
   let alive = true
-  // One draw list per (palette color, level), so a frame changes fillStyle at most six times.
-  const groups: number[][] = RING_PALETTE.flatMap(() => [[], []] as number[][])
-  const rings = createRingColorSequence(options.seed ?? Math.floor(Math.random() * 0x100000000), RING_PALETTE)
+
+  const seed = options.seed ?? Math.floor(Math.random() * 0x100000000)
+  const rings = createRingColorSequence(seed, PORTAL.rings)
+  const beat = createHeartbeat(seed ^ 0x5bd1e995)
+  const cache = createBlendCache(PORTAL.rings, PORTAL.deep, BLEND_STEPS, DIM_SHARE)
+  // One draw list per (ring pair, blend step, level), so a frame changes fillStyle once per non-empty list.
+  const groups: number[][] = Array.from({ length: cache.count }, () => [])
+  const bands: Band[] = []
 
   // next/font hashes the family name; the CSS variable carries the real one.
   const family = getComputedStyle(canvas).getPropertyValue("--font-doto").trim() || "Doto"
@@ -77,17 +97,33 @@ export function createTunnelRenderer(
   function draw(dt: number) {
     if (!alive || !ctx) return
     const gate = options.getGate()
+    // A static tunnel neither beats nor surges.
+    const pulse = reduced ? null : beat
+    if (pulse) pulse.advance(dt, gate)
+    const sample = pulse ? pulse.sample() : null
+    const surge = sample ? sample.surge : 0
+
     speed += (targetSpeed(gate) - speed) * (1 - Math.exp(-dt * (gate === "granted" ? 1.4 : 3)))
-    phase += speed * dt
+    phase += (speed + surge * surgeSpeed(gate)) * dt
     twist += speed * dt * 0.012
     const follow = 1 - Math.exp(-dt * 2.2)
     vx += (0.5 + (pointerX - 0.5) * 0.45 - vx) * follow
     vy += (0.5 + (pointerY - 0.5) * 0.45 - vy) * follow
     const gain = gate === "granted" ? 1 + Math.min(speed / 7, 1) * 0.7 : gate === "denied" ? 0.55 : 1
 
+    bands.length = 0
+    if (sample) {
+      for (let w = 0; w < sample.waveCount; w++) {
+        const wave = sample.waves[w]
+        if (wave.fade < 0.01) continue
+        const center = WAVE_FROM + (WAVE_TO - WAVE_FROM) * Math.pow(wave.progress, 1.5)
+        bands.push({ center, invWidth: 1 / (0.05 + 0.16 * center), gain: wave.fade * wave.strength })
+      }
+    }
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.globalCompositeOperation = "source-over"
-    ctx.fillStyle = PALETTE.void
+    ctx.fillStyle = PORTAL.deep
     ctx.fillRect(0, 0, W, H)
 
     const cols = Math.ceil(W / CW)
@@ -112,13 +148,20 @@ export function createTunnelRenderer(
         ring *= ring
         const ang = Math.atan2(dy, dx) / 6.28318 + 0.5 + twist
         const gap = hash(ringIdx, Math.floor(ang * 40)) < 0.2 ? 0.12 : 1
-        const fog = Math.min(1, Math.max(0, (r - 0.025) / 0.32))
-        let v = ring * gap * (0.2 + 0.8 * fog) * gain
-        if (hash(i * 31 + ringIdx * 7, j) > 0.955) v = Math.max(v, 0.14 * fog * gain)
+        // Far (near the vanishing point) fades into the dark, so the tunnel reads as deep.
+        const fog = Math.min(1, Math.max(0, (r - 0.025) / 0.34))
+        const depth = 0.14 + 0.86 * Math.pow(fog, 1.4)
+        let v = ring * gap * depth * gain
+        if (hash(i * 31 + ringIdx * 7, j) > 0.955) v = Math.max(v, 0.14 * depth * gain)
+        for (const b of bands) {
+          const d = (r - b.center) * b.invWidth
+          if (d < 2.4 && d > -2.4) v += b.gain * Math.exp(-d * d) * (0.25 + 0.75 * depth) * 0.85
+        }
         if (v < 0.07) continue
         const ci = Math.min(RAMP.length - 1, Math.max(1, Math.round(v * (RAMP.length - 1))))
-        // Brightness picks the glyph; the ring picks the color, at full or dim level only.
-        groups[rings.indexAt(ringIdx) * 2 + (v >= FULL_FROM ? 0 : 1)].push(x, y, ci)
+        // Brightness picks the glyph and the level; the ring pair and its phase pick a smoothly blended color.
+        const key = cache.key(rings.indexAt(ringIdx), rings.indexAt(ringIdx + 1), blendStep(ph, BLEND_STEPS), v >= FULL_FROM ? 0 : 1)
+        groups[key].push(x, y, ci)
       }
     }
 
@@ -128,18 +171,29 @@ export function createTunnelRenderer(
     for (let g = 0; g < groups.length; g++) {
       const list = groups[g]
       if (!list.length) continue
-      const color = g >> 1
-      ctx.fillStyle = g & 1 ? DIM_PALETTE[color] : RING_PALETTE[color]
+      ctx.fillStyle = cache.colorOf(g)
       for (let k = 0; k < list.length; k += 3) ctx.fillText(RAMP[list[k + 2]], list[k], list[k + 1])
     }
 
-    // The light at the end of the tunnel.
+    // Vignette: the edges sink into the dark, which sells the depth.
+    const reach = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))
+    const vig = ctx.createRadialGradient(cx, cy, reach * 0.35, cx, cy, reach)
+    vig.addColorStop(0, rgba(PORTAL.deep, 0))
+    vig.addColorStop(1, rgba(PORTAL.deep, 0.72))
+    ctx.fillStyle = vig
+    ctx.fillRect(0, 0, W, H)
+
+    // The light at the end of the tunnel, the brightest point. It crossfades from this ring's color to the
+    // next as the next ring is born, so it never jumps.
+    const u0 = ringDepth(BIRTH_RADIUS, phase)
+    const k0 = Math.floor(u0)
+    const glow = mixHex(rings.colorAt(k0 + 1), rings.colorAt(k0), smooth(u0 - k0))
     ctx.globalCompositeOperation = "lighter"
-    const glowR = minSide * (0.16 + 0.1 * Math.min(speed / 7, 1))
+    const glowR = minSide * (0.16 + 0.1 * Math.min(speed / 7, 1) + 0.05 * surge)
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR)
-    // The glow takes the color of the ring about to be born, so the light foreshadows the next wave.
-    const glow = rings.colorAt(nextRingIndex(phase))
-    grad.addColorStop(0, rgba(glow, 0.34 * gain))
+    const strength = (0.42 + 0.4 * surge) * gain
+    grad.addColorStop(0, rgba(glow, Math.min(strength, 0.95)))
+    grad.addColorStop(0.35, rgba(glow, strength * 0.4))
     grad.addColorStop(1, rgba(glow, 0))
     ctx.fillStyle = grad
     ctx.fillRect(cx - glowR, cy - glowR, glowR * 2, glowR * 2)
@@ -208,6 +262,9 @@ export function createTunnelRenderer(
   }
 
   return {
+    refresh: () => {
+      if (alive && (reduced || !raf)) draw(0)
+    },
     stop: () => {
       alive = false
       cancelAnimationFrame(raf)

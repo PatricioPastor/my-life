@@ -1,10 +1,10 @@
-/** Rings past this are refused; the memo is one small int per ring, so the cap only guards runaway input. */
-export const MAX_RING = 1_000_000
+/** Rings per cycle. The lookup wraps here, so it is bounded in memory and total for any input. */
+export const PERIOD = 1024
 
 export interface RingColorSequence {
-  /** The palette color of ring `n`; n is floored, and anything below 0 or not a number reads as ring 0. */
+  /** The palette color of ring `n`. n is floored and read through the cycle; a non-finite n reads as ring 0. */
   colorAt: (n: number) => string
-  /** The palette position of ring `n`, under the same clamping. */
+  /** The palette position of ring `n`, under the same rule. */
   indexAt: (n: number) => number
 }
 
@@ -17,23 +17,30 @@ export function ringRand(seed: number, n: number): number {
 }
 
 /**
- * The portal's ring colors as a recursive rule over a seeded hash:
+ * The portal's ring colors as a recursive rule over a seeded hash, closed into a cycle of PERIOD rings:
  * c(0) = palette[rand(seed, 0) mod k], c(n) = palette[(idx(c(n-1)) + 1 + rand(seed, n) mod (k-1)) mod k].
- * The step is 1..k-1, so a ring never shares its predecessor's color. The sequence is built once,
- * iteratively, and only ever extended, so asking for ring n costs O(1) after the first visit.
+ * The step is 1..k-1, so a ring never shares its predecessor's color. The last ring of the cycle also avoids
+ * the first, so the wrap has no repeat either. The whole cycle is built once; a lookup is one modulo.
  */
 export function createRingColorSequence(seed: number, palette: readonly string[]): RingColorSequence {
   const k = palette.length
   if (k < 2) throw new RangeError("A ring palette needs at least two colors to avoid repeats")
-  const indices: number[] = [ringRand(seed, 0) % k]
+  const cycle = new Uint8Array(PERIOD)
+  cycle[0] = ringRand(seed, 0) % k
+  for (let i = 1; i < PERIOD; i++) {
+    cycle[i] = (cycle[i - 1] + 1 + (ringRand(seed, i) % (k - 1))) % k
+  }
+  if (k >= 3 && cycle[PERIOD - 1] === cycle[0]) {
+    // Move the last ring to a color that differs from both neighbours (k >= 3 always leaves one).
+    const options: number[] = []
+    for (let c = 0; c < k; c++) if (c !== cycle[PERIOD - 2] && c !== cycle[0]) options.push(c)
+    cycle[PERIOD - 1] = options[ringRand(seed, PERIOD - 1) % options.length]
+  }
+  // With k = 2 the sequence strictly alternates, and PERIOD is even, so the wrap already differs.
 
   const indexAt = (n: number): number => {
-    const ring = Number.isNaN(n) ? 0 : Math.max(Math.floor(n), 0)
-    if (ring > MAX_RING) throw new RangeError(`Ring ${n} is beyond the cap of ${MAX_RING}`)
-    for (let i = indices.length; i <= ring; i++) {
-      indices.push((indices[i - 1] + 1 + (ringRand(seed, i) % (k - 1))) % k)
-    }
-    return indices[ring]
+    if (!Number.isFinite(n)) return cycle[0]
+    return cycle[((Math.floor(n) % PERIOD) + PERIOD) % PERIOD]
   }
 
   return { colorAt: (n) => palette[indexAt(n)], indexAt }

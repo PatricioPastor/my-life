@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { PORTAL } from "./portal-palette"
 import { dimTint, mixHex, nextRingIndex, ringDepth } from "./tunnel-math"
 
 describe("mixHex", () => {
@@ -13,10 +14,14 @@ describe("mixHex", () => {
 })
 
 describe("dimTint", () => {
-  it("is the ring color at 35% over Shadow Grey", () => {
+  it("is the ring color at 35% over the given background", () => {
     // Per channel, rounded: 0.35*F3 + 0.65*19 = 65, 0.35*B6 + 0.65*19 = 50, 0.35*1F + 0.65*23 = 22.
-    expect(dimTint("#F3B61F")).toBe("#655022")
-    expect(dimTint("#191923")).toBe("#191923")
+    expect(dimTint("#F3B61F", "#191923")).toBe("#655022")
+    expect(dimTint("#191923", "#191923")).toBe("#191923")
+  })
+
+  it("defaults to the portal background", () => {
+    expect(dimTint("#FFC15E")).toBe(mixHex("#FFC15E", PORTAL.deep, 0.35))
   })
 })
 

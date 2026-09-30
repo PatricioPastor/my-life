@@ -1,5 +1,5 @@
 import { hexToRgb } from "@/shared/lib/color"
-import { PALETTE } from "@/shared/lib/palette"
+import { PORTAL } from "./portal-palette"
 
 // Rings live at whole steps of depth u = (DEPTH / r) * DEPTH_GAIN + phase and race outward as phase grows.
 const DEPTH = 0.32
@@ -7,7 +7,7 @@ const DEPTH_GAIN = 1.25
 /** Radius (fraction of the short side) just outside the vanishing point, where a new ring is born. */
 const BIRTH_RADIUS = 0.03
 /** Share of a ring's color kept when it is dimmed over the background. */
-const DIM_SHARE = 0.35
+export const DIM_SHARE = 0.35
 
 /** Depth into the tunnel at radius `r`; the ring index is its floor. */
 export function ringDepth(r: number, phase: number): number {
@@ -30,7 +30,7 @@ export function mixHex(fg: string, bg: string, share: number): string {
   return `#${channel(0)}${channel(1)}${channel(2)}`.toUpperCase()
 }
 
-/** The fixed dim level of a ring color: mixed over Shadow Grey, precomputed once per color. */
-export function dimTint(color: string): string {
-  return mixHex(color, PALETTE.void, DIM_SHARE)
+/** The fixed dim level of a ring color: mixed over the portal background, precomputed once per color. */
+export function dimTint(color: string, bg: string = PORTAL.deep): string {
+  return mixHex(color, bg, DIM_SHARE)
 }

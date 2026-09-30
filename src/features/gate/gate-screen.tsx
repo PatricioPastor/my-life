@@ -1,10 +1,12 @@
 "use client"
 
 import type { FormEvent } from "react"
+import { rgba } from "@/shared/lib/color"
 import { cn } from "@/shared/lib/utils"
 import { OWNER_HANDLE, buildAccessRequest, copyToClipboard } from "./access/access-request"
 import { AsciiTunnel } from "./ascii-tunnel"
 import type { GateState, GateStatus } from "./gate-machine"
+import { PORTAL } from "./portal-palette"
 
 interface GateScreenProps {
   state: GateState
@@ -55,7 +57,7 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
       <div
         aria-hidden="true"
         className="pointer-events-none absolute top-[70%] left-1/2 h-[460px] w-[min(760px,100%)] -translate-x-1/2 -translate-y-1/2"
-        style={{ background: "radial-gradient(closest-side, var(--scrim), transparent)" }}
+        style={{ background: `radial-gradient(closest-side, ${rgba(PORTAL.deep, 0.88)}, transparent)` }}
       />
       <p className={cn("absolute top-10 left-12 m-0 text-xs tracking-[0.12em] text-ink-muted", SHADOW)}>
         [Your name]
