@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest"
+import { FACETS } from "@/features/facets"
+import { FACET_IDS, sanitizeProps } from "./events"
+
+describe("sanitizeProps", () => {
+  it("keeps only the allow-listed keys of an event", () => {
+    expect(sanitizeProps("entry_opened", { facet: "now", index: 2, handle: "ana", note: "hi" })).toEqual({
+      facet: "now",
+      index: 2,
+    })
+  })
+
+  it("drops every prop from events that carry none", () => {
+    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested"] as const) {
+      expect(sanitizeProps(name, { handle: "ana", facet: "now" })).toEqual({})
+    }
+  })
+
+  it("never lets a handle or free text through the facet slot", () => {
+    expect(sanitizeProps("facet_opened", { facet: "ana.b" })).toEqual({})
+    expect(sanitizeProps("facet_opened", { facet: "@ana" })).toEqual({})
+    expect(sanitizeProps("entry_opened", { facet: "now", index: "ana" })).toEqual({ facet: "now" })
+  })
+
+  it("accepts only whole, small entry indexes", () => {
+    expect(sanitizeProps("entry_opened", { facet: "now", index: 1.5 })).toEqual({ facet: "now" })
+    expect(sanitizeProps("entry_opened", { facet: "now", index: -1 })).toEqual({ facet: "now" })
+  })
+
+  it("knows exactly the facets the site has", () => {
+    expect([...FACET_IDS].sort()).toEqual(FACETS.map((f) => f.id).sort())
+  })
+})

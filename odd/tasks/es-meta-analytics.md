@@ -67,7 +67,7 @@ The user asked for these changes:
 
 - [x] **T1 — Spanish and metadata.** Copy, name mark, `lang`, metadata, OG image, icon, theme color, `.env.example`.
 - [x] **T2 — Security.** The `security.txt` route handler and security headers.
-- [ ] **T3 — Analytics.** Vercel Analytics, Speed Insights, env-gated GA4, the `track` port and journey events.
+- [x] **T3 — Analytics.** Vercel Analytics, Speed Insights, env-gated GA4, the `track` port and journey events.
 - [ ] **T4 — Star visibility.** Shader and params changes, plus screenshots.
 
 ## Acceptance criteria
@@ -83,6 +83,7 @@ The user asked for these changes:
 - 2026-09-30: Document created.
 - 2026-09-30: T1 done. Spanish copy, name mark, metadata, generated OG image and icon, `.env.example`. Route: delegated writer. RED: 22 failing tests before implementation; GREEN: 194 passing.
 - 2026-09-30: T2 done. Static security.txt route and four security headers. RED: missing modules; GREEN: 199 passing, build lists the route.
+- 2026-09-30: T3 done. Allow-listed `track` port, Vercel Analytics, Speed Insights, env-gated GA4, journey wiring. RED: missing modules and 2 failing journey tests; GREEN: 209 passing, `/` still static.
 
 ## Next step
 

@@ -1,3 +1,4 @@
+import type { FacetId } from "@/shared/analytics"
 import { STAR_TINT, type StarColorKey } from "@/shared/lib/palette"
 
 export interface FacetEntry {
@@ -6,7 +7,7 @@ export interface FacetEntry {
 }
 
 export interface Facet {
-  id: string
+  id: FacetId
   name: string
   /** Star position as 0..1 stage fractions, y up (the sky's convention). */
   x: number

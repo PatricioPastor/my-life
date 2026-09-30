@@ -1,3 +1,6 @@
+import { GoogleAnalytics } from "@next/third-parties/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { Doto, Silkscreen, Spectral } from "next/font/google";
 import { resolveSiteUrl } from "@/shared/site/site-url";
@@ -24,6 +27,7 @@ const spectral = Spectral({
   style: ["normal", "italic"],
 });
 
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const TITLE = "patriciopastor";
 const DESCRIPTION = "Historias, escritos y proyectos de Patricio Pastor. Solo con invitación.";
 
@@ -48,7 +52,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${doto.variable} ${silkscreen.variable} ${spectral.variable} dark h-full antialiased`}
     >
-      <body className="h-full">{children}</body>
+      <body className="h-full">
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
+      {GA_ID ? <GoogleAnalytics gaId={GA_ID} /> : null}
     </html>
   );
 }

@@ -6,6 +6,7 @@ import { checkHandle } from "@/features/gate/actions"
 import { GateScreen, gateReducer, initialGateState } from "@/features/gate"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
+import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
 import {
   initialJourneyState,
@@ -50,6 +51,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   // Checking: ask the server, and hold for the minimum beat. Failures deny (fail closed).
   useEffect(() => {
     if (gate.status !== "checking") return
+    track("gate_submitted")
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const beat = new Promise<void>((resolve) => {
@@ -57,7 +59,10 @@ export function Journey({ preset = "ember" }: JourneyProps) {
     })
     const answer = checkHandle(gate.handle).catch(() => ({ status: "denied" as const }))
     Promise.all([answer, beat]).then(([result]) => {
-      if (!cancelled) dispatchGate({ type: "resolved", result: result.status === "granted" ? "granted" : "denied" })
+      if (cancelled) return
+      const outcome = result.status === "granted" ? "granted" : "denied"
+      track(outcome === "granted" ? "gate_granted" : "gate_denied")
+      dispatchGate({ type: "resolved", result: outcome })
     })
     return () => {
       cancelled = true
@@ -108,7 +113,10 @@ export function Journey({ preset = "ember" }: JourneyProps) {
               sky={skyRef}
               layerRef={layerRef}
               onHover={(id) => dispatch({ type: "hover", facetId: id })}
-              onOpen={(f) => dispatch({ type: "facetOpened", facetId: f.id })}
+              onOpen={(f) => {
+                track("facet_opened", { facet: f.id })
+                dispatch({ type: "facetOpened", facetId: f.id })
+              }}
             />
           )}
         </HalftoneSky>
@@ -133,7 +141,10 @@ export function Journey({ preset = "ember" }: JourneyProps) {
           <FacetPlace
             facet={facet}
             listSide={listSide}
-            onOpenEntry={(index) => dispatch({ type: "entryOpened", index })}
+            onOpenEntry={(index) => {
+              track("entry_opened", { facet: facet.id, index })
+              dispatch({ type: "entryOpened", index })
+            }}
           />
         </div>
       )}
@@ -166,7 +177,10 @@ export function Journey({ preset = "ember" }: JourneyProps) {
             state={gate}
             onTyped={(raw) => dispatchGate({ type: "typed", raw })}
             onSubmit={() => dispatchGate({ type: "submit" })}
-            onRequestInvite={(copied) => dispatchGate({ type: "requestInvite", copied })}
+            onRequestInvite={(copied) => {
+              track("access_requested")
+              dispatchGate({ type: "requestInvite", copied })
+            }}
           />
         </div>
       )}

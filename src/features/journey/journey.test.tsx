@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const checkHandle = vi.fn()
 vi.mock("@/features/gate/actions", () => ({ checkHandle: (h: string) => checkHandle(h) }))
+const track = vi.fn()
+vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 
 import { Journey } from "./journey"
 
@@ -17,6 +19,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   checkHandle.mockReset()
+  track.mockReset()
 })
 
 async function enter(handle: string) {
@@ -97,5 +100,35 @@ describe("Journey after the gate", () => {
     expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
+  })
+})
+
+describe("Journey analytics", () => {
+  it("tracks the gate outcome without ever sending the handle", async () => {
+    checkHandle.mockResolvedValue({ status: "denied" })
+    await enter("eve")
+    await act(() => vi.advanceTimersByTimeAsync(1200))
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    fireEvent.click(screen.getByRole("link", { name: "Pedir acceso por Instagram" }))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    vi.unstubAllGlobals()
+    expect(track.mock.calls.map((c) => c[0])).toEqual(["gate_submitted", "gate_denied", "access_requested"])
+    expect(JSON.stringify(track.mock.calls)).not.toContain("eve")
+  })
+
+  it("tracks a granted gate, a facet and an entry by id and index only", async () => {
+    checkHandle.mockResolvedValue({ status: "granted" })
+    await enter("ana")
+    await act(() => vi.advanceTimersByTimeAsync(1200))
+    await act(() => vi.advanceTimersByTimeAsync(1500))
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    fireEvent.click(screen.getByRole("button", { name: /\[Foco actual\]/ }))
+    expect(track.mock.calls).toEqual([
+      ["gate_submitted"],
+      ["gate_granted"],
+      ["facet_opened", { facet: "now" }],
+      ["entry_opened", { facet: "now", index: 0 }],
+    ])
+    expect(JSON.stringify(track.mock.calls)).not.toContain("ana")
   })
 })
