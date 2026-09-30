@@ -1,3 +1,5 @@
+import { GAS_TINTS, PALETTE } from "@/shared/lib/palette"
+
 export interface SkyParams {
   pixel: number
   dotMin: number
@@ -39,7 +41,7 @@ export interface SkyParams {
   starColor: string
 }
 
-export type SkyPresetName = "crimson" | "ultraviolet" | "abyssal" | "solar" | "phosphor"
+export type SkyPresetName = "periwinkle" | "crimson" | "ultraviolet" | "abyssal" | "solar" | "phosphor"
 
 // The planet sits top-right in every preset unless a preset resizes or drops it.
 export const SKY_DEFAULTS: SkyParams = {
@@ -55,6 +57,11 @@ export const SKY_DEFAULTS: SkyParams = {
 }
 
 export const SKY_PRESETS: Record<SkyPresetName, Partial<SkyParams>> = {
+  // The landing's default: Shadow Grey gas rising through Periwinkle to Sunflower Gold, Porcelain stars.
+  periwinkle: {
+    voidColor: PALETTE.void, hazeColor: GAS_TINTS.haze, duskColor: GAS_TINTS.dusk, wineColor: GAS_TINTS.wine,
+    crimsonColor: PALETTE.periwinkle, hotColor: PALETTE.gold, starColor: PALETTE.ink,
+  },
   crimson: {},
   ultraviolet: { hazeColor: "#10183f", duskColor: "#2a1a5e", wineColor: "#3d1478", crimsonColor: "#7b2cf0", hotColor: "#c77dff", starColor: "#eef0ff", bandAngle: 2.2, bandOffset: 0.3, seed: 4 },
   abyssal: { voidColor: "#02060a", hazeColor: "#0a1f2e", duskColor: "#0d2f3f", wineColor: "#0a4453", crimsonColor: "#0f8f9f", hotColor: "#3ff2e0", starColor: "#e4fffb", band: 0.5, bandAngle: -0.4, bandOffset: -0.2, seed: 23 },

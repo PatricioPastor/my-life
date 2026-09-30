@@ -50,6 +50,12 @@ describe("buildSkyFragment", () => {
     expect(src).toContain("crossMask")
   })
 
+  it("picks the sparkle tint by exact palette index, never by blending", () => {
+    expect(src).not.toContain("mix(uHotColor, uStarColor")
+    expect(src).toContain("vec3 starTint(float idx)")
+    expect(src).toContain("vec3 tint = starTint(b.x);")
+  })
+
   it("has no duplicate slot names", () => {
     const names = SKY_UNIFORM_SLOTS.map(([k]) => k)
     expect(new Set(names).size).toBe(names.length)

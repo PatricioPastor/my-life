@@ -2,7 +2,7 @@ import { hexToRgb } from "@/shared/lib/color"
 import { driftPos } from "./drift"
 import { SKY_UNIFORM_SLOTS, SKY_VERTEX, buildSkyFragment, uniformName } from "./shaders"
 import type { SkyParams } from "./sky-params"
-import { layoutSkySparkles, pushSparkle, type Sparkle, type SparkleAnchor } from "./sparkles"
+import { layoutSkySparkles, pickTint, pushSparkle, type Sparkle, type SparkleAnchor } from "./sparkles"
 
 export interface SkyRendererOptions {
   /** Read every frame, so param changes apply without restarting WebGL. */
@@ -161,7 +161,7 @@ export function createSkyRenderer(
       sparks,
       {
         x, y, reach: 0.045 + 0.08 * rand, core: 0.006 + 0.008 * rand,
-        tint: Math.random() < 0.2 ? 1 : 0, phase: Math.random() * 6.283,
+        tint: pickTint(Math.random()), phase: Math.random() * 6.283,
         born: reduced ? now - 10 : now, user: true,
       },
       MAX_SPARKS,

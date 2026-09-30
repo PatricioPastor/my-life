@@ -23,11 +23,30 @@ describe("resolveSkyParams", () => {
     expect(Object.keys(SKY_PRESETS).sort()).toEqual([
       "abyssal",
       "crimson",
+      "periwinkle",
       "phosphor",
       "solar",
       "ultraviolet",
     ])
     expect(resolveSkyParams("solar").planetRadius).toBe(0.09)
+  })
+
+  it("builds the periwinkle preset from the palette and leaves the rest at the defaults", () => {
+    const p = resolveSkyParams("periwinkle")
+    expect(p.voidColor).toBe("#191923")
+    expect(p.hazeColor).toBe("#2C2A42")
+    expect(p.duskColor).toBe("#3E3A60")
+    expect(p.wineColor).toBe("#59518B")
+    expect(p.crimsonColor).toBe("#8377D1")
+    expect(p.hotColor).toBe("#F3B61F")
+    expect(p.starColor).toBe("#FBFEF9")
+    expect(p.warp).toBe(SKY_DEFAULTS.warp)
+    expect(p.planet).toBe(true)
+  })
+
+  it("never uses School Bus Yellow in the periwinkle sky", () => {
+    const colors = Object.values(resolveSkyParams("periwinkle")).filter((v) => typeof v === "string")
+    expect(colors.map((c) => String(c).toUpperCase())).not.toContain("#FFC600")
   })
 
   it("applies overrides on top of the preset", () => {
@@ -60,5 +79,13 @@ describe("skyFallbackGradient", () => {
     expect(css).toContain(p.wineColor)
     expect(css).toContain(p.duskColor)
     expect(css.endsWith(p.voidColor)).toBe(true)
+  })
+
+  it("stands in with palette colors only for the periwinkle sky", () => {
+    const css = skyFallbackGradient(resolveSkyParams("periwinkle"))
+    expect(css).toContain("#F3B61F")
+    expect(css).toContain("#8377D1")
+    expect(css.endsWith("#191923")).toBe(true)
+    expect(css.toLowerCase()).not.toContain("#050309")
   })
 })

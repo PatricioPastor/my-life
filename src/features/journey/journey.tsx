@@ -29,7 +29,7 @@ interface JourneyProps {
   preset?: SkyPresetName
 }
 
-export function Journey({ preset = "crimson" }: JourneyProps) {
+export function Journey({ preset = "periwinkle" }: JourneyProps) {
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
   const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
   const [gateMounted, setGateMounted] = useState(true)

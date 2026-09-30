@@ -33,7 +33,7 @@ const NO_ANCHORS: readonly SparkleAnchor[] = []
 
 export function HalftoneSky({
   ref,
-  preset = "crimson",
+  preset = "periwinkle",
   pixel,
   anchors = NO_ANCHORS,
   hidden = false,

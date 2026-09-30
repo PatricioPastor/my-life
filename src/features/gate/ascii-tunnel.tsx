@@ -10,7 +10,7 @@ interface AsciiTunnelProps {
   preset?: SkyPresetName
 }
 
-export function AsciiTunnel({ gate, preset = "crimson" }: AsciiTunnelProps) {
+export function AsciiTunnel({ gate, preset = "periwinkle" }: AsciiTunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const params = useMemo(() => resolveSkyParams(preset), [preset])
 

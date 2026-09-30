@@ -1,3 +1,5 @@
+import { STAR_COLORS } from "@/shared/lib/palette"
+
 /** Positions are 0..1 stage fractions (y up); `reach` and `core` are fractions of the short side. */
 export interface Sparkle {
   x: number
@@ -13,6 +15,13 @@ export interface Sparkle {
 export interface SparkleAnchor {
   x: number
   y: number
+  /** Star color index (see STAR_COLORS): 0 gold, 1 porcelain, 2 periwinkle. */
+  tint: number
+}
+
+/** A unit random to an exact star color index; the clamp guards a degenerate 1. */
+export function pickTint(r: number): number {
+  return Math.min(Math.floor(r * STAR_COLORS.length), STAR_COLORS.length - 1)
 }
 
 /** Small seeded PRNG so the layout is the same on every load. */
@@ -28,7 +37,7 @@ export function mulberry32(seed: number): () => number {
 }
 
 // The planet and the bottom-left corner stay free of small sparkles.
-const KEEP_CLEAR: SparkleAnchor[] = [
+const KEEP_CLEAR: Pick<SparkleAnchor, "x" | "y">[] = [
   { x: 0.87, y: 0.2 },
   { x: 0.08, y: 0.95 },
 ]
@@ -38,17 +47,17 @@ const SMALL_COUNT = 6
 /** The anchors (facet stars) are the bright sparkles; a few small seeded ones fill the gaps. */
 export function layoutSkySparkles(seed: number, anchors: readonly SparkleAnchor[]): Sparkle[] {
   const rand = mulberry32(seed)
-  const out: Sparkle[] = anchors.map((a, i) => ({
+  const out: Sparkle[] = anchors.map((a) => ({
     x: a.x,
     y: a.y,
     reach: 0.085 + 0.025 * rand(),
     core: 0.012,
-    tint: i % 2,
+    tint: a.tint,
     phase: rand() * 6.283,
     born: -10,
     user: false,
   }))
-  const occupied: SparkleAnchor[] = [...anchors, ...KEEP_CLEAR]
+  const occupied: Pick<SparkleAnchor, "x" | "y">[] = [...anchors, ...KEEP_CLEAR]
   for (let i = 0; i < SMALL_COUNT; i++) {
     let x = 0.5
     let y = 0.5
@@ -62,7 +71,7 @@ export function layoutSkySparkles(seed: number, anchors: readonly SparkleAnchor[
       y,
       reach: 0.022 + 0.035 * rand(),
       core: 0.004 + 0.004 * rand(),
-      tint: rand() < 0.3 ? 1 : 0,
+      tint: pickTint(rand()),
       phase: rand() * 6.283,
       born: -10,
       user: false,

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { layoutSkySparkles, mulberry32, pushSparkle, type Sparkle } from "./sparkles"
+import { layoutSkySparkles, mulberry32, pickTint, pushSparkle, type Sparkle } from "./sparkles"
 
 const ANCHORS = [
-  { x: 0.21, y: 0.68 },
-  { x: 0.57, y: 0.79 },
-  { x: 0.75, y: 0.45 },
-  { x: 0.39, y: 0.29 },
+  { x: 0.21, y: 0.68, tint: 2 },
+  { x: 0.57, y: 0.79, tint: 1 },
+  { x: 0.75, y: 0.45, tint: 0 },
+  { x: 0.39, y: 0.29, tint: 2 },
 ]
 
 const spark = (user: boolean, x = 0.5): Sparkle => ({
@@ -46,7 +46,7 @@ describe("layoutSkySparkles", () => {
       expect(s.reach).toBeGreaterThanOrEqual(0.085)
       expect(s.reach).toBeLessThanOrEqual(0.11)
       expect(s.core).toBe(0.012)
-      expect(s.tint).toBe(i % 2)
+      expect(s.tint).toBe(ANCHORS[i].tint)
       expect(s.user).toBe(false)
       expect(s.born).toBe(-10)
     })
@@ -77,6 +77,27 @@ describe("layoutSkySparkles", () => {
 
   it("works without anchors", () => {
     expect(layoutSkySparkles(3, [])).toHaveLength(6)
+  })
+
+  it("gives the seeded small sparkles only the three star tints, and uses all three across seeds", () => {
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const s of layoutSkySparkles(seed, ANCHORS).slice(ANCHORS.length)) {
+        expect([0, 1, 2]).toContain(s.tint)
+        seen.add(s.tint)
+      }
+    }
+    expect([...seen].sort()).toEqual([0, 1, 2])
+  })
+})
+
+describe("pickTint", () => {
+  it("maps a unit random to an exact index in {0, 1, 2}", () => {
+    expect([0, 0.32, 0.34, 0.66, 0.67, 0.999999].map(pickTint)).toEqual([0, 0, 1, 1, 2, 2])
+  })
+
+  it("stays inside the palette even for a degenerate 1", () => {
+    expect(pickTint(1)).toBe(2)
   })
 })
 

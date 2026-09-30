@@ -74,6 +74,11 @@ vec3 ramp(float d, vec3 haze){
   c = mix(c, uCrimsonColor, smoothstep(0.42, 0.72, d));
   return mix(c, uHotColor, smoothstep(0.7, 0.96, d));
 }
+// Sparkle color by exact palette index, never blended: 0 gold (hot), 1 porcelain (star), 2 periwinkle
+// (the ramp's crimson slot, which the periwinkle preset maps to Soft Periwinkle).
+vec3 starTint(float idx){
+  return idx < 0.5 ? uHotColor : (idx < 1.5 ? uStarColor : uCrimsonColor);
+}
 vec2 shift(float depth){
   return floor(uLook * uParallax * depth * 28.0);
 }
@@ -165,7 +170,8 @@ void main(){
       float tw = 0.45 + 0.55 * (0.5 + 0.5 * sin(uTime * uTwinkle * (0.6 + h2 * 2.5) + h2 * 40.0));
       float rad = l == 2 ? 0.42 : 0.26 + h2 * 0.22;
       float m = step(length(fr), rad);
-      vec3 sc = (l == 0 || h2 > 0.82) ? uStarColor : uHotColor;
+      // The far layer stays porcelain; nearer ones pick one of the three exact star colors.
+      vec3 sc = l == 0 ? uStarColor : starTint(floor(h2 * 3.0));
       starAcc = max(starAcc, sc * m * tw);
       starA = max(starA, m * tw);
     }
@@ -202,7 +208,7 @@ void main(){
     float fl = 1.0 + b.z * 0.6;
     float reach = s.z * grow * tw * fl;
     float core = b.w * grow * fl;
-    vec3 tint = mix(uHotColor, uStarColor, b.x);
+    vec3 tint = starTint(b.x);
     vec2 c = s.xy + sh;
     vec2 d = css - c;
     float th = uSpikeWidth * 0.5 + 0.25;
