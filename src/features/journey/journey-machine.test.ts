@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   initialJourneyState,
   journeyReducer,
+  focusIndexFor,
   listSideFor,
   originFor,
   veilFor,
@@ -99,6 +100,17 @@ describe("derived values", () => {
     expect(veilFor("sky")).toBe(0)
     expect(veilFor("place")).toBe(0.5)
     expect(veilFor("entry")).toBe(0.86)
+  })
+
+  it("focuses the star the cursor captured, else the one hovered or keyboard-focused, only on the sky", () => {
+    const ids = ["stories", "writing", "projects", "now"]
+    expect(focusIndexFor("sky", "projects", null, ids)).toBe(2)
+    expect(focusIndexFor("sky", null, "now", ids)).toBe(3)
+    expect(focusIndexFor("sky", "writing", "now", ids)).toBe(1)
+    expect(focusIndexFor("sky", null, null, ids)).toBe(-1)
+    expect(focusIndexFor("sky", "nope", null, ids)).toBe(-1)
+    expect(focusIndexFor("place", "projects", "now", ids)).toBe(-1)
+    expect(focusIndexFor("gate", "projects", null, ids)).toBe(-1)
   })
 
   it("puts the list on the side opposite the star", () => {

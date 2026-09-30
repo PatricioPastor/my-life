@@ -61,6 +61,17 @@ export function originFor(facet: { x: number; y: number } | undefined): { x: num
   return { x: Number((facet.x * 100).toFixed(2)), y: Number(((1 - facet.y) * 100).toFixed(2)) }
 }
 
+/** Which sky anchor to spotlight: the star the cursor captured, else the hovered or keyboard-focused one; -1 for none. */
+export function focusIndexFor(
+  screen: Screen,
+  capturedId: string | null,
+  hoveredId: string | null,
+  facetIds: readonly string[],
+): number {
+  if (screen !== "sky") return -1
+  return facetIds.indexOf(capturedId ?? hoveredId ?? "")
+}
+
 /** The list opens on the side of the sky away from the star you dove into. */
 export function listSideFor(facetX: number): "left" | "right" {
   return facetX > 0.5 ? "left" : "right"

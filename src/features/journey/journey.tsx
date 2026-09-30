@@ -10,6 +10,7 @@ import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetNa
 import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
 import {
+  focusIndexFor,
   initialJourneyState,
   journeyReducer,
   listSideFor,
@@ -24,6 +25,8 @@ const CHECK_MIN_MS = 1100
 // The warp before the tunnel's mouth opens onto the sky, and how long the gate layer lingers after.
 const WARP_MS = 1500
 const GATE_EXIT_MS = 1300
+
+const FACET_IDS = FACETS.map((f) => f.id)
 
 const SHADOW = "[text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
 
@@ -86,6 +89,12 @@ export function Journey({ preset = "ember" }: JourneyProps) {
       clearTimeout(exit)
     }
   }, [gate.status])
+
+  // The captured star (cursor) or the hovered/keyboard-focused one lights up in the sky.
+  const focusIndex = focusIndexFor(screen, cursorTarget?.id ?? null, journey.hoveredFacet, FACET_IDS)
+  useEffect(() => {
+    skyRef.current?.focus(focusIndex >= 0 ? focusIndex : null)
+  }, [focusIndex])
 
   const origin = originFor(facet)
   const listSide = listSideFor((facet ?? FACETS[0]).x)

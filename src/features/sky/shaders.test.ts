@@ -74,13 +74,40 @@ describe("buildSkyFragment", () => {
   })
 
   it("draws the sparkle cores porcelain, with the facet tint on spikes and glow", () => {
-    expect(src).toContain("col = mix(col, uStarColor, disc);")
+    expect(src).toContain("col = mix(col, uStarColor, disc *")
     expect(src).not.toContain("col = mix(col, tint, disc);")
     expect(src).toContain("col += tint * glow")
   })
 
-  it("strengthens the four facet anchors, which are the first sparkles", () => {
-    expect(src).toContain("float anchor = i < 4 ? 1.0 : 0.0;")
+  it("takes the anchor count as a uniform instead of assuming the first four sparkles", () => {
+    expect(src).toMatch(/uniform int uAnchorCount;/)
+    expect(src).toContain("float anchor = i < uAnchorCount ? 1.0 : 0.0;")
+    expect(src).not.toMatch(/i < 4/)
+  })
+
+  it("declares the focus uniforms", () => {
+    expect(src).toMatch(/uniform int uFocusIndex;/)
+    for (const u of ["uFocusAmount", "uFocusTime", "uFocusMotion"]) {
+      expect(src, u).toMatch(new RegExp(`uniform float ${u};`))
+    }
+    expect(src).toMatch(/uniform vec4 uFocusFx;/)
+    expect(src).toMatch(/uniform vec4 uFocusArms;/)
+  })
+
+  it("dims only the gas with the focus amount, leaving stars and sparkles alone", () => {
+    const field = src.slice(src.indexOf("vec3 field("), src.indexOf("void main()"))
+    expect(field).toContain("1.0 - 0.4 * uFocusAmount")
+    expect(field.indexOf("gasDim")).toBeLessThan(field.indexOf("d -= exp(-(dist * dist)"))
+    const main = src.slice(src.indexOf("void main()"))
+    expect(main).not.toContain("gasDim")
+  })
+
+  it("reveals only the focused anchor, with orbiting particles driven by the focus clock", () => {
+    const main = src.slice(src.indexOf("void main()"))
+    expect(main).toContain("i == uFocusIndex")
+    expect(main).toContain("uFocusTime")
+    expect(main).toContain("uFocusMotion")
+    expect(main).toContain("focusParticles(")
   })
 
   it("has no duplicate slot names", () => {

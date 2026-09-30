@@ -1,5 +1,6 @@
 import { hexToRgb } from "@/shared/lib/color"
 import { driftPos } from "./drift"
+import { easeFocus, focusFx, stepFocusAmount } from "./focus"
 import { SKY_UNIFORM_SLOTS, SKY_VERTEX, buildSkyFragment, uniformName } from "./shaders"
 import type { SkyParams } from "./sky-params"
 import { layoutSkySparkles, pickTint, pushSparkle, type Sparkle, type SparkleAnchor } from "./sparkles"
@@ -22,6 +23,8 @@ export interface SkyRenderer {
   pulse: (x: number, y: number) => void
   /** Move the lamp only. */
   aim: (x: number, y: number) => void
+  /** Focus one anchor (its index in `getAnchors`): the gas dims and the star reveals itself. null releases. */
+  focus: (index: number | null) => void
   stop: () => void
 }
 
@@ -92,6 +95,8 @@ export function createSkyRenderer(
     pointer: loc("uPointer"), pointerOn: loc("uPointerOn"), look: loc("uLook"),
     sparkCount: loc("uSparkCount"), spark: loc("uSpark"), sparkB: loc("uSparkB"),
     ripple: loc("uRipple"), planet: loc("uPlanet"), starTints: loc("uStarTints"),
+    anchorCount: loc("uAnchorCount"), focusIndex: loc("uFocusIndex"), focusAmount: loc("uFocusAmount"),
+    focusTime: loc("uFocusTime"), focusMotion: loc("uFocusMotion"), focusFx: loc("uFocusFx"), focusArms: loc("uFocusArms"),
   }
   const vao = ctx.createVertexArray()
 
@@ -119,6 +124,11 @@ export function createSkyRenderer(
   let lampOn = 0
   let inside = false
   let lastTouched = -1e9
+  // Focus: `focusIndex` is the star shown (kept while it fades out); `focusAmount` ramps 0..1 linearly.
+  let focusWant = 0
+  let focusIndex = -1
+  let focusAmount = 0
+  let focusStart = 0
   let raf = 0
   let visible = true
   let alive = true
@@ -201,6 +211,11 @@ export function createSkyRenderer(
     const onTarget = reduced ? 0 : idle ? 0.55 : 1
     lampOn += (onTarget - lampOn) * (reduced ? 1 : 1 - Math.exp(-dt * 3))
 
+    focusAmount = reduced ? focusWant : stepFocusAmount(focusAmount, focusWant, dt)
+    if (focusAmount === 0 && focusWant === 0) focusIndex = -1
+    const fxTime = Math.max(t - focusStart, 0)
+    const fx = focusFx(fxTime, 17 + Math.max(focusIndex, 0) * 31)
+
     const minSide = Math.min(cssW, cssH)
     const n = Math.min(sparks.length, MAX_SPARKS)
     for (let i = 0; i < n; i++) {
@@ -238,6 +253,13 @@ export function createSkyRenderer(
     ctx.uniform1f(U.pointerOn, lampOn)
     ctx.uniform2f(U.look, lookX, lookY)
     ctx.uniform1i(U.sparkCount, n)
+    ctx.uniform1i(U.anchorCount, Math.min(opts.getAnchors().length, n))
+    ctx.uniform1i(U.focusIndex, focusIndex)
+    ctx.uniform1f(U.focusAmount, easeFocus(focusAmount))
+    ctx.uniform1f(U.focusTime, fxTime)
+    ctx.uniform1f(U.focusMotion, reduced ? 0 : 1)
+    ctx.uniform4f(U.focusFx, fx.flicker, fx.swell, 0, 0)
+    ctx.uniform4f(U.focusArms, fx.arms[0], fx.arms[1], fx.arms[2], fx.arms[3])
     ctx.uniform4fv(U.spark, sparkA)
     ctx.uniform4fv(U.sparkB, sparkB)
     ctx.uniform4fv(U.ripple, ripples)
@@ -292,6 +314,19 @@ export function createSkyRenderer(
 
   return {
     aim: (x, y) => touch(x, y),
+    focus: (index) => {
+      const next = index !== null && index >= 0 && index < opts.getAnchors().length ? index : null
+      if (next === null) {
+        focusWant = 0
+      } else {
+        // A new star restarts the reveal clock; the dim simply stays.
+        if (next !== focusIndex || focusWant === 0) focusStart = clock()
+        focusIndex = next
+        focusWant = 1
+      }
+      // Reduced motion has no loop, so repaint on demand.
+      if (reduced) paint()
+    },
     pulse: (x, y) => {
       touch(x, y)
       ripple(x, y, clock())

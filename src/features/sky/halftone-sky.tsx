@@ -10,6 +10,8 @@ export interface HalftoneSkyHandle {
   pulse: (x: number, y: number) => void
   /** Move the lamp only (0..1, y up). */
   aim: (x: number, y: number) => void
+  /** Focus an anchor by index (dims the gas, reveals the star), or null to release. */
+  focus: (index: number | null) => void
 }
 
 export interface HalftoneSkyProps {
@@ -60,6 +62,7 @@ export function HalftoneSky({
     () => ({
       pulse: (x, y) => rendererRef.current?.pulse(x, y),
       aim: (x, y) => rendererRef.current?.aim(x, y),
+      focus: (index) => rendererRef.current?.focus(index),
     }),
     [],
   )

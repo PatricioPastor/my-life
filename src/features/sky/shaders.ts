@@ -42,6 +42,13 @@ uniform vec4 uSparkB[16];
 uniform vec4 uRipple[4];
 uniform vec4 uPlanet;
 uniform vec3 uStarTints[4];
+uniform int uAnchorCount;
+uniform int uFocusIndex;
+uniform float uFocusAmount;
+uniform float uFocusTime;
+uniform float uFocusMotion;
+uniform vec4 uFocusFx;
+uniform vec4 uFocusArms;
 ${decl}
 out vec4 frag;
 
@@ -63,6 +70,7 @@ float fbm(vec2 p){
   for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = r * p * 2.03 + 17.1; a *= 0.5; }
   return s / 0.96875;
 }
+const int MAX_RIPPLES = 4;
 float bayer4(vec2 c){
   vec2 m = mod(c, 4.0);
   int i = int(m.x) + int(m.y) * 4;
@@ -93,7 +101,7 @@ vec3 field(vec2 pos, vec2 resCss){
   p += toP / minSide * lamp * uLensPush * uScale;
 
   float ring = 0.0;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < MAX_RIPPLES; i++) {
     vec4 r = uRipple[i];
     float age = uTime - r.z;
     if (r.w <= 0.0 || age < 0.0 || age > 2.4) continue;
@@ -118,6 +126,9 @@ vec3 field(vec2 pos, vec2 resCss){
   float raw = n + river * uBand * 0.5 + (uDensity - 0.5) * 0.5;
   float d = smoothstep(uThreshold, uThreshold + uSoftness, raw);
   d = clamp(d + lamp * uLens * 0.45 + ring * 0.55, 0.0, 1.0);
+  // Focusing a star dims the gas (not the stars) by up to 40%.
+  float gasDim = 1.0 - 0.4 * uFocusAmount;
+  d *= gasDim;
 
   for (int i = 0; i < 16; i++) {
     if (i >= uSparkCount) break;
@@ -130,9 +141,32 @@ vec3 field(vec2 pos, vec2 resCss){
     d -= exp(-(dist * dist) / (halo * halo)) * 0.95 * grow;
   }
 
-  float hz = smoothstep(0.25, 0.75, n + river * 0.25) * uHaze;
+  float hz = smoothstep(0.25, 0.75, n + river * 0.25) * uHaze * gasDim;
   float tone = fbm(p * 0.45 + vec2(11.0, -3.0) + t * 0.2);
   return vec3(clamp(d, 0.0, 1.0), hz, tone);
+}
+
+// Erratic pixel motes around the focused star: they scatter, then converge and settle by about 1.2 s.
+float focusParticles(vec2 css, vec2 c, float T, float px){
+  float conv = smoothstep(0.1, 1.2, T);
+  float hit = 0.0;
+  for (int j = 0; j < 7; j++) {
+    float fj = float(j);
+    float h1 = hash12(vec2(fj, 3.7));
+    float h2 = hash12(vec2(fj, 8.1));
+    float h3 = hash12(vec2(fj, 1.3));
+    // Speed, direction and radius change in hashed steps, so the orbit never feels mechanical.
+    float seg = floor(T * (2.0 + 3.0 * h2));
+    float kick = (hash12(vec2(fj + seg * 0.37, 5.5)) - 0.5) * 6.0 * (1.0 - conv);
+    float ang = h1 * 6.283 + T * (2.5 + 5.0 * h2) * (h3 > 0.5 ? 1.0 : -1.0) + kick;
+    float wander = 1.0 + 0.5 * sin(T * (5.0 + 7.0 * h3) + fj * 2.1) * (1.0 - conv);
+    float r0 = (60.0 + 110.0 * h1) * wander;
+    float rs = (40.0 + 24.0 * h2) * (1.0 + 0.08 * sin(T * (1.7 + h3) + fj));
+    vec2 pp = c + vec2(cos(ang), sin(ang)) * mix(r0, rs, conv);
+    vec2 dc = floor(pp / px) - floor(css / px);
+    hit = max(hit, step(max(abs(dc.x), abs(dc.y)), 0.5));
+  }
+  return hit;
 }
 
 void main(){
@@ -208,33 +242,44 @@ void main(){
     float grow = smoothstep(0.0, 0.55, age) * (1.0 + 0.3 * exp(-age * 3.0) * sin(age * 13.0));
     float tw = 0.84 + 0.16 * sin(uTime * uTwinkle * 1.7 + b.y);
     float fl = 1.0 + b.z * 0.6;
-    float anchor = i < 4 ? 1.0 : 0.0;
-    float reach = s.z * grow * tw * fl;
-    float core = b.w * grow * fl * (1.0 + 0.3 * anchor);
+    float anchor = i < uAnchorCount ? 1.0 : 0.0;
+    // Only the focused anchor gets the entropic reveal; reduced motion leaves uFocusMotion at 0.
+    float amt = i == uFocusIndex ? uFocusAmount : 0.0;
+    float mot = uFocusMotion * smoothstep(0.0, 0.25, amt);
+    float flick = mix(1.0, uFocusFx.x, mot);
+    vec4 arms = mix(vec4(1.0), uFocusArms, mot);
+    float reach = s.z * grow * tw * fl * (1.0 + 0.4 * mot);
+    float core = b.w * grow * fl * (1.0 + 0.3 * anchor) * mix(1.0, uFocusFx.y, mot);
     vec3 tint = starTint(b.x);
     vec2 c = s.xy + sh;
     vec2 d = css - c;
     float th = uSpikeWidth * 0.5 + 0.25;
-    float hx = step(abs(d.y), th) * pow(max(1.0 - abs(d.x) / max(reach, 1.0), 0.0), 1.1);
-    float vy = step(abs(d.x), th) * pow(max(1.0 - abs(d.y) / max(reach, 1.0), 0.0), 1.1);
+    float rx = reach * (d.x >= 0.0 ? arms.x : arms.y);
+    float ry = reach * (d.y >= 0.0 ? arms.z : arms.w);
+    float hx = step(abs(d.y), th) * pow(max(1.0 - abs(d.x) / max(rx, 1.0), 0.0), 1.1);
+    float vy = step(abs(d.x), th) * pow(max(1.0 - abs(d.y) / max(ry, 1.0), 0.0), 1.1);
     vec2 rd = vec2(d.x + d.y, d.x - d.y) * 0.7071;
     float diag = step(0.5, core / px - 1.5) * 0.45 * max(
       step(abs(rd.y), th) * pow(max(1.0 - abs(rd.x) / max(reach * 0.22, 1.0), 0.0), 2.0),
       step(abs(rd.x), th) * pow(max(1.0 - abs(rd.y) / max(reach * 0.22, 1.0), 0.0), 2.0));
-    col = mix(col, tint, clamp(max(max(hx, vy), diag) * (1.0 + 0.25 * anchor), 0.0, 1.0));
+    col = mix(col, tint, clamp(max(max(hx, vy), diag) * (1.0 + 0.25 * anchor) * flick, 0.0, 1.0));
     float hp = px * 0.5;
     vec2 dcell = (floor(css / hp) + 0.5) * hp - (floor(c / hp) + 0.5) * hp;
     float disc = step(length(dcell), core);
     float glow = exp(-length(d) / max(core * 1.4, 1.0)) * (1.0 - disc);
-    col += tint * glow * (0.35 + 0.25 * anchor);
-    col = mix(col, uStarColor, disc);
+    col += tint * glow * (0.35 + 0.25 * anchor) * flick;
+    col = mix(col, uStarColor, disc * mix(1.0, 0.35 + 0.65 * flick, mot));
     float crossMask = max(step(abs(d.y), th) * step(abs(d.x), core * 0.85),
                           step(abs(d.x), th) * step(abs(d.y), core * 0.85));
     col = mix(col, uStarColor, crossMask * disc * 0.9);
+    if (mot > 0.0) {
+      float motes = focusParticles(css, c, uFocusTime, px);
+      col = mix(col, mix(tint, uStarColor, 0.3), motes * mot * smoothstep(0.0, 0.2, uFocusTime));
+    }
   }
 
   vec2 vu = gl_FragCoord.xy / uRes - 0.5;
-  col *= 1.0 - uVignette * smoothstep(0.35, 0.95, length(vu * vec2(uRes.x / uRes.y, 1.0) * 1.1));
+  col *= 1.0 - uVignette * (1.0 + 0.35 * uFocusAmount) * smoothstep(0.35, 0.95, length(vu * vec2(uRes.x / uRes.y, 1.0) * 1.1));
   col += (hash12(floor(css) + fract(uTime) * 91.0) - 0.5) * uGrain;
   frag = vec4(max(col, vec3(0.0)), 1.0);
 }`
