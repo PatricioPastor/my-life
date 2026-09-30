@@ -11,7 +11,7 @@ describe("sanitizeProps", () => {
   })
 
   it("drops every prop from events that carry none", () => {
-    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed"] as const) {
+    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed", "story_completed"] as const) {
       expect(sanitizeProps(name, { handle: "ana", facet: "now" })).toEqual({})
     }
   })

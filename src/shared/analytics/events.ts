@@ -14,6 +14,7 @@ export interface EventProps {
   onboarding_skipped: Record<never, never>
   hw_accel_suggested: Record<never, never>
   intro_replayed: Record<never, never>
+  story_completed: Record<never, never>
   facet_opened: { facet: FacetId }
   entry_opened: { facet: FacetId; index: number }
 }
@@ -34,6 +35,7 @@ const ALLOWED: Record<EventName, Record<string, Accepts>> = {
   onboarding_skipped: {},
   hw_accel_suggested: {},
   intro_replayed: {},
+  story_completed: {},
   facet_opened: { facet: isFacet },
   entry_opened: { facet: isFacet, index: isIndex },
 }

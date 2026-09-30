@@ -86,7 +86,7 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
 
 - [x] **T1 — Base.** 1.8 s holds; typography and spacing tokens; case rules applied to the existing Gambarino texts; `viewport-fit=cover` and a safe-area bottom zone.
 - [x] **T2 — Markdown pipeline.** The strict subset parser at build time, typed blocks, the content file with a format guide and placeholder text, and the story rendering from it (still static).
-- [ ] **T3 — Focused reading.** Focus styling, the snap and spring scroller (wheel, touch, keys), outline → fill painting at reading rhythm, mixed auto-advance, progress, "Continuar" at 100%, reduced motion, accessibility, screenshots (including a WebKit/iPhone viewport).
+- [x] **T3 — Focused reading.** Focus styling, the snap and spring scroller (wheel, touch, keys), outline → fill painting at reading rhythm, mixed auto-advance, progress, "Continuar" at 100%, reduced motion, accessibility, screenshots (including a WebKit/iPhone viewport).
 - [ ] **T4 — Deliver.** RDD per policy; push after the user approves.
 
 ## Acceptance criteria
@@ -103,7 +103,9 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
 - 2026-09-30: T1 done (writer, delegated): holds 1800 (RED then GREEN), type/spacing tokens, `.t-title/.t-body/.t-label`, `--page-pad`/`--bottom-pad`, `viewportFit: "cover"`, bottom zone `.ob-foot`; lint/typecheck/test pass. Route: delegated writer (2+ non-trivial files).
 
 - 2026-09-30: T2 done (writer, delegated): `src/shared/content/` (`parseStory`, `loadStory`, types), unified + remark-parse + remark-frontmatter + remark-gfm (to reject GFM extras by name) + yaml; `content/intro/por-que-cree-esto.md`; `/` static; an invalid construct fails the build with file and line. Checked with lint, typecheck, test, build and Playwright (Chromium 1440x900, WebKit iPhone 13).
+- 2026-09-30: T3.0 done (writer, delegated): content test checks the pipeline, not the author text; emphasis in a `##` subheading reports a precise message; onboarding doc holds corrected to 1800 ms. Commit `ee3d6e0`.
+- 2026-09-30: T3 done (writer, delegated, route: delegated writer, 2+ non-trivial files). Pure, test-first modules in `src/features/onboarding/reader/` (words, timeline, reader-machine, settle, wheel-gate, layout); UI = absolute-positioned stack laid out small and scaled up for focus (uniform scale keeps line breaks), spring-driven transforms written straight to the DOM, words painted by a `data-p` flip at word pace (state changes per word, never per frame), wheel/swipe/keys with a wheel gate, progress ring + `Continuar` at 100%, `story_completed` event. Parameters: 220 wpm base (272 ms/word, x0.7-1.9 by word length), pauses 120 (, ; :) / 300 (. ? ! …) / 500 (paragraph), settle 600 ms, spring omega 11 zeta 0.8 (reduced: omega 22 zeta 1), focus scale 1.5625 (two steps of the type scale), dim opacity 0.34, blur 1 px, paint 420 ms, stroke 0.75 px at 62% ink. Checked with lint, typecheck, test, build (twice for the first three) and Playwright (Chromium 1440x900, WebKit iPhone 13).
 
 ## Next step
 
-Writer runs T1 + T2, then T3.
+T4: RDD per policy, then push after the user approves.

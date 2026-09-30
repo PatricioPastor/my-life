@@ -474,62 +474,117 @@
     mix-blend-mode: screen;
     pointer-events: none;
   }
+  /*
+   * The reader. The surface is not a native scroller: it owns the wheel, swipe and keys (see use-reader-gestures) and swallows
+   * the page scroll. The column holds the title and the stage; the stage holds the stack of blocks.
+   */
   .ob-scroll {
     position: absolute;
     inset: 0;
-    display: flex;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .ob-col {
-    width: 100%;
-    max-width: calc(68ch + 2 * var(--page-pad));
-    margin: auto;
-    /* Top and sides follow the page margin; the bottom leaves room for the bottom zone (controls + safe area). */
-    padding: clamp(72px, 14vh, 144px) var(--page-pad) calc(var(--bottom-pad) + var(--control-h) + var(--space-3));
-  }
-  .ob-title {
-    width: fit-content;
-    margin: 0 0 var(--space-5);
-    font-size: var(--type-5);
-    will-change: transform, opacity;
-  }
-  .ob-body > * {
-    margin: 0 0 var(--space-3);
-    color: rgba(246, 226, 232, 0.82);
-    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  /* em: Gambarino ships only its 400 roman, so the slant is the browser's; strong stays 400 and takes the full ink. */
-  .ob-body em {
-    font-style: italic;
-  }
-  .ob-body strong {
-    font-weight: 400;
-    color: var(--ink);
-  }
-  .ob-quote {
-    padding-left: var(--space-3);
-    border-left: 1px solid var(--ink-faint);
-    color: var(--ink-muted);
-  }
-  .ob-body > .ob-subheading {
-    margin-top: var(--space-5);
-    font-size: var(--type-3);
-    color: var(--ink);
-  }
-  .ob-break {
-    width: var(--space-8);
-    height: 0;
-    margin: var(--space-5) 0 var(--space-5);
-    border: 0;
-    border-top: 1px solid var(--ink-faint);
-  }
-  .ob-scroll {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    outline: none;
     transition: opacity 500ms ease;
   }
   .ob-scroll[data-away="true"] {
     opacity: 0;
     pointer-events: none;
+  }
+  .ob-col {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    max-width: calc(68ch + 2 * var(--page-pad));
+    margin: 0 auto;
+    /* Top and sides follow the page margin; the bottom leaves room for the bottom zone (controls + safe area). */
+    padding: clamp(56px, 9vh, 96px) var(--page-pad) calc(var(--bottom-pad) + var(--control-h) + var(--space-3));
+  }
+  .ob-title {
+    flex: none;
+    width: fit-content;
+    margin: 0 0 var(--space-4);
+    font-size: var(--type-5);
+    will-change: transform, opacity;
+  }
+  /* The stage clips the stack and fades its ends, so blocks slide out under the title and the bottom zone instead of colliding. */
+  .rd-stage {
+    --rd-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    margin-inline: calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
+    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 600ms both;
+  }
+  .rd-stack {
+    position: absolute;
+    top: 0;
+    left: var(--space-1);
+    right: var(--space-1);
+  }
+  /*
+   * Every block is laid out at the resting size, at 1/--rd-s of the column, and the focused one is scaled up by --rd-s: a uniform
+   * scale keeps every line break where it was, so focus never reflows text. Position, scale, opacity and blur are written per
+   * frame by use-stack-motion (transform, opacity and filter only).
+   */
+  .rd-block {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% / var(--rd-s, 1));
+    margin: 0;
+    transform-origin: 0 0;
+    color: var(--ink);
+  }
+  /*
+   * Outline to fill. An unpainted word is a glyph outline (transparent fill, a hairline stroke); a painted one fills in and the
+   * stroke fades. The stroke is set in resting-size px, so it reads as about 0.75 px once the focused block is scaled up.
+   */
+  .rd-w {
+    color: rgb(246 226 232 / 0);
+    -webkit-text-stroke: calc(0.75px / var(--rd-s, 1)) rgb(246 226 232 / 0.62);
+    transition:
+      color 420ms var(--rd-ease),
+      -webkit-text-stroke-color 420ms var(--rd-ease);
+  }
+  .rd-w[data-p] {
+    color: rgb(246 226 232 / 0.9);
+    -webkit-text-stroke-color: rgb(246 226 232 / 0);
+  }
+  /* em: Gambarino ships only its 400 roman, so the slant is the browser's; strong stays 400 and takes the full ink. */
+  .rd-block em {
+    font-style: italic;
+  }
+  .rd-block strong {
+    font-weight: 400;
+  }
+  .rd-block strong .rd-w[data-p] {
+    color: var(--ink);
+  }
+  .rd-quote {
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--ink-faint);
+  }
+  .rd-quote .rd-w[data-p] {
+    color: var(--ink-muted);
+  }
+  .rd-sub {
+    font-size: var(--type-2);
+  }
+  .rd-break {
+    width: var(--space-8);
+    height: 0;
+    border: 0;
+    border-top: 1px solid var(--ink-faint);
+  }
+  /* Reduced motion: every word is filled from the start, so there is nothing to fade. */
+  .rd-stage[data-reduced="true"] .rd-w {
+    transition: none;
   }
   .ob-hw {
     position: absolute;
@@ -617,13 +672,65 @@
     border: 1px solid var(--ink-faint) !important;
     animation: rise 800ms cubic-bezier(0.16, 1, 0.3, 1) 1400ms both;
   }
+  /* In the story, Continuar is held back until the reading is complete, then fades and lifts in (inert until then). */
+  .ob-foot {
+    gap: var(--space-2);
+  }
+  .ob-continue[data-ready] {
+    animation: none;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition:
+      opacity 640ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 640ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ob-continue[data-ready="true"] {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  /* Reading progress: a thin ring and a Silkscreen percentage, on the same guides and control height as the buttons. */
+  .rd-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: var(--control-h);
+    color: var(--ink-muted);
+  }
+  .rd-ring {
+    flex: none;
+    transform: rotate(-90deg);
+  }
+  .rd-ring-track,
+  .rd-ring-fill {
+    fill: none;
+    stroke-width: 1.5;
+  }
+  .rd-ring-track {
+    stroke: var(--ink-faint);
+  }
+  .rd-ring-fill {
+    stroke: var(--ink);
+    transition: stroke-dashoffset 420ms var(--rd-ease, ease);
+  }
+  .rd-percent {
+    min-width: 4ch;
+    font-variant-numeric: tabular-nums;
+  }
   @media (prefers-reduced-motion: reduce) {
     .ob-vignette {
       animation: none;
     }
-    .ob-body > *,
-    .ob-continue {
+    .ob-continue,
+    .rd-stage {
       animation-name: fade;
+    }
+    .ob-continue[data-ready] {
+      transform: none;
+    }
+    .rd-ring-fill {
+      transition: none;
     }
     /* Fade only: a small stagger, no travel, rotation or blur. The holds stay the same. */
     .ob-line[data-on="true"] .ob-letter {

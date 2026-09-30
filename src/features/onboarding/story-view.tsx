@@ -1,9 +1,10 @@
 "use client"
 
-import { useLayoutEffect, useRef } from "react"
-import { FilmGrain } from "./film-grain"
+import { useEffect, useLayoutEffect, useRef } from "react"
+import { track } from "@/shared/analytics"
 import type { Story } from "@/shared/content"
-import { StoryBlocks } from "./story-blocks"
+import { FilmGrain } from "./film-grain"
+import { ReaderStage, ReadingProgress, useReader, useReaderGestures, useReducedMotion } from "./reader"
 
 interface StoryViewProps {
   story: Story
@@ -14,11 +15,17 @@ interface StoryViewProps {
   onContinue: () => void
 }
 
-const MORPH_MS = 700
+export const MORPH_MS = 700
 const MORPH_EASE = "cubic-bezier(0.16, 1, 0.3, 1)"
+/** The stage rises while the title lands; the reading starts once it is there. */
+export const READ_START_MS = MORPH_MS + 200
 
 export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const reduced = useReducedMotion()
+  const reader = useReader(story.blocks, { startDelayMs: READ_START_MS })
+  const { canContinue } = reader
 
   // FLIP: the title is laid out in its final place, then animated from the CTA's rect (centre and width).
   useLayoutEffect(() => {
@@ -41,26 +48,41 @@ export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
     return () => anim?.cancel()
   }, [from])
 
+  // The surface takes the keyboard (it is focusable, not a tab stop) and owns wheel, swipe and keys while it is on stage.
+  useEffect(() => {
+    surfaceRef.current?.focus({ preventScroll: true })
+  }, [])
+  useReaderGestures(surfaceRef, reader.step, !away)
+
+  // Finishing the reading is the one thing worth knowing about it: once, with no payload.
+  const reported = useRef(false)
+  useEffect(() => {
+    if (!canContinue || reported.current) return
+    reported.current = true
+    track("story_completed")
+  }, [canContinue])
+
   return (
     <section className="ob-story" aria-labelledby="ob-story-title">
       <div className="ob-vignette" aria-hidden="true" />
       <FilmGrain />
-      <div className="ob-scroll" data-away={away} inert={away}>
+      <div ref={surfaceRef} className="ob-scroll" data-away={away} inert={away} tabIndex={-1}>
         <div className="ob-col">
           <h2 id="ob-story-title" ref={titleRef} className="ob-title t-title">
             {story.meta.title}
           </h2>
-          <div className="ob-body t-body">
-            <StoryBlocks blocks={story.blocks} delayMs={(i) => MORPH_MS - 100 + i * 140} />
-          </div>
+          <ReaderStage blocks={story.blocks} readables={reader.timeline.readables} state={reader.state} reduced={reduced} />
         </div>
       </div>
       <div className="ob-foot" data-away={away} inert={away}>
+        <ReadingProgress value={reader.progress} />
         <button
           type="button"
           className="ob-continue t-label press"
-          data-magnetic={away ? undefined : "light"}
+          data-ready={canContinue}
+          data-magnetic={canContinue && !away ? "light" : undefined}
           data-cursor-label="Continuar"
+          inert={!canContinue}
           onClick={onContinue}
         >
           Continuar
