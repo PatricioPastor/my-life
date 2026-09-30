@@ -32,6 +32,7 @@ vi.mock("next/dynamic", async () => {
 })
 
 import { Experience } from "./experience"
+import { STORY } from "./story-fixture"
 
 const phase = () => document.querySelector(".ob")?.getAttribute("data-phase")
 
@@ -55,7 +56,7 @@ async function advance(ms: number) {
 describe("Experience replay", () => {
   it("clicking Ver intro on the gate starts the full intro again, keeping the journey mounted", async () => {
     window.localStorage.setItem("my-life:onboarding:v1", "1")
-    render(<Experience />)
+    render(<Experience story={STORY} />)
     await advance(0)
     expect(phase()).toBe("greeting")
     // A returning visitor: greeting, then straight to the gate.
@@ -85,7 +86,7 @@ describe("Experience replay", () => {
   it("forces the full intro on load with ?intro even when it was seen", async () => {
     window.localStorage.setItem("my-life:onboarding:v1", "1")
     window.history.replaceState(null, "", "/?intro")
-    render(<Experience />)
+    render(<Experience story={STORY} />)
     await advance(0)
     await advance(4500)
     expect(phase()).toBe("life")

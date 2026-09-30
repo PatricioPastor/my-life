@@ -494,10 +494,35 @@
     font-size: var(--type-5);
     will-change: transform, opacity;
   }
-  .ob-body p {
+  .ob-body > * {
     margin: 0 0 var(--space-3);
     color: rgba(246, 226, 232, 0.82);
     animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  /* em: Gambarino ships only its 400 roman, so the slant is the browser's; strong stays 400 and takes the full ink. */
+  .ob-body em {
+    font-style: italic;
+  }
+  .ob-body strong {
+    font-weight: 400;
+    color: var(--ink);
+  }
+  .ob-quote {
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--ink-faint);
+    color: var(--ink-muted);
+  }
+  .ob-body > .ob-subheading {
+    margin-top: var(--space-5);
+    font-size: var(--type-3);
+    color: var(--ink);
+  }
+  .ob-break {
+    width: var(--space-8);
+    height: 0;
+    margin: var(--space-5) 0 var(--space-5);
+    border: 0;
+    border-top: 1px solid var(--ink-faint);
   }
   .ob-scroll {
     transition: opacity 500ms ease;
@@ -565,6 +590,18 @@
     align-items: flex-end;
     transition: opacity 500ms ease;
   }
+  /* A scrim so text scrolling under the controls fades out instead of colliding with them. */
+  .ob-story .ob-foot::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: calc(var(--space-6) * -1);
+    right: calc(var(--page-pad) * -1);
+    bottom: calc(var(--bottom-pad) * -1);
+    left: calc(var(--page-pad) * -1);
+    background: linear-gradient(to top, rgba(6, 5, 4, 0.94) 55%, transparent);
+    pointer-events: none;
+  }
   .ob-foot[data-away="true"] {
     opacity: 0;
     pointer-events: none;
@@ -584,7 +621,7 @@
     .ob-vignette {
       animation: none;
     }
-    .ob-body p,
+    .ob-body > *,
     .ob-continue {
       animation-name: fade;
     }

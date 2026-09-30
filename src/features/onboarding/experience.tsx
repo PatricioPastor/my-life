@@ -6,6 +6,7 @@ import { warmUpSky } from "@/features/sky/warm-up"
 import { probeRenderer } from "./gpu-probe"
 import { whenIdle } from "./idle"
 import { track } from "@/shared/analytics"
+import type { Story } from "@/shared/content"
 import { Onboarding } from "./onboarding"
 import { journeyWanted } from "./onboarding-machine"
 import { useOnboarding } from "./use-onboarding"
@@ -18,7 +19,7 @@ const LazyJourney = dynamic(() => loadJourney(), { ssr: false })
 const LEAVE_MS = 900
 
 /** The journey (gate first) with the onboarding layered above it until it is done. */
-export function Experience() {
+export function Experience({ story }: { story: Story }) {
   const [state, dispatch, replay] = useOnboarding()
   const [gone, setGone] = useState(false)
   const { phase } = state
@@ -53,7 +54,7 @@ export function Experience() {
   return (
     <>
       {journeyWanted(state) && <LazyJourney onReplayIntro={done ? replayIntro : undefined} />}
-      {!gone && <Onboarding state={state} dispatch={dispatch} />}
+      {!gone && <Onboarding story={story} state={state} dispatch={dispatch} />}
     </>
   )
 }

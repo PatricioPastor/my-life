@@ -2,8 +2,8 @@
 
 import { useRef, useState, type ActionDispatch } from "react"
 import { MagneticCursor } from "@/features/cursor"
-import { STORY_TITLE as CTA_LABEL } from "./story"
 import { track } from "@/shared/analytics"
+import type { Story } from "@/shared/content"
 import { HardwareStep } from "./hardware-step"
 import { PhraseLine } from "./phrase-line"
 import { DIFFERENT_PHRASE, LIFE_PHRASE, type PhraseKind } from "./phrases"
@@ -11,6 +11,7 @@ import { StoryView } from "./story-view"
 import type { OnboardingEvent, OnboardingPhase, OnboardingState } from "./onboarding-machine"
 
 interface OnboardingProps {
+  story: Story
   state: OnboardingState
   dispatch: ActionDispatch<[OnboardingEvent]>
 }
@@ -32,10 +33,11 @@ function activeLine(phase: OnboardingPhase): number {
   }
 }
 
-export function Onboarding({ state, dispatch }: OnboardingProps) {
+export function Onboarding({ story, state, dispatch }: OnboardingProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [ctaRect, setCtaRect] = useState<DOMRect | null>(null)
   const { phase } = state
+  const CTA_LABEL = story.meta.title
   const active = activeLine(phase)
   // Before the machine starts the greeting stays empty, so SSR never guesses day or night.
   const lines = [phase === "idle" ? "" : state.greeting, LIFE_PHRASE, DIFFERENT_PHRASE]
@@ -68,7 +70,7 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
       </div>
 
       {(phase === "story" || phase === "hardware") && (
-        <StoryView from={ctaRect} away={phase === "hardware"} onContinue={() => dispatch({ type: "continue" })} />
+        <StoryView story={story} from={ctaRect} away={phase === "hardware"} onContinue={() => dispatch({ type: "continue" })} />
       )}
 
       {phase === "hardware" && (

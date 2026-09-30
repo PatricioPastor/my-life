@@ -2,9 +2,11 @@
 
 import { useLayoutEffect, useRef } from "react"
 import { FilmGrain } from "./film-grain"
-import { STORY_PARAGRAPHS, STORY_TITLE } from "./story"
+import type { Story } from "@/shared/content"
+import { StoryBlocks } from "./story-blocks"
 
 interface StoryViewProps {
+  story: Story
   /** Where the CTA was when it was pressed: the title flies in from there. */
   from: DOMRect | null
   /** The column steps aside (the grain stays) while the next step is on stage. */
@@ -15,7 +17,7 @@ interface StoryViewProps {
 const MORPH_MS = 700
 const MORPH_EASE = "cubic-bezier(0.16, 1, 0.3, 1)"
 
-export function StoryView({ from, away, onContinue }: StoryViewProps) {
+export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
 
   // FLIP: the title is laid out in its final place, then animated from the CTA's rect (centre and width).
@@ -46,14 +48,10 @@ export function StoryView({ from, away, onContinue }: StoryViewProps) {
       <div className="ob-scroll" data-away={away} inert={away}>
         <div className="ob-col">
           <h2 id="ob-story-title" ref={titleRef} className="ob-title t-title">
-            {STORY_TITLE}
+            {story.meta.title}
           </h2>
           <div className="ob-body t-body">
-            {STORY_PARAGRAPHS.map((text, i) => (
-              <p key={i} style={{ animationDelay: `${MORPH_MS - 100 + i * 140}ms` }}>
-                {text}
-              </p>
-            ))}
+            <StoryBlocks blocks={story.blocks} delayMs={(i) => MORPH_MS - 100 + i * 140} />
           </div>
         </div>
       </div>

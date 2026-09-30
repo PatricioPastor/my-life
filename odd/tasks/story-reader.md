@@ -85,7 +85,7 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
 ## Tasks
 
 - [x] **T1 — Base.** 1.8 s holds; typography and spacing tokens; case rules applied to the existing Gambarino texts; `viewport-fit=cover` and a safe-area bottom zone.
-- [ ] **T2 — Markdown pipeline.** The strict subset parser at build time, typed blocks, the content file with a format guide and placeholder text, and the story rendering from it (still static).
+- [x] **T2 — Markdown pipeline.** The strict subset parser at build time, typed blocks, the content file with a format guide and placeholder text, and the story rendering from it (still static).
 - [ ] **T3 — Focused reading.** Focus styling, the snap and spring scroller (wheel, touch, keys), outline → fill painting at reading rhythm, mixed auto-advance, progress, "Continuar" at 100%, reduced motion, accessibility, screenshots (including a WebKit/iPhone viewport).
 - [ ] **T4 — Deliver.** RDD per policy; push after the user approves.
 
@@ -101,6 +101,8 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
 
 - 2026-09-30: Document created. The user chose the MIXED rhythm.
 - 2026-09-30: T1 done (writer, delegated): holds 1800 (RED then GREEN), type/spacing tokens, `.t-title/.t-body/.t-label`, `--page-pad`/`--bottom-pad`, `viewportFit: "cover"`, bottom zone `.ob-foot`; lint/typecheck/test pass. Route: delegated writer (2+ non-trivial files).
+
+- 2026-09-30: T2 done (writer, delegated): `src/shared/content/` (`parseStory`, `loadStory`, types), unified + remark-parse + remark-frontmatter + remark-gfm (to reject GFM extras by name) + yaml; `content/intro/por-que-cree-esto.md`; `/` static; an invalid construct fails the build with file and line. Checked with lint, typecheck, test, build and Playwright (Chromium 1440x900, WebKit iPhone 13).
 
 ## Next step
 
