@@ -77,7 +77,7 @@ The cursor becomes part of the universe:
 - [x] **T1 — Cursor, magnetism and tooltip.** Plus label flipping on mobile.
 - [x] **T2 — Contextual panel.** Dwell hint with glitch, Ctrl expands to the description, accessibility.
 - [x] **T3 — Star focus.** Nebula dim and the entropic reveal in the shader. Screenshots.
-- [ ] **T4 — Deliver.** RDD per policy, then fast-forward `main` and push (pre-authorized).
+- [x] **T4 — Deliver.** RDD approved; `main` fast-forwarded and pushed (pre-authorized).
 
 ## Acceptance criteria
 
@@ -95,6 +95,26 @@ The cursor becomes part of the universe:
 - 2026-09-30: T2 done (delegated writer). RED: context-machine, glitch-text and the facet description assertions failed before implementation; GREEN: 278 + 4 facet-stars tests. Reducer hidden -> hint (500 ms dwell) -> expanded (Ctrl/Meta) with blur reset; seeded glitch decode; panel is an aria-live region with a decoding visual layer. Descriptions are editable placeholders wired to `aria-describedby`.
 - 2026-09-30: T3 done (delegated writer). RED: shader assertions (uniforms, `i < uAnchorCount`, gas dim, reveal) and `focus.ts` / `focusIndexFor` tests failed first; GREEN: 302 tests. Verified with Playwright at a paused fake clock (200/700/1500 ms after capture, Ctrl panel, release, 390px label flip); shots in the scratchpad `shots/cursor-*.png`. Tuned: reveal effects gate on a fast ramp, motes orbit outside the swollen core, stronger disc flicker. Final: lint, typecheck, 302 tests and build pass; `/` static, security.txt revalidates daily.
 
+- 2026-09-30: T4 done.
+  - Parent spot check: `pnpm test` passed 302/302. Reviewed the screenshots at capture, 700 ms, with Ctrl, and after release.
+  - RDD slice `8e89242..bcdf1a4`: assessed **high** (the `security.txt` route); consent granted by the user; four lenses → **approved**; acknowledged, authority burned (lineage `review-d8e5eb15212006b2`).
+  - `main` fast-forwarded to include `feat/es-meta-analytics` and `feat/magnetic-cursor`, then pushed (pre-authorized by the user).
+
+## Review follow-ups (advisory, not accepted yet)
+
+- `R4-cursor-captured-loop-never-idles`: while a star is captured the rAF loop keeps running, with `matchMedia` and rect re-measuring every ~120 ms. It should idle once the spring settles.
+- `R2-gate-submit-reducer-run-twice`: `onSubmit` predicts the next state with a manual reducer run before dispatching.
+- `R2-duplicated-integer-hash`: `hash01` is duplicated in `focus.ts` and `glitch-text.ts`; move it to one shared helper.
+- `R2-glitchframes-dead-in-production`: `glitchFrames` is tested but the panel uses its own loop.
+- `R2-settle-comment-contradicts-constant`: the comment says 1.2 s but `SETTLE_END` is 1.4.
+- `R2-snap-state-on-dataset`: the snap flag lives on a DOM dataset instead of a local.
+- `R3-reticle-field-hide-test-vacuous`: the field-hide test passes without the check. Show the reticle first.
+- `R3-context-panel-motion-path-untested`: only the reduced-motion path is tested.
+- `R3-sky-focus-wiring-untested`: `focus()` bounds, clock restart and uniform uploads are untested.
+- `R3-journey-focus-index-order-unasserted`: nothing asserts that `FACET_IDS` order matches the anchor order.
+- `R3-contenteditable-cursor-gap`: the CSS restores the native cursor for input, textarea and select, but not for `contenteditable`.
+- `R2-task-doc-next-step-stale`: fixed by this update.
+
 ## Next step
 
-The writer runs T0–T3.
+Feature delivered. Next, if the user wants: the cursor idle loop (performance), then the tests listed above.
