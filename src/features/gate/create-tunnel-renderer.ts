@@ -3,6 +3,7 @@ import type { GateStatus } from "./gate-machine"
 import { blendStep, createBlendCache, smooth } from "./color-blend"
 import { createHeartbeat } from "./heartbeat"
 import { PORTAL } from "./portal-palette"
+import { TANGENT_GLYPHS, gridFor, tangentIndex, type Grid } from "./glyphs"
 import { createRingColorSequence } from "./ring-colors"
 import { DIM_SHARE, mixHex, ringDepth } from "./tunnel-math"
 
@@ -11,6 +12,8 @@ export interface TunnelOptions {
   getGate: () => GateStatus
   /** Seeds the ring colors and the heartbeat; by default drawn once per visit so every visit paints its own. */
   seed?: number
+  /** A canvas layered above this one; it gets a half-resolution copy every frame, and its opacity follows the beat. */
+  bloom?: HTMLCanvasElement | null
 }
 
 export interface TunnelRenderer {
@@ -20,8 +23,9 @@ export interface TunnelRenderer {
 }
 
 const RAMP = " .:-=+*#%@"
-const CW = 10
-const CH = 16
+// Ring spines use the direction glyphs; everything else keeps the brightness ramp.
+const CHARS = [...RAMP, ...TANGENT_GLYPHS]
+const SPINE_FROM = 0.55
 const BLEND_STEPS = 6
 const FULL_FROM = 0.36
 /** Radius (short-side fraction) where a wave starts and where it leaves the screen. */
@@ -90,9 +94,12 @@ export function createTunnelRenderer(
   const groups: number[][] = Array.from({ length: cache.count }, () => [])
   const bands: Band[] = []
 
+  const bloom = options.bloom ?? null
+  const bloomCtx = bloom ? bloom.getContext("2d", { alpha: false }) : null
   // next/font hashes the family name; the CSS variable carries the real one.
-  const family = getComputedStyle(canvas).getPropertyValue("--font-doto").trim() || "Doto"
-  const font = `600 15px ${family}, ui-monospace, Menlo, Consolas, monospace`
+  const family = getComputedStyle(canvas).getPropertyValue("--font-silkscreen").trim() || "Silkscreen"
+  let grid: Grid = gridFor(1, 1)
+  let font = ""
 
   function draw(dt: number) {
     if (!alive || !ctx) return
@@ -126,18 +133,19 @@ export function createTunnelRenderer(
     ctx.fillStyle = PORTAL.deep
     ctx.fillRect(0, 0, W, H)
 
-    const cols = Math.ceil(W / CW)
-    const rows = Math.ceil(H / CH)
+    const { cw, ch } = grid
+    const cols = Math.ceil(W / cw)
+    const rows = Math.ceil(H / ch)
     const cx = vx * W
     const cy = vy * H
     const minSide = Math.min(W, H)
     for (const g of groups) g.length = 0
 
     for (let j = 0; j < rows; j++) {
-      const y = j * CH + CH / 2
+      const y = j * ch + ch / 2
       const dy = (y - cy) / minSide
       for (let i = 0; i < cols; i++) {
-        const x = i * CW + CW / 2
+        const x = i * cw + cw / 2
         const dx = (x - cx) / minSide
         const r = Math.sqrt(dx * dx + dy * dy) + 1e-4
         // Depth into the tunnel; rings live at whole steps of u and race outward.
@@ -158,7 +166,11 @@ export function createTunnelRenderer(
           if (d < 2.4 && d > -2.4) v += b.gain * Math.exp(-d * d) * (0.25 + 0.75 * depth) * 0.85
         }
         if (v < 0.07) continue
-        const ci = Math.min(RAMP.length - 1, Math.max(1, Math.round(v * (RAMP.length - 1))))
+        // The bright spine of a ring follows its direction; its fading tail and the dots keep the brightness ramp.
+        const ci =
+          ring * gap >= SPINE_FROM && depth > 0.3
+            ? RAMP.length + tangentIndex(dx, dy)
+            : Math.min(RAMP.length - 1, Math.max(1, Math.round(v * (RAMP.length - 1))))
         // Brightness picks the glyph and the level; the ring pair and its phase pick a smoothly blended color.
         const key = cache.key(rings.indexAt(ringIdx), rings.indexAt(ringIdx + 1), blendStep(ph, BLEND_STEPS), v >= FULL_FROM ? 0 : 1)
         groups[key].push(x, y, ci)
@@ -172,7 +184,7 @@ export function createTunnelRenderer(
       const list = groups[g]
       if (!list.length) continue
       ctx.fillStyle = cache.colorOf(g)
-      for (let k = 0; k < list.length; k += 3) ctx.fillText(RAMP[list[k + 2]], list[k], list[k + 1])
+      for (let k = 0; k < list.length; k += 3) ctx.fillText(CHARS[list[k + 2]], list[k], list[k + 1])
     }
 
     // Vignette: the edges sink into the dark, which sells the depth.
@@ -198,6 +210,12 @@ export function createTunnelRenderer(
     ctx.fillStyle = grad
     ctx.fillRect(cx - glowR, cy - glowR, glowR * 2, glowR * 2)
     ctx.globalCompositeOperation = "source-over"
+
+    // Bloom: one half-resolution copy; CSS blurs it and screen-blends it back over the tunnel.
+    if (bloom && bloomCtx) {
+      bloomCtx.drawImage(canvas, 0, 0, bloom.width, bloom.height)
+      bloom.style.opacity = String(0.35 + 0.5 * surge)
+    }
   }
 
   function resize() {
@@ -209,6 +227,26 @@ export function createTunnelRenderer(
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w
       canvas.height = h
+    }
+    if (bloom) {
+      const bw = Math.max(Math.floor(w / 2), 1)
+      const bh = Math.max(Math.floor(h / 2), 1)
+      if (bloom.width !== bw || bloom.height !== bh) {
+        bloom.width = bw
+        bloom.height = bh
+      }
+    }
+    grid = gridFor(W, H)
+    font = `${grid.font}px ${family}, ui-monospace, Menlo, Consolas, monospace`
+    // Canvas text does not trigger a font download, so ask for it; repaint once it is there.
+    if (document.fonts?.load) {
+      const wanted = font
+      document.fonts.load(wanted).then(
+        () => {
+          if (alive && font === wanted && (reduced || !raf)) draw(0)
+        },
+        () => {},
+      )
     }
     draw(0)
   }
@@ -250,16 +288,6 @@ export function createTunnelRenderer(
 
   resize()
   wake()
-
-  // Canvas text does not trigger a font download, and the 600 weight is used nowhere in the DOM.
-  if (document.fonts?.load) {
-    document.fonts.load(font).then(
-      () => {
-        if (alive && (reduced || !raf)) draw(0)
-      },
-      () => {},
-    )
-  }
 
   return {
     refresh: () => {

@@ -12,6 +12,7 @@ interface AsciiTunnelProps {
 
 export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const bloomRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<TunnelRenderer | null>(null)
 
   // The loop reads the gate through a getter, so a state change never restarts the canvas.
@@ -29,6 +30,7 @@ export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
     const renderer = createTunnelRenderer(canvas, stage, {
       getGate: () => live.current.gate,
       seed,
+      bloom: bloomRef.current,
     })
     rendererRef.current = renderer
     return () => {
@@ -37,5 +39,16 @@ export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
     }
   }, [seed])
 
-  return <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full" />
+  return (
+    <>
+      <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full" />
+      {/* A blurred half-resolution copy of the tunnel, screen-blended over it. The renderer drives its opacity. */}
+      <canvas
+        ref={bloomRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 block h-full w-full"
+        style={{ mixBlendMode: "screen", filter: "blur(10px) contrast(1.5) brightness(1.3)", opacity: 0.4 }}
+      />
+    </>
+  )
 }

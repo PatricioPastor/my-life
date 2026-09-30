@@ -62,7 +62,7 @@ Rework the entry portal (the ASCII tunnel of the gate). User feedback:
 ## Tasks
 
 - [x] **T1 — Heartbeat, smooth color and palette.** Pure modules plus the renderer wiring and the darker background. Route: delegated direct (writer trigger).
-- [ ] **T2 — Glow and ASCII quality.** Bloom layer, orientation glyphs, grid and font, mobile bounds. Route: delegated direct.
+- [x] **T2 — Glow and ASCII quality.** Bloom layer, orientation glyphs, grid and font, mobile bounds. Route: delegated direct.
 - [ ] **T3 — Deliver.** RDD per policy, then fast-forward `main` and push.
 
 ## Acceptance criteria
@@ -76,6 +76,7 @@ Rework the entry portal (the ASCII tunnel of the gate). User feedback:
 
 - 2026-09-30: Document created.
 - 2026-09-30: T1 done: warm portal palette, bounded cyclic ring colors (period 1024, no throw), smooth quantized color blend, seeded heartbeat (lub-dub, gate profiles, surge and pulse band), darker depth with vignette, static reduced-motion frame that repaints on gate change. Route: delegated direct (writer).
+- 2026-09-30: T2 done: half-resolution CSS-blurred screen-blend bloom canvas driven by the beat, tangent glyphs on ring spines, viewport-aware bounded grid (<=12k cells), Silkscreen glyph font.
 
 ## Next step
 
