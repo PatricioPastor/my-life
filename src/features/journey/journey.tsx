@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, findFacet } from "@/features/facets"
 import { checkHandle } from "@/features/gate/actions"
+import { MagneticCursor } from "@/features/cursor"
 import { GateScreen, gateReducer, initialGateState } from "@/features/gate"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
@@ -36,6 +37,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   const [gateMounted, setGateMounted] = useState(true)
   const skyRef = useRef<HalftoneSkyHandle>(null)
   const layerRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLElement>(null)
 
   const params = useMemo(() => resolveSkyParams(preset), [preset])
   const { screen } = journey
@@ -90,6 +92,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
 
   return (
     <main
+      ref={stageRef}
       className="ui relative h-svh w-full overflow-hidden bg-void font-sans text-ink"
       style={themeVars(params)}
     >
@@ -136,7 +139,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
 
       {screen === "place" && facet && (
         <div className="absolute inset-0">
-          <BackButton label="Cielo" onClick={() => dispatch({ type: "back" })} />
+          <BackButton label="Cielo" hint="Volver al cielo" onClick={() => dispatch({ type: "back" })} />
           <FacetPlace
             facet={facet}
             listSide={listSide}
@@ -150,7 +153,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
 
       {screen === "entry" && facet && (
         <div className="absolute inset-0">
-          <BackButton label={facet.name} onClick={() => dispatch({ type: "back" })} />
+          <BackButton label={facet.name} hint={`Volver a ${facet.name}`} onClick={() => dispatch({ type: "back" })} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
             <Reader
               meta={entry.meta}
@@ -188,6 +191,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
           />
         </div>
       )}
+      <MagneticCursor stageRef={stageRef} />
     </main>
   )
 }

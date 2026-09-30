@@ -95,6 +95,8 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
               <button
                 type="submit"
                 aria-label="Entrar"
+                data-magnetic="light"
+                data-cursor-label="Entrar"
                 disabled={!handle || status === "checking"}
                 className="press flex h-11 w-11 shrink-0 items-center justify-center border border-signal text-ink sm:h-14 sm:w-14"
               >
@@ -120,6 +122,8 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={askForAccess}
+                data-magnetic="light"
+                data-cursor-label="Pedir acceso"
                 className="press inline-flex h-11 items-center border border-ink-faint px-[18px] text-xs tracking-[0.08em] text-ink"
               >
                 Pedir acceso por Instagram

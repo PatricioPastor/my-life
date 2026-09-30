@@ -309,3 +309,127 @@
     transform: translateX(5px);
   }
 }
+/* Magnetic cursor: the native cursor is hidden only on the stage while the reticle is active. */
+[data-cursor="on"],
+[data-cursor="on"] * {
+  cursor: none !important;
+}
+[data-cursor="on"] :is(input, textarea, select) {
+  cursor: text !important;
+}
+
+.mc {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  contain: layout style;
+  opacity: 0;
+  transition: opacity 160ms ease;
+  --mc-ink: var(--ink, #f6e2e8);
+  --mc-edge: rgba(10, 6, 0, 0.9);
+}
+.mc[data-visible="on"] {
+  opacity: 1;
+}
+.mc-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  will-change: transform, width, height;
+}
+.mc-frame > i {
+  position: absolute;
+  display: block;
+  background: var(--mc-ink);
+  box-shadow: 0 0 0 1px var(--mc-edge);
+  transition: opacity 140ms ease;
+}
+/* Free: a 2px crosshair with a gap at its heart. */
+.mc-h {
+  top: calc(50% - 1px);
+  left: 0;
+  width: 100%;
+  height: 2px;
+  -webkit-mask: linear-gradient(90deg, #000 0 38%, transparent 38% 62%, #000 62%);
+  mask: linear-gradient(90deg, #000 0 38%, transparent 38% 62%, #000 62%);
+}
+.mc-v {
+  left: calc(50% - 1px);
+  top: 0;
+  width: 2px;
+  height: 100%;
+  -webkit-mask: linear-gradient(180deg, #000 0 38%, transparent 38% 62%, #000 62%);
+  mask: linear-gradient(180deg, #000 0 38%, transparent 38% 62%, #000 62%);
+}
+/* Captured: the crosshair gives way to a [ ] frame sized to the target. */
+.mc-c {
+  width: 8px;
+  height: 8px;
+  background: none !important;
+  box-shadow: none !important;
+  border: 0 solid var(--mc-ink);
+  filter: drop-shadow(0 0 1px var(--mc-edge)) drop-shadow(0 0 1px var(--mc-edge));
+  opacity: 0;
+}
+.mc-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.mc-tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.mc-bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.mc-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+.mc[data-state="captured"] .mc-c {
+  opacity: 1;
+}
+.mc[data-state="captured"] .mc-h,
+.mc[data-state="captured"] .mc-v {
+  opacity: 0;
+}
+.mc[data-pressed="on"] .mc-frame {
+  scale: 0.92;
+}
+.mc-frame {
+  transition: scale 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.mc-tip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--mc-ink);
+  background: rgba(10, 6, 0, 0.88);
+  border: 1px solid var(--ink-faint, rgba(246, 226, 232, 0.24));
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.mc-tip[data-tip="on"] {
+  opacity: 1;
+}
+.mc-key {
+  font: inherit;
+  font-size: 9px;
+  padding: 1px 4px;
+  color: var(--ink-muted, rgba(246, 226, 232, 0.68));
+  border: 1px solid var(--ink-muted, rgba(246, 226, 232, 0.68));
+  box-shadow: 0 1px 0 var(--ink-faint, rgba(246, 226, 232, 0.24));
+}
+.mc-key[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc,
+  .mc-frame,
+  .mc-frame > i,
+  .mc-tip {
+    transition: none;
+  }
+}

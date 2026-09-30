@@ -52,7 +52,7 @@ export function Reader({ meta, title, page, onPrev, onNext }: ReaderProps) {
         </div>
       </div>
       <nav aria-label="Páginas" className="flex items-center justify-between">
-        <button type="button" aria-label="Página anterior" disabled={page === 0} onClick={onPrev} className={pageButton}>
+        <button type="button" aria-label="Página anterior" data-magnetic="light" data-cursor-label="Página anterior" disabled={page === 0} onClick={onPrev} className={pageButton}>
           <Chevron d={CHEVRON_L} />
         </button>
         <div className="flex items-center gap-4">
@@ -65,7 +65,7 @@ export function Reader({ meta, title, page, onPrev, onNext }: ReaderProps) {
             {page + 1} de {count}
           </span>
         </div>
-        <button type="button" aria-label="Página siguiente" disabled={page === count - 1} onClick={onNext} className={pageButton}>
+        <button type="button" aria-label="Página siguiente" data-magnetic="light" data-cursor-label="Página siguiente" disabled={page === count - 1} onClick={onNext} className={pageButton}>
           <Chevron d={CHEVRON_R} />
         </button>
       </nav>

@@ -28,6 +28,8 @@ export function FacetPlace({ facet, listSide, onOpenEntry }: FacetPlaceProps) {
             <button
               type="button"
               onClick={() => onOpenEntry(i)}
+              data-magnetic="light"
+              data-cursor-label="Abrir"
               className="row press flex min-h-[72px] w-full items-center gap-5 text-left"
             >
               <span className="mark size-2 shrink-0 bg-signal" />
