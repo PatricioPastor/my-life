@@ -66,6 +66,23 @@ describe("buildSkyFragment", () => {
     expect(src).toContain("starTint(floor(h2 * 4.0))")
   })
 
+  it("carves a dark halo around each sparkle instead of brightening the gas under it", () => {
+    const field = src.slice(src.indexOf("vec3 field("), src.indexOf("void main()"))
+    expect(field).not.toContain("d += exp(-dist")
+    expect(field).toContain("d -= exp(-(dist * dist)")
+    expect(field).toContain("clamp(d, 0.0, 1.0)")
+  })
+
+  it("draws the sparkle cores porcelain, with the facet tint on spikes and glow", () => {
+    expect(src).toContain("col = mix(col, uStarColor, disc);")
+    expect(src).not.toContain("col = mix(col, tint, disc);")
+    expect(src).toContain("col += tint * glow")
+  })
+
+  it("strengthens the four facet anchors, which are the first sparkles", () => {
+    expect(src).toContain("float anchor = i < 4 ? 1.0 : 0.0;")
+  })
+
   it("has no duplicate slot names", () => {
     const names = SKY_UNIFORM_SLOTS.map(([k]) => k)
     expect(new Set(names).size).toBe(names.length)

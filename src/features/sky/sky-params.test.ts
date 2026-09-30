@@ -47,6 +47,12 @@ describe("resolveSkyParams", () => {
     expect(p.planet).toBe(true)
   })
 
+  it("keeps the ember gas a little thinner so the stars stand out", () => {
+    const p = resolveSkyParams("ember")
+    expect(p.threshold).toBeGreaterThanOrEqual(0.6)
+    expect(p.density).toBeLessThan(SKY_DEFAULTS.density)
+  })
+
   it("derives the ember dusk as Coffee Bean mixed 30% toward Bronze Spice", () => {
     const coffee = hexToRgb("#1F1300")
     const bronze = hexToRgb("#CC5803")

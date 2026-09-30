@@ -70,7 +70,7 @@ export const SKY_PRESETS: Record<SkyPresetName, Partial<SkyParams>> = {
   ember: {
     voidColor: PORTAL.deep, hazeColor: EMBER_GAS.haze, duskColor: EMBER_GAS.dusk, wineColor: EMBER_GAS.wine,
     crimsonColor: EMBER_GAS.crimson, hotColor: EMBER_GAS.hot, starColor: PALETTE.ink,
-    starTints: PORTAL.rings, threshold: 0.57,
+    starTints: PORTAL.rings, threshold: 0.6, density: 0.46,
   },
   // The earlier periwinkle sky: Shadow Grey gas rising through Periwinkle to Sunflower Gold, Porcelain stars.
   periwinkle: {

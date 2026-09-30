@@ -125,7 +125,9 @@ vec3 field(vec2 pos, vec2 resCss){
     vec4 b = uSparkB[i];
     float grow = smoothstep(0.0, 0.6, uTime - s.w);
     float dist = length(pos - s.xy - shift(1.2));
-    d += exp(-dist / max(b.w * 2.2 * (1.0 + b.z * 0.6), 1.0)) * 0.55 * grow;
+    // A smooth clearing, not a glow: the gas thins around each star so it reads against it.
+    float halo = max(b.w * 3.2 + s.z * 0.16, 10.0) * (1.0 + b.z * 0.6);
+    d -= exp(-(dist * dist) / (halo * halo)) * 0.95 * grow;
   }
 
   float hz = smoothstep(0.25, 0.75, n + river * 0.25) * uHaze;
@@ -206,8 +208,9 @@ void main(){
     float grow = smoothstep(0.0, 0.55, age) * (1.0 + 0.3 * exp(-age * 3.0) * sin(age * 13.0));
     float tw = 0.84 + 0.16 * sin(uTime * uTwinkle * 1.7 + b.y);
     float fl = 1.0 + b.z * 0.6;
+    float anchor = i < 4 ? 1.0 : 0.0;
     float reach = s.z * grow * tw * fl;
-    float core = b.w * grow * fl;
+    float core = b.w * grow * fl * (1.0 + 0.3 * anchor);
     vec3 tint = starTint(b.x);
     vec2 c = s.xy + sh;
     vec2 d = css - c;
@@ -218,13 +221,13 @@ void main(){
     float diag = step(0.5, core / px - 1.5) * 0.45 * max(
       step(abs(rd.y), th) * pow(max(1.0 - abs(rd.x) / max(reach * 0.22, 1.0), 0.0), 2.0),
       step(abs(rd.x), th) * pow(max(1.0 - abs(rd.y) / max(reach * 0.22, 1.0), 0.0), 2.0));
-    col = mix(col, tint, clamp(max(max(hx, vy), diag), 0.0, 1.0));
+    col = mix(col, tint, clamp(max(max(hx, vy), diag) * (1.0 + 0.25 * anchor), 0.0, 1.0));
     float hp = px * 0.5;
     vec2 dcell = (floor(css / hp) + 0.5) * hp - (floor(c / hp) + 0.5) * hp;
     float disc = step(length(dcell), core);
     float glow = exp(-length(d) / max(core * 1.4, 1.0)) * (1.0 - disc);
-    col += tint * glow * 0.35;
-    col = mix(col, tint, disc);
+    col += tint * glow * (0.35 + 0.25 * anchor);
+    col = mix(col, uStarColor, disc);
     float crossMask = max(step(abs(d.y), th) * step(abs(d.x), core * 0.85),
                           step(abs(d.x), th) * step(abs(d.y), core * 0.85));
     col = mix(col, uStarColor, crossMask * disc * 0.9);
