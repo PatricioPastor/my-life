@@ -87,11 +87,15 @@ function tidy(runs: InlineRun[]): InlineRun[] {
   return merged.filter((run) => run.text !== "")
 }
 
-function plainText(children: PhrasingContent[]): string {
+function plainText(children: PhrasingContent[], inSubheading = false): string {
   let out = ""
   for (const child of children) {
     if (child.type !== "text") {
-      throw unsupported(child.type === "emphasis" || child.type === "strong" ? "nested emphasis" : constructName(child), lineOf(child))
+      const emphasis = child.type === "emphasis" || child.type === "strong"
+      throw unsupported(
+        emphasis ? (inSubheading ? "emphasis in a subheading" : "nested emphasis") : constructName(child),
+        lineOf(child),
+      )
     }
     out += child.value
   }
@@ -166,7 +170,7 @@ function toBlock(node: RootContent): Block | null {
     }
     case "heading": {
       if (node.depth !== 2) throw unsupported(constructName(node), lineOf(node))
-      const text = plainText(node.children).trim()
+      const text = plainText(node.children, true).trim()
       return text === "" ? null : { type: "subheading", text }
     }
     case "thematicBreak":

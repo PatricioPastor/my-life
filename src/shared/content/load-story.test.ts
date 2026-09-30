@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { loadStory } from "./load-story"
 
+// The story file is the author's to rewrite: this checks the pipeline, never the text. Parser behaviour lives in parse-story.test.ts.
 describe("loadStory", () => {
-  it("parses the shipped intro story", () => {
+  it("loads the shipped intro story into a valid Story", () => {
     const { meta, blocks } = loadStory("content/intro/por-que-cree-esto.md")
-    expect(meta).toEqual({ title: "¿por qué creé esto?", updated: "2026-09-30" })
-    const types = new Set(blocks.map((b) => b.type))
-    expect(types).toEqual(new Set(["paragraph", "quote", "break"]))
-    const kinds = new Set(blocks.flatMap((b) => ("runs" in b ? b.runs.map((r) => r.kind) : [])))
-    expect(kinds).toEqual(new Set(["text", "em", "strong"]))
-    expect(blocks.filter((b) => b.type === "paragraph").length).toBeGreaterThanOrEqual(5)
+    expect(meta.title.trim()).not.toBe("")
+    expect(meta.updated).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(Number.isNaN(new Date(`${meta.updated}T00:00:00Z`).getTime())).toBe(false)
+    expect(blocks.length).toBeGreaterThan(0)
   })
 
   it("prefixes a failure with the file it came from", () => {

@@ -171,6 +171,7 @@ describe("parseStory: rejected constructs", () => {
     ["table", "| a | b |\n|---|---|\n| 1 | 2 |", "table", 6],
     ["hard line break", "Uno  \ndos", "hard line break", 6],
     ["nested emphasis", "**a *b* c**", "nested", 6],
+    ["emphasis in a subheading", "## Un *apartado*", "emphasis in a subheading", 6],
     ["multi-paragraph quote", "> Uno.\n>\n> Dos.", "blockquote", 6],
     ["quote holding a list", "> - uno", "blockquote", 6],
     ["footnote-style definition", "[x]: https://x.org", "definition", 6],
