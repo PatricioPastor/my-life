@@ -18,9 +18,9 @@ describe("phrase timings", () => {
     expect(d.different).toBe(phraseTimeline("different", DIFFERENT_PHRASE, false).totalMs)
   })
 
-  it("holds the greeting ~2 s, the middle phrase ~2.5 s and gives the last one no exit", () => {
+  it("holds the greeting 2 s, the middle phrase 2.3 s and gives the last one no exit", () => {
     expect(phraseTimeline("greeting", "buenoniaa", false).holdMs).toBe(2000)
-    expect(phraseTimeline("life", LIFE_PHRASE, false).holdMs).toBe(2500)
+    expect(phraseTimeline("life", LIFE_PHRASE, false).holdMs).toBe(2300)
     expect(phraseTimeline("different", DIFFERENT_PHRASE, false).exitMs).toBe(0)
   })
 

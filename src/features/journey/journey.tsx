@@ -9,6 +9,7 @@ import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
 import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
+import { ReplayIntroButton } from "./replay-intro-button"
 import {
   focusIndexFor,
   initialJourneyState,
@@ -33,9 +34,11 @@ const SHADOW = "[text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
 
 interface JourneyProps {
   preset?: SkyPresetName
+  /** Plays the onboarding again over this journey. The control only shows when given. */
+  onReplayIntro?: () => void
 }
 
-export function Journey({ preset = "ember" }: JourneyProps) {
+export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
   const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
   const [gateMounted, setGateMounted] = useState(true)
@@ -216,6 +219,9 @@ export function Journey({ preset = "ember" }: JourneyProps) {
             }}
           />
         </div>
+      )}
+      {onReplayIntro && (screen === "sky" || (screen === "gate" && gate.status !== "granted")) && (
+        <ReplayIntroButton onClick={onReplayIntro} />
       )}
       <MagneticCursor stageRef={stageRef} onCapture={onCapture} />
       <ContextPanel target={cursorTarget} />

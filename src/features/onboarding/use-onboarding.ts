@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useReducer } from "react"
+import { useCallback, useEffect, useReducer } from "react"
 import { FONT_WAIT_MS, fontReadyOrTimeout, loadGambarino } from "./font"
+import { forcedIntro } from "./forced-intro"
 import { greetingFor } from "./greeting"
 import { dueIn, initialOnboarding, onboardingReducer } from "./onboarding-machine"
 import { phaseDurations } from "./phrases"
@@ -18,7 +19,7 @@ export function useOnboarding() {
     let cancelled = false
     void fontReadyOrTimeout(loadGambarino, FONT_WAIT_MS).then(() => {
       if (cancelled) return
-      const returning = readSeen()
+      const returning = readSeen() && !forcedIntro(window.location.search)
       const greeting = greetingFor(new Date())
       dispatch({ type: "start", now: performance.now(), returning, greeting, durations: phaseDurations(greeting, returning) })
     })
@@ -40,5 +41,11 @@ export function useOnboarding() {
     if (phase === "done") markSeen()
   }, [phase])
 
-  return [state, dispatch] as const
+  // Plays the full intro again from the greeting, whatever "seen" says. Only takes effect once the intro is done.
+  const replay = useCallback(() => {
+    const greeting = greetingFor(new Date())
+    dispatch({ type: "replay", now: performance.now(), greeting, durations: phaseDurations(greeting, false) })
+  }, [])
+
+  return [state, dispatch, replay] as const
 }

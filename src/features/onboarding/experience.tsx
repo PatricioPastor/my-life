@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { warmUpSky } from "@/features/sky/warm-up"
 import { probeRenderer } from "./gpu-probe"
 import { whenIdle } from "./idle"
+import { track } from "@/shared/analytics"
 import { Onboarding } from "./onboarding"
 import { journeyWanted } from "./onboarding-machine"
 import { useOnboarding } from "./use-onboarding"
@@ -18,7 +19,7 @@ const LEAVE_MS = 900
 
 /** The journey (gate first) with the onboarding layered above it until it is done. */
 export function Experience() {
-  const [state, dispatch] = useOnboarding()
+  const [state, dispatch, replay] = useOnboarding()
   const [gone, setGone] = useState(false)
   const { phase } = state
   const done = phase === "done"
@@ -41,9 +42,17 @@ export function Experience() {
     return () => clearTimeout(id)
   }, [done])
 
+  // The journey stays mounted (no WebGL teardown); the onboarding layer just comes back over it. The control is only
+  // offered while the intro is done, so it never sits (focusable, magnetic) underneath the layer.
+  const replayIntro = () => {
+    track("intro_replayed")
+    setGone(false)
+    replay()
+  }
+
   return (
     <>
-      {journeyWanted(state) && <LazyJourney />}
+      {journeyWanted(state) && <LazyJourney onReplayIntro={done ? replayIntro : undefined} />}
       {!gone && <Onboarding state={state} dispatch={dispatch} />}
     </>
   )

@@ -86,6 +86,48 @@ describe("onboarding machine", () => {
   })
 })
 
+describe("replay", () => {
+  const done = (returning: boolean): OnboardingState => ({ ...start(returning), phase: "done", returning, skipped: true })
+  const replay = (s: OnboardingState, now = 9000) =>
+    onboardingReducer(s, { type: "replay", now, greeting: "buenanochee", durations: D })
+
+  it("restarts the full sequence from the greeting even after a returning (seen) visit", () => {
+    let s = replay(done(true))
+    expect(s.phase).toBe("greeting")
+    expect(s.returning).toBe(false)
+    expect(s.skipped).toBe(false)
+    expect(s.greeting).toBe("buenanochee")
+    expect(s.enteredAt).toBe(9000)
+    // A returning greeting would jump to done; a replay walks every phase.
+    s = onboardingReducer(s, { type: "tick", now: 9000 + D.greeting })
+    expect(s.phase).toBe("life")
+    s = onboardingReducer(s, { type: "tick", now: 9000 + D.greeting + D.life })
+    expect(s.phase).toBe("different")
+    s = onboardingReducer(s, { type: "tick", now: 9000 + D.greeting + D.life + D.different })
+    expect(s.phase).toBe("cta")
+  })
+
+  it("only replays once the intro is done", () => {
+    for (const phase of ["idle", "greeting", "life", "different", "cta", "story", "hardware"] as const) {
+      const s: OnboardingState = { ...start(), phase }
+      expect(replay(s)).toBe(s)
+    }
+  })
+
+  it("keeps the journey mounted for the whole replay", () => {
+    const s = replay(done(false))
+    expect(s.phase).toBe("greeting")
+    expect(journeyWanted(s)).toBe(true)
+    expect(journeyWanted({ ...s, phase: "story" })).toBe(true)
+  })
+
+  it("can be skipped like the first run and replayed again", () => {
+    const skipped = onboardingReducer(replay(done(true)), { type: "skip" })
+    expect(skipped.phase).toBe("done")
+    expect(replay(skipped).phase).toBe("greeting")
+  })
+})
+
 describe("journeyWanted", () => {
   it("keeps the journey out of the way until the last step, or a returning visit", () => {
     const s = start()

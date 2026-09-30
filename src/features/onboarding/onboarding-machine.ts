@@ -12,10 +12,13 @@ export interface OnboardingState {
   greeting: Greeting
   returning: boolean
   skipped: boolean
+  /** True once the visitor asked to see the intro again: the journey is already up and must stay mounted. */
+  replayed: boolean
 }
 
 export type OnboardingEvent =
   | { type: "start"; now: number; returning: boolean; greeting: Greeting; durations: PhaseDurations }
+  | { type: "replay"; now: number; greeting: Greeting; durations: PhaseDurations }
   | { type: "tick"; now: number }
   | { type: "cta" }
   | { type: "continue" }
@@ -29,6 +32,7 @@ export const initialOnboarding: OnboardingState = {
   greeting: "buenoniaa",
   returning: false,
   skipped: false,
+  replayed: false,
 }
 
 const TIMED_NEXT: Partial<Record<OnboardingPhase, OnboardingPhase>> = {
@@ -57,6 +61,19 @@ export function onboardingReducer(state: OnboardingState, event: OnboardingEvent
         greeting: event.greeting,
         durations: event.durations,
       }
+    case "replay":
+      // Always the full sequence, whatever the remembered "seen" flag said the first time.
+      if (state.phase !== "done") return state
+      return {
+        ...state,
+        phase: "greeting",
+        enteredAt: event.now,
+        returning: false,
+        skipped: false,
+        replayed: true,
+        greeting: event.greeting,
+        durations: event.durations,
+      }
     case "tick": {
       if (!isTimed(state) || event.now - state.enteredAt < holdFor(state)) return state
       // A returning visitor only sees the greeting, then the gate.
@@ -82,5 +99,5 @@ export function dueIn(state: OnboardingState, now: number): number | null {
 
 /** The heavy journey (sky, tunnel) is mounted early enough to be ready when the layer leaves, but not while text animates. */
 export function journeyWanted(state: OnboardingState): boolean {
-  return state.phase === "hardware" || state.phase === "done" || (state.returning && state.phase !== "idle")
+  return state.replayed || state.phase === "hardware" || state.phase === "done" || (state.returning && state.phase !== "idle")
 }

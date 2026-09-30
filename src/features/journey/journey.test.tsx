@@ -148,3 +148,39 @@ describe("Journey analytics", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain("ana")
   })
 })
+
+describe("Journey replay control", () => {
+  it("offers Ver intro on the gate and reports the press", () => {
+    const onReplayIntro = vi.fn()
+    render(<Journey onReplayIntro={onReplayIntro} />)
+    fireEvent.click(screen.getByRole("button", { name: "Ver intro" }))
+    expect(onReplayIntro).toHaveBeenCalledTimes(1)
+  })
+
+  it("is not rendered without a handler", () => {
+    render(<Journey />)
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+  })
+
+  it("hides during the warp and comes back on the sky", async () => {
+    checkHandle.mockResolvedValue({ status: "granted" })
+    render(<Journey onReplayIntro={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
+    await act(() => vi.advanceTimersByTimeAsync(1200))
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(1500))
+    expect(screen.getByRole("button", { name: "Ver intro" })).toBeTruthy()
+  })
+
+  it("is not offered inside a facet", async () => {
+    checkHandle.mockResolvedValue({ status: "granted" })
+    render(<Journey onReplayIntro={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
+    await act(() => vi.advanceTimersByTimeAsync(1200))
+    await act(() => vi.advanceTimersByTimeAsync(1500))
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+  })
+})
