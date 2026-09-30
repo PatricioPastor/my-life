@@ -51,7 +51,6 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   // Checking: ask the server, and hold for the minimum beat. Failures deny (fail closed).
   useEffect(() => {
     if (gate.status !== "checking") return
-    track("gate_submitted")
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const beat = new Promise<void>((resolve) => {
@@ -176,7 +175,12 @@ export function Journey({ preset = "ember" }: JourneyProps) {
           <GateScreen
             state={gate}
             onTyped={(raw) => dispatchGate({ type: "typed", raw })}
-            onSubmit={() => dispatchGate({ type: "submit" })}
+            onSubmit={() => {
+              // One event per accepted submit; refused or repeated ones never reach "checking".
+              const next = gateReducer(gate, { type: "submit" })
+              if (next.status === "checking" && gate.status !== "checking") track("gate_submitted")
+              dispatchGate({ type: "submit" })
+            }}
             onRequestInvite={(copied) => {
               track("access_requested")
               dispatchGate({ type: "requestInvite", copied })

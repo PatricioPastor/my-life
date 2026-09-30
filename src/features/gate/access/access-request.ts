@@ -1,7 +1,8 @@
 import { normalizeHandle } from "../handle"
 
-// Public site config, not a secret: where access requests are received.
-export const OWNER_HANDLE = "patriciopastor_"
+import { OWNER_HANDLE } from "@/shared/site/owner"
+
+export { OWNER_HANDLE }
 
 export interface AccessRequest {
   href: string

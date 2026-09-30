@@ -1,5 +1,7 @@
-// Public site config, not a secret: the Instagram DM is the disclosure channel.
-const CONTACT = "https://ig.me/m/patriciopastor_"
+import { OWNER_HANDLE } from "./owner"
+
+// The Instagram DM is the disclosure channel.
+const CONTACT = `https://ig.me/m/${OWNER_HANDLE}`
 const VALID_DAYS = 364
 const DAY_MS = 24 * 60 * 60 * 1000
 

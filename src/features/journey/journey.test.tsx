@@ -116,6 +116,22 @@ describe("Journey analytics", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain("eve")
   })
 
+  it("tracks gate_submitted once per submit, not for refused or repeated submits", async () => {
+    checkHandle.mockResolvedValue({ status: "denied" })
+    render(<Journey />)
+    const input = screen.getByLabelText("Ingresa con tu Instagram")
+    fireEvent.change(input, { target: { value: "bad handle!" } })
+    fireEvent.submit(input.closest("form")!)
+    expect(track).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: "eve" } })
+    const form = input.closest("form")!
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    expect(track.mock.calls).toEqual([["gate_submitted"]])
+    await act(() => vi.advanceTimersByTimeAsync(1200))
+    expect(track.mock.calls.map((c) => c[0])).toEqual(["gate_submitted", "gate_denied"])
+  })
+
   it("tracks a granted gate, a facet and an entry by id and index only", async () => {
     checkHandle.mockResolvedValue({ status: "granted" })
     await enter("ana")
