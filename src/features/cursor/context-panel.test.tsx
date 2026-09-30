@@ -61,9 +61,33 @@ describe("ContextPanel", () => {
   it("shows the hint and description as plain text under reduced motion", () => {
     const { container } = render(<ContextPanel target={STAR} />)
     act(() => vi.advanceTimersByTime(DWELL_MS + 10))
-    expect(container.querySelector(".cp-hint")?.textContent).toBe(HINT_TEXT)
+    expect(container.querySelector(".cp-hint .cp-final")?.textContent).toBe(HINT_TEXT)
+    expect(container.querySelector(".cp-hint .cp-overlay")?.textContent).toBe(HINT_TEXT)
     fireEvent.keyDown(window, { key: "Control" })
-    expect(container.querySelector(".cp-text")?.textContent).toBe(STAR.context)
+    expect(container.querySelector(".cp-text .cp-final")?.textContent).toBe(STAR.context)
+    expect(container.querySelector(".cp-text .cp-overlay")?.textContent).toBe(STAR.context)
+  })
+
+  it("sizes the box with the final text and scrambles in an aria-hidden overlay", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }))
+    const { container } = render(<ContextPanel target={STAR} />)
+    act(() => vi.advanceTimersByTime(DWELL_MS + 10))
+    const final = container.querySelector(".cp-hint .cp-final")
+    const overlay = container.querySelector(".cp-hint .cp-overlay")
+    expect(final?.textContent).toBe(HINT_TEXT)
+    expect(overlay?.getAttribute("aria-hidden")).toBe("true")
+    // Mid-decode the overlay differs from the final text; the sizing layer never changes.
+    expect(overlay?.textContent).toHaveLength(HINT_TEXT.length)
+    expect(overlay?.textContent).not.toBe(HINT_TEXT)
+    expect(final?.textContent).toBe(HINT_TEXT)
+  })
+
+  it("cancels the decode when it unmounts", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }))
+    const { unmount } = render(<ContextPanel target={STAR} />)
+    act(() => vi.advanceTimersByTime(DWELL_MS + 10))
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it("ignores stars that have no description", () => {

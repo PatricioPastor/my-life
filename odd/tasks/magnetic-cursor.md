@@ -105,7 +105,7 @@ The cursor becomes part of the universe:
 - ~~`R4-cursor-captured-loop-never-idles`~~ resolved by the feel fixes below: the loop idles, `matchMedia` is read once, and rects are read at the top of each awake frame.
 - `R2-gate-submit-reducer-run-twice`: `onSubmit` predicts the next state with a manual reducer run before dispatching.
 - `R2-duplicated-integer-hash`: `hash01` is duplicated in `focus.ts` and `glitch-text.ts`; move it to one shared helper.
-- `R2-glitchframes-dead-in-production`: `glitchFrames` is tested but the panel uses its own loop.
+- ~~`R2-glitchframes-dead-in-production`~~ resolved: the panel now consumes `scrambleFrames` (see "Scramble panel fix" below).
 - `R2-settle-comment-contradicts-constant`: the comment says 1.2 s but `SETTLE_END` is 1.4.
 - ~~`R2-snap-state-on-dataset`~~ resolved: the snap is gone (the reticle is the pointer plus an offset that starts at zero).
 - `R3-reticle-field-hide-test-vacuous`: the field-hide test passes without the check. Show the reticle first.
@@ -147,6 +147,16 @@ RED (before the fix): `stepFollow`, `shouldForwardClick` and the click-forwardin
 - ~~`R3-css-regex-test-cwd-dependent`~~: the stylesheet path is resolved from the test file (`import.meta.url`); the test passes from another cwd.
 
 RED before the fix: 24 failing tests (for example "isInteractive is not a function", "expected vi.fn() to be called 1 times, but got 0 times" for the sparkle listener, "expected 'on' to be null" for blur and visibility, and the missing `./parallax` module).
+
+## Scramble panel fix (2026-09-30)
+
+User report: the context panel resized and looked broken while decoding (symbols of different widths reflowed the text). Branch `fix/scramble-panel`.
+
+- Cause: the frames were written into the layout text itself (symbol glyphs, proportional widths), and the container also had an RGB-split/offset keyframe.
+- Fix: `glitch-text.ts` became `scramble-text.ts` (`scrambleFrame` / `scrambleFrames`, 40 ms step). Only letters and digits scramble, matching case; spaces, punctuation and accents stay. The final text is the hidden sizing layer (`.cp-final`); frames paint in an `aria-hidden`, clipped, absolutely positioned overlay (`.cp-overlay`). The RGB-split keyframe is replaced by a 240 ms opacity and 2px blur ease-in. Durations: hint 600 ms, description 800 ms. `aria-live` still speaks the final text only; reduced motion shows the text at once.
+- Evidence (Playwright, 1440x900, panel `getBoundingClientRect()` every 20 ms of a stepped clock): hint width 275.47/275.47 and height 44/44; description width 308.09/308.09 and height 69.39/69.39 (0 px variation). Screenshots `shots/scramble-hint.png` and `scramble-desc.png`.
+- Known trade-off: a mid-frame line that gets longer wraps inside the overlay and is clipped, so trailing words can briefly disappear until they resolve.
+- RED: `scramble-text` module missing (2 suites failed) and the two new component assertions (`.cp-final` and `.cp-overlay` undefined). GREEN: lint, typecheck, 359 tests and build pass.
 
 ## Next step
 

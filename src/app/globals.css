@@ -442,7 +442,7 @@
   }
 }
 
-/* Contextual panel: a glitching hint after a dwell, the description while Ctrl is held. */
+/* Contextual panel: a decoding hint after a dwell, the description while Ctrl is held. */
 .cp {
   position: fixed;
   right: 24px;
@@ -479,33 +479,34 @@
   line-height: 1.4;
   letter-spacing: 0;
 }
-.cp:not([data-phase="hidden"]) .cp-content {
-  animation: cp-glitch 320ms steps(8, end) both;
+/* The final text sizes the box; the scramble frames paint in a clipped overlay, so nothing reflows. */
+.cp-scramble {
+  position: relative;
+  display: block;
 }
-@keyframes cp-glitch {
-  0% {
-    transform: translateX(-4px);
-    text-shadow: -3px 0 #ff1f5a, 3px 0 #3ff2e0;
-    clip-path: inset(0 0 55% 0);
+.cp-final {
+  display: block;
+  visibility: hidden;
+}
+.cp-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: inherit;
+  word-break: inherit;
+  overflow-wrap: inherit;
+}
+.cp:not([data-phase="hidden"]) .cp-content {
+  animation: cp-in 240ms ease-out both;
+}
+@keyframes cp-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
   }
-  18% {
-    transform: translateX(3px);
-    text-shadow: 3px 0 #ff1f5a, -3px 0 #3ff2e0;
-    clip-path: inset(45% 0 0 0);
-  }
-  36% {
-    transform: translateX(-2px);
-    text-shadow: -2px 0 #ff1f5a, 2px 0 #3ff2e0;
-    clip-path: inset(0);
-  }
-  60% {
-    transform: translateX(1px);
-    text-shadow: 1px 0 #ff1f5a, -1px 0 #3ff2e0;
-  }
-  100% {
-    transform: none;
-    text-shadow: none;
-    clip-path: inset(0);
+  to {
+    opacity: 1;
+    filter: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

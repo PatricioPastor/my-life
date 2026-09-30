@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useReducer, useRef, useSyncExternalStore } from "react"
+import { useEffect, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from "react"
 import { contextReducer, initialContextState, nextDeadline } from "./context-machine"
-import { glitchFrame } from "./glitch-text"
+import { scrambleFrames } from "./scramble-text"
 import type { CursorTarget } from "./magnetic-cursor"
 
 export const HINT_TEXT = "Mantén Ctrl para saber más"
-const HINT_MS = 300
-const DECODE_MS = 480
-const FRAME_MS = 1000 / 30
+const HINT_MS = 600
+const DECODE_MS = 800
+const STEP_MS = 40
 // Timers can fire a hair early; this keeps a tick from landing just before its deadline.
 const TIMER_SLACK_MS = 4
 
@@ -20,40 +20,43 @@ function subscribeReduced(notify: () => void) {
 }
 const reducedSnapshot = () => typeof window.matchMedia === "function" && window.matchMedia(REDUCED).matches
 
-const seedOf = (text: string) => {
-  let h = 7
-  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0
-  return h
-}
-
-/** Decodes into `text` imperatively (no React state per frame); the final frame is always the exact text. */
-function GlitchText({ text, run, durationMs, reduced }: { text: string; run: boolean; durationMs: number; reduced: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  useEffect(() => {
-    const el = ref.current
+/**
+ * Decodes `text` with zero layout shift: the final text sizes the box (hidden, laid out), and the
+ * scramble frames are painted in an absolutely positioned, clipped overlay of the same box.
+ * Frames come from the pure `scrambleFrames`; the last one is always the exact text.
+ */
+function ScrambleText({ text, run, durationMs, reduced }: { text: string; run: boolean; durationMs: number; reduced: boolean }) {
+  const overlay = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const el = overlay.current
     if (!el) return
     if (!run || reduced) {
       el.textContent = text
       return
     }
-    const seed = seedOf(text)
+    const frames = scrambleFrames(text, { durationMs, stepMs: STEP_MS, seed: (Math.random() * 0x7fffffff) | 0 })
+    const last = frames.length - 1
     const start = performance.now()
     let raf = 0
-    let shown = -1
+    let shown = 0
+    el.textContent = frames[0]
     const step = (now: number) => {
-      const progress = (now - start) / durationMs
-      const tick = Math.floor((now - start) / FRAME_MS)
-      if (tick !== shown) {
-        shown = tick
-        el.textContent = glitchFrame(text, progress, seed, tick)
+      const i = Math.min(last, Math.floor((now - start) / STEP_MS))
+      if (i !== shown) {
+        shown = i
+        el.textContent = frames[i]
       }
-      if (progress < 1) raf = requestAnimationFrame(step)
+      if (i < last) raf = requestAnimationFrame(step)
     }
-    el.textContent = glitchFrame(text, 0, seed, 0)
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
   }, [text, run, durationMs, reduced])
-  return <span ref={ref} />
+  return (
+    <span className="cp-scramble">
+      <span className="cp-final">{text}</span>
+      <span ref={overlay} aria-hidden="true" className="cp-overlay" />
+    </span>
+  )
 }
 
 interface ContextPanelProps {
@@ -61,7 +64,7 @@ interface ContextPanelProps {
   target: CursorTarget | null
 }
 
-/** Bottom-right: a glitching hint after a dwell on a star, and its description while Ctrl is held. */
+/** Bottom-right: a decoding hint after a dwell on a star, and its description while Ctrl is held. */
 export function ContextPanel({ target }: ContextPanelProps) {
   const [state, dispatch] = useReducer(contextReducer, initialContextState)
   const reduced = useSyncExternalStore(subscribeReduced, reducedSnapshot, () => false)
@@ -119,12 +122,12 @@ export function ContextPanel({ target }: ContextPanelProps) {
               <>
                 <p className="cp-name">{t.label}</p>
                 <p className="cp-text">
-                  <GlitchText text={t.context ?? ""} run={visible} durationMs={DECODE_MS} reduced={reduced} />
+                  <ScrambleText text={t.context ?? ""} run={visible} durationMs={DECODE_MS} reduced={reduced} />
                 </p>
               </>
             ) : (
               <p className="cp-hint">
-                <GlitchText text={HINT_TEXT} run={visible} durationMs={HINT_MS} reduced={reduced} />
+                <ScrambleText text={HINT_TEXT} run={visible} durationMs={HINT_MS} reduced={reduced} />
               </p>
             )}
           </div>
