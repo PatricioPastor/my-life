@@ -71,7 +71,7 @@ export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
           <h2 id="ob-story-title" ref={titleRef} className="ob-title t-title">
             {story.meta.title}
           </h2>
-          <ReaderStage blocks={story.blocks} readables={reader.timeline.readables} state={reader.state} reduced={reduced} />
+          <ReaderStage blocks={story.blocks} readables={reader.timeline.readables} state={reader.state} reduced={reduced} onMeasure={reader.measure} />
         </div>
       </div>
       <div className="ob-foot" data-away={away} inert={away}>

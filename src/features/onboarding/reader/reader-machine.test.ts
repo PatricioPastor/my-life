@@ -180,3 +180,74 @@ describe("reader machine", () => {
     expect(readerStep(empty, s, { type: "next" })).toBe(s)
   })
 })
+
+describe("reader machine: panning inside a tall paragraph", () => {
+  // 2.3 reading areas tall: two pan steps (see panSteps).
+  const TALL = [2.3, 1]
+  const measured = (events: ReaderEvent[] = []) => run(PLAN, [{ type: "measure", ratios: TALL }, ...events])
+
+  it("takes the pan steps from the measured ratios", () => {
+    const s = measured()
+    expect(s.pan).toBe(0)
+    expect(readerStep(PLAN, s, { type: "measure", ratios: TALL })).toBe(s)
+  })
+
+  it("pans before it advances: next moves inside the paragraph first", () => {
+    let s = measured([tick(0), { type: "next" }])
+    expect(s.activeIndex).toBe(0)
+    expect(s.pan).toBe(1)
+    expect(s.painted[0]).toBe(1) // not completed: the visitor is still reading it
+    s = run(PLAN, [{ type: "next" }], s)
+    expect(s.activeIndex).toBe(0)
+    expect(s.pan).toBe(2)
+  })
+
+  it("advances only once the end is visible, completing the paragraph then", () => {
+    const s = measured([{ type: "next" }, { type: "next" }, { type: "next" }])
+    expect(s.activeIndex).toBe(1)
+    expect(s.pan).toBe(0)
+    expect(s.painted[0]).toBe(3)
+  })
+
+  it("prev pans back up first, then goes to the paragraph before, landing on its end", () => {
+    let s = measured([{ type: "next" }, { type: "next" }, { type: "next" }]) // now on paragraph 1
+    s = run(PLAN, [{ type: "prev" }], s)
+    expect(s.activeIndex).toBe(0)
+    expect(s.pan).toBe(2)
+    s = run(PLAN, [{ type: "prev" }, { type: "prev" }], s)
+    expect(s.activeIndex).toBe(0)
+    expect(s.pan).toBe(0)
+    s = run(PLAN, [{ type: "prev" }], s)
+    expect(s.activeIndex).toBe(0)
+  })
+
+  it("on the last paragraph, pans to the end before it finishes the story", () => {
+    let s = run(PLAN, [{ type: "measure", ratios: [1, 1.5] }, { type: "next" }]) // on paragraph 1 (one step)
+    s = run(PLAN, [{ type: "next" }], s)
+    expect(s.pan).toBe(1)
+    expect(canContinue(PLAN, s)).toBe(false)
+    s = run(PLAN, [{ type: "next" }], s)
+    expect(canContinue(PLAN, s)).toBe(true)
+  })
+
+  it("follows the painting down the paragraph without forcing the visitor back afterwards", () => {
+    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }], settleMs: 600 }
+    let s = run(plan, [{ type: "measure", ratios: [3] }, tick(0)])
+    expect(s.pan).toBe(0)
+    s = run(plan, [tick(1000)], s)
+    expect(s.pan).toBe(4)
+    s = run(plan, [{ type: "prev" }, tick(1100)], s)
+    expect(s.pan).toBe(3) // the visitor scrolled up to reread: a later tick does not drag them down again
+  })
+
+  it("clamps the pan when the paragraph gets shorter", () => {
+    const s = measured([{ type: "next" }, { type: "next" }])
+    expect(readerStep(PLAN, s, { type: "measure", ratios: [1, 1] }).pan).toBe(0)
+  })
+
+  it("has nothing to pan on a paragraph that fits", () => {
+    const s = run(PLAN, [tick(0), { type: "next" }])
+    expect(s.activeIndex).toBe(1)
+    expect(s.pan).toBe(0)
+  })
+})

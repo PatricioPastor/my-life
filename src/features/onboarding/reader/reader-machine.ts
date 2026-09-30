@@ -1,3 +1,5 @@
+import { autoPanStep, panSteps } from "./layout"
+
 /**
  * The focused-reading state machine. Pure: time is injected through `tick`, so nothing here knows about timers or the DOM.
  *
@@ -33,6 +35,12 @@ export interface ReaderState {
   mode: "auto" | "manual"
   /** Every word of the story is painted. */
   completed: boolean
+  /** Pan step inside the active paragraph, when it is taller than the reading area (0 is its start). */
+  pan: number
+  /** The last pan step the painting itself asked for, so the visitor's own panning is never undone. */
+  follow: number
+  /** How many reading areas tall each paragraph is at its focus scale (see layout.panRatios); 1 until measured. */
+  ratios: readonly number[]
 }
 
 export type ReaderEvent =
@@ -40,11 +48,13 @@ export type ReaderEvent =
   | { type: "goto"; index: number }
   | { type: "next" }
   | { type: "prev" }
+  | { type: "measure"; ratios: readonly number[] }
 
 /** A tick after a stall (a hidden tab, a throttled timer) advances the clock by at most this, so it never leaps ahead. */
 export const MAX_TICK_MS = 1000
 
 const wordCount = (plan: ReaderPlan, i: number): number => plan.paragraphs[i]!.wordStarts.length
+const stepsOf = (s: ReaderState, i: number): number => panSteps(s.ratios[i] ?? 1)
 const isRead = (plan: ReaderPlan, painted: readonly number[], i: number): boolean => painted[i]! >= wordCount(plan, i)
 
 function withCompleted(plan: ReaderPlan, s: ReaderState): ReaderState {
@@ -60,6 +70,9 @@ export function initReader(plan: ReaderPlan): ReaderState {
     lastNow: null,
     mode: plan.paragraphs.length > 0 && wordCount(plan, 0) > 0 ? "auto" : "manual",
     completed: false,
+    pan: 0,
+    follow: 0,
+    ratios: plan.paragraphs.map(() => 1),
   })
 }
 
@@ -93,13 +106,15 @@ function complete(plan: ReaderPlan, painted: readonly number[], i: number): read
   return next
 }
 
-function activate(plan: ReaderPlan, s: ReaderState, painted: readonly number[], index: number): ReaderState {
+function activate(plan: ReaderPlan, s: ReaderState, painted: readonly number[], index: number, pan = 0): ReaderState {
   return withCompleted(plan, {
     ...s,
     activeIndex: index,
     painted,
     clock: 0,
     lastNow: null,
+    pan,
+    follow: 0,
     mode: isRead(plan, painted, index) ? "manual" : "auto",
   })
 }
@@ -112,7 +127,8 @@ function goto(plan: ReaderPlan, s: ReaderState, requested: number): ReaderState 
   const from = s.activeIndex
   const to = index > from ? index - 1 : from
   for (let i = from; i <= to; i++) painted = complete(plan, painted, i)
-  return activate(plan, s, painted, index)
+  // Coming back to a paragraph lands on its end, where the visitor left it.
+  return activate(plan, s, painted, index, index < from ? stepsOf(s, index) : 0)
 }
 
 function tick(plan: ReaderPlan, s: ReaderState, now: number): ReaderState {
@@ -132,6 +148,9 @@ function tick(plan: ReaderPlan, s: ReaderState, now: number): ReaderState {
       painted[s.activeIndex] = n
       s = { ...s, painted }
     }
+    // Keep the word being painted in view: pan when it reaches the edge of the reading area.
+    const want = autoPanStep(s.ratios[s.activeIndex] ?? 1, s.painted[s.activeIndex]! / p.wordStarts.length)
+    if (want > s.follow) s = { ...s, follow: want, pan: Math.max(s.pan, want) }
     if (s.clock < p.endMs) break
     const last = s.activeIndex === plan.paragraphs.length - 1
     if (last) {
@@ -153,10 +172,18 @@ export function readerStep(plan: ReaderPlan, s: ReaderState, event: ReaderEvent)
       return tick(plan, s, event.now)
     case "goto":
       return goto(plan, s, event.index)
+    case "measure": {
+      if (event.ratios.length === s.ratios.length && event.ratios.every((r, i) => r === s.ratios[i])) return s
+      const next = { ...s, ratios: event.ratios }
+      return { ...next, pan: Math.min(s.pan, stepsOf(next, s.activeIndex)) }
+    }
     case "prev":
+      if (plan.paragraphs.length > 0 && s.pan > 0) return { ...s, pan: s.pan - 1 }
       return goto(plan, s, s.activeIndex - 1)
     case "next": {
       if (plan.paragraphs.length === 0) return s
+      // Pan down the paragraph first; only once its end is in view does the next gesture move on.
+      if (s.pan < stepsOf(s, s.activeIndex)) return { ...s, pan: s.pan + 1 }
       if (s.activeIndex < plan.paragraphs.length - 1) return goto(plan, s, s.activeIndex + 1)
       // On the last paragraph there is nowhere to go: finish painting it instead.
       const painted = complete(plan, s.painted, s.activeIndex)

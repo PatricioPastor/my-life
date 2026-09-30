@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { layoutStack, type LayoutParams, type StackBlock } from "./layout"
+import { autoPanStep, focusScaleFor, layoutStack, panRatios, panSteps, type LayoutParams, type StackBlock } from "./layout"
 
 const P: LayoutParams = { scale: 2, gap: 24, focusGap: 24, line: 300, top: 0, bottom: 1000 }
 const reading = (height: number, readable: number): StackBlock => ({ height, readable })
@@ -91,5 +91,71 @@ describe("layoutStack", () => {
   it("does not scale anything with a scale of one, for reduced motion", () => {
     const { scales } = layoutStack([reading(100, 0), reading(100, 1)], 0.5, { ...P, scale: 1 })
     expect(scales).toEqual([1, 1])
+  })
+})
+
+describe("fit scale", () => {
+  const room: LayoutParams = { ...P, top: 0, bottom: 600 }
+
+  it("keeps the full focus scale when the paragraph fits", () => {
+    expect(focusScaleFor(100, room)).toBe(2)
+  })
+
+  it("shrinks the focus scale so a tall paragraph still fits the reading area", () => {
+    expect(focusScaleFor(400, room)).toBeCloseTo(1.5)
+    expect(layoutStack([reading(400, 0)], 0, room).scales[0]).toBeCloseTo(1.5)
+  })
+
+  it("never goes below one, however tall the paragraph", () => {
+    expect(focusScaleFor(1000, room)).toBe(1)
+    expect(layoutStack([reading(1000, 0)], 0, room).scales[0]).toBe(1)
+  })
+
+  it("treats an unmeasured block as fitting", () => {
+    expect(focusScaleFor(0, room)).toBe(2)
+  })
+})
+
+describe("pan", () => {
+  const room: LayoutParams = { ...P, scale: 1, top: 0, bottom: 600, line: 300 }
+
+  it("needs no steps when it fits, and about 65% of the area per step otherwise", () => {
+    expect(panSteps(1)).toBe(0)
+    expect(panSteps(0.4)).toBe(0)
+    expect(panSteps(1.3)).toBe(1)
+    expect(panSteps(1.65)).toBe(1)
+    expect(panSteps(1.66)).toBe(2)
+    expect(panSteps(3)).toBe(4)
+  })
+
+  it("measures how many reading areas each readable paragraph takes at its focus scale", () => {
+    const blocks = [reading(1000, 0), still(40), reading(100, 1)]
+    const [a, b] = panRatios(blocks, { ...room, scale: 2 })
+    expect(a).toBeCloseTo(1000 / 600)
+    expect(b).toBeCloseTo(200 / 600)
+  })
+
+  it("slides the focused paragraph up by one step", () => {
+    const at0 = layoutStack([reading(1000, 0)], 0, room, [0])
+    const at1 = layoutStack([reading(1000, 0)], 0, room, [1])
+    expect(at0.tops[0]! + at0.y).toBe(0)
+    expect(at1.tops[0]! + at1.y).toBe(-390)
+  })
+
+  it("stops at the end of the paragraph, so its last line sits at the bottom of the area", () => {
+    const { tops, y } = layoutStack([reading(1000, 0)], 0, room, [2])
+    expect(tops[0]! + y).toBe(-400)
+  })
+
+  it("follows the painting: later words need later steps, and the end needs the last step", () => {
+    const r = 1000 / 600
+    expect(autoPanStep(r, 0.1)).toBe(0)
+    expect(autoPanStep(r, 1)).toBe(panSteps(r))
+    let last = 0
+    for (let f = 0; f <= 1; f += 0.05) {
+      const k = autoPanStep(r, f)
+      expect(k).toBeGreaterThanOrEqual(last)
+      last = k
+    }
   })
 })

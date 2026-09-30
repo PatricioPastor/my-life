@@ -27,6 +27,8 @@ export interface UseReader {
   next: () => void
   prev: () => void
   step: (direction: 1 | -1) => void
+  /** Report how many reading areas tall each paragraph is (for panning a tall one). */
+  measure: (ratios: readonly number[]) => void
 }
 
 const clock = () => performance.now()
@@ -44,7 +46,18 @@ export function useReader(blocks: readonly Block[], { startDelayMs = 0, now = cl
     }),
     [timeline],
   )
-  const [state, dispatch] = useReducer((s: ReaderState, e: ReaderEvent) => readerStep(plan, s, e), plan, initReader)
+  const [machine, dispatch] = useReducer(
+    (s: ReaderState, e: ReaderEvent | { type: "reset"; plan: ReaderPlan }) => (e.type === "reset" ? initReader(e.plan) : readerStep(plan, s, e)),
+    plan,
+    initReader,
+  )
+  // A different story is a different plan: start over rather than reading the old state against the new paragraphs.
+  const [seen, setSeen] = useState(plan)
+  if (seen !== plan) {
+    setSeen(plan)
+    dispatch({ type: "reset", plan })
+  }
+  const state = seen === plan ? machine : initReader(plan)
 
   // Reading starts once the story has settled on screen.
   const [started, setStarted] = useState(startDelayMs <= 0)
@@ -64,7 +77,8 @@ export function useReader(blocks: readonly Block[], { startDelayMs = 0, now = cl
 
   const next = useCallback(() => dispatch({ type: "next" }), [])
   const prev = useCallback(() => dispatch({ type: "prev" }), [])
+  const measure = useCallback((ratios: readonly number[]) => dispatch({ type: "measure", ratios }), [])
   const step = useCallback((direction: 1 | -1) => dispatch({ type: direction === 1 ? "next" : "prev" }), [])
 
-  return { timeline, plan, state, progress: readerProgress(plan, state), canContinue: canContinueOf(plan, state), next, prev, step }
+  return { timeline, plan, state, progress: readerProgress(plan, state), canContinue: canContinueOf(plan, state), next, prev, step, measure }
 }

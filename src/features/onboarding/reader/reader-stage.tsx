@@ -12,13 +12,15 @@ interface ReaderStageProps {
   readables: readonly number[]
   state: ReaderState
   reduced: boolean
+  /** Reports how many reading areas tall each paragraph is, so the machine knows when one needs panning. */
+  onMeasure: (ratios: readonly number[]) => void
 }
 
 /**
  * The stack of blocks. Every block is laid out small and scaled up when it takes the focus, so the line breaks never move;
  * `useStackMotion` slides the stack on a spring so the focused block lands on the reading line.
  */
-export function ReaderStage({ blocks, readables, state, reduced }: ReaderStageProps) {
+export function ReaderStage({ blocks, readables, state, reduced, onMeasure }: ReaderStageProps) {
   const stageRef = useRef<HTMLDivElement>(null)
   const stackRef = useRef<HTMLDivElement>(null)
   const els = useRef<(HTMLElement | null)[]>([])
@@ -33,7 +35,7 @@ export function ReaderStage({ blocks, readables, state, reduced }: ReaderStagePr
       }),
     [blocks],
   )
-  useStackMotion({ stage: stageRef, stack: stackRef, blocks: els, readable, target: state.activeIndex, reduced })
+  useStackMotion({ stage: stageRef, stack: stackRef, blocks: els, readable, target: state.activeIndex, pan: state.pan, reduced, onMeasure })
 
   const scale = reduced ? 1 : FOCUS_SCALE
   return (

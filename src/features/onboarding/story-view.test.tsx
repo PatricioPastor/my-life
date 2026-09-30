@@ -123,6 +123,31 @@ describe("StoryView reading", () => {
     expect(active()).toBe(2)
   })
 
+  it("ignores a held key: a repeated keydown moves nothing", async () => {
+    mount()
+    await advance(READ_START_MS)
+    fireEvent.keyDown(document, { key: "ArrowDown", repeat: true })
+    expect(active()).toBe(0)
+    fireEvent.keyDown(document, { key: "ArrowDown" })
+    expect(active()).toBe(2)
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(document, { key: "ArrowDown", repeat: true })
+    expect(bar().getAttribute("aria-valuenow")).not.toBe("100")
+    expect(continueBtn().hasAttribute("inert")).toBe(true)
+  })
+
+  it("starts over when the story changes", async () => {
+    const view = mount()
+    await advance(READ_START_MS + 300)
+    fireEvent.keyDown(document, { key: "ArrowDown" })
+    expect(active()).toBe(2)
+    const other: Story = { ...STORY, blocks: [{ type: "paragraph", runs: [{ kind: "text", text: "Otra historia distinta." }] }] }
+    view.rerender(<StoryView story={other} from={null} away={false} onContinue={() => {}} />)
+    expect(blocks().map((b) => b.textContent)).toEqual(["Otra historia distinta."])
+    expect(active()).toBe(0)
+    expect(painted(blocks()[0]!)).toBe(0)
+    expect(bar().getAttribute("aria-valuenow")).toBe("0")
+  })
+
   it("leaves keys alone when they belong to a button", async () => {
     mount()
     await advance(READ_START_MS)

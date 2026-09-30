@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
-import { layoutStack, type LayoutParams, type StackBlock } from "./layout"
+import { layoutStack, panRatios, type LayoutParams, type StackBlock } from "./layout"
 import { isSettled, settleProfile, stepSettle, type SettleState } from "./settle"
 
 /** How much the focused paragraph grows: two steps of the 1.25 type scale, so 18 px body reads at 28 px. */
@@ -27,7 +27,10 @@ interface Options {
   readable: readonly number[]
   /** The readable paragraph that has the focus. */
   target: number
+  /** Pan step inside the focused paragraph. */
+  pan: number
   reduced: boolean
+  onMeasure: (ratios: readonly number[]) => void
 }
 
 /**
@@ -35,9 +38,16 @@ interface Options {
  * near the focus. Nothing here goes through React state, and nothing reads layout while it animates: the block heights are
  * measured once (and again when the stage, a block or the font changes).
  */
-export function useStackMotion({ stage, stack, blocks, readable, target, reduced }: Options) {
+export function useStackMotion({ stage, stack, blocks, readable, target, pan, reduced, onMeasure }: Options) {
   const spring = useRef<SettleState>({ x: target, v: 0 })
   const targetRef = useRef(target)
+  // One spring per paragraph for its pan (only the focused one ever moves), on the same profile as the focus spring.
+  const pans = useRef<SettleState[]>([])
+  const panTargets = useRef<number[]>([])
+  const onMeasureRef = useRef(onMeasure)
+  useEffect(() => {
+    onMeasureRef.current = onMeasure
+  })
   const raf = useRef(0)
   const apply = useRef<(f: number) => void>(() => {})
   const measure = useRef<() => void>(() => {})
@@ -55,7 +65,12 @@ export function useStackMotion({ stage, stack, blocks, readable, target, reduced
 
     const write = (f: number) => {
       const els = blocks.current
-      const layout = layoutStack(stackBlocks, f, params)
+      const layout = layoutStack(
+        stackBlocks,
+        f,
+        params,
+        pans.current.map((s) => s.x),
+      )
       const y = `translate3d(0, ${layout.y.toFixed(2)}px, 0)`
       if (y !== lastStack) {
         stackEl.style.transform = y
@@ -83,6 +98,7 @@ export function useStackMotion({ stage, stack, blocks, readable, target, reduced
       // The reading line is a share of the viewport, measured from the top of the stage.
       const viewport = stageEl.closest<HTMLElement>(".ob")?.clientHeight || window.innerHeight
       params = { ...params, scale, line: viewport * READING_LINE - rect.top, bottom: stageEl.clientHeight - EDGE_BOTTOM_PX }
+      onMeasureRef.current(panRatios(stackBlocks, params))
     }
 
     apply.current = write
@@ -110,6 +126,8 @@ export function useStackMotion({ stage, stack, blocks, readable, target, reduced
   // Spring toward the focused paragraph.
   useEffect(() => {
     targetRef.current = target
+    panTargets.current[target] = pan
+    if (!pans.current[target]) pans.current[target] = { x: pan, v: 0 }
     const profile = settleProfile(reduced)
     cancelAnimationFrame(raf.current)
     let prev = performance.now()
@@ -117,15 +135,19 @@ export function useStackMotion({ stage, stack, blocks, readable, target, reduced
       const dt = Math.min(0.05, Math.max(0, (t - prev) / 1000))
       prev = t
       spring.current = stepSettle(spring.current, targetRef.current, dt, profile)
-      if (isSettled(spring.current, targetRef.current)) {
-        spring.current = { x: targetRef.current, v: 0 }
-        apply.current(spring.current.x)
-        return
-      }
+      let moving = !isSettled(spring.current, targetRef.current)
+      if (!moving) spring.current = { x: targetRef.current, v: 0 }
+      pans.current = pans.current.map((s, i) => {
+        const goal = panTargets.current[i] ?? 0
+        const next = stepSettle(s, goal, dt, profile)
+        if (isSettled(next, goal)) return { x: goal, v: 0 }
+        moving = true
+        return next
+      })
       apply.current(spring.current.x)
-      raf.current = requestAnimationFrame(frame)
+      if (moving) raf.current = requestAnimationFrame(frame)
     }
     raf.current = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf.current)
-  }, [target, reduced])
+  }, [target, pan, reduced])
 }

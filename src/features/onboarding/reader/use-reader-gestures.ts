@@ -54,7 +54,8 @@ export function useReaderGestures(surface: RefObject<HTMLElement | null>, onStep
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      // A held key repeats: one press is one step, like one wheel gesture.
+      if (e.repeat || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.target instanceof Element && e.target.closest(OWN_KEYS)) return
       const direction = NEXT_KEYS.has(e.key) ? 1 : PREV_KEYS.has(e.key) ? -1 : 0
       if (direction === 0) return
