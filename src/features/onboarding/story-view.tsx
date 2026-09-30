@@ -7,13 +7,15 @@ import { STORY_PARAGRAPHS, STORY_TITLE } from "./story"
 interface StoryViewProps {
   /** Where the CTA was when it was pressed: the title flies in from there. */
   from: DOMRect | null
+  /** The column steps aside (the grain stays) while the next step is on stage. */
+  away: boolean
   onContinue: () => void
 }
 
 const MORPH_MS = 700
 const MORPH_EASE = "cubic-bezier(0.16, 1, 0.3, 1)"
 
-export function StoryView({ from, onContinue }: StoryViewProps) {
+export function StoryView({ from, away, onContinue }: StoryViewProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
 
   // FLIP: the title is laid out in its final place, then animated from the CTA's rect (centre and width).
@@ -41,7 +43,7 @@ export function StoryView({ from, onContinue }: StoryViewProps) {
     <section className="ob-story" aria-labelledby="ob-story-title">
       <div className="ob-vignette" aria-hidden="true" />
       <FilmGrain />
-      <div className="ob-scroll">
+      <div className="ob-scroll" data-away={away} inert={away}>
         <div className="ob-col font-gambarino">
           <h2 id="ob-story-title" ref={titleRef} className="ob-title">
             {STORY_TITLE}
@@ -56,7 +58,7 @@ export function StoryView({ from, onContinue }: StoryViewProps) {
           <button
             type="button"
             className="ob-continue press"
-            data-magnetic="light"
+            data-magnetic={away ? undefined : "light"}
             data-cursor-label="Continuar"
             onClick={onContinue}
           >

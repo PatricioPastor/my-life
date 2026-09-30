@@ -10,6 +10,9 @@ export interface EventProps {
   gate_granted: Record<never, never>
   gate_denied: Record<never, never>
   access_requested: Record<never, never>
+  onboarding_completed: Record<never, never>
+  onboarding_skipped: Record<never, never>
+  hw_accel_suggested: Record<never, never>
   facet_opened: { facet: FacetId }
   entry_opened: { facet: FacetId; index: number }
 }
@@ -26,6 +29,9 @@ const ALLOWED: Record<EventName, Record<string, Accepts>> = {
   gate_granted: {},
   gate_denied: {},
   access_requested: {},
+  onboarding_completed: {},
+  onboarding_skipped: {},
+  hw_accel_suggested: {},
   facet_opened: { facet: isFacet },
   entry_opened: { facet: isFacet, index: isIndex },
 }

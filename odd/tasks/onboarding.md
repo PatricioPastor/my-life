@@ -65,7 +65,7 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 
 - [x] **T1 — Sequence and font.** Greeting and phrases machine, CTA, skip and remember, Gambarino through Fontshare, `.gitignore` for `resources/`.
 - [x] **T2 — Story view.** Grain background, CTA→title morph, Gambarino body.
-- [ ] **T3 — Lazy loading, WebGL warm-up and hardware check.** Dynamic imports, offscreen compile, GPU classification with the suggestion, handoff to the gate.
+- [x] **T3 — Lazy loading, WebGL warm-up and hardware check.** Dynamic imports, offscreen compile, GPU classification with the suggestion, handoff to the gate.
 - [ ] **T4 — Deliver.** RDD per policy; push after the user approves.
 
 ## Acceptance criteria
@@ -80,7 +80,8 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 - 2026-09-30: Document created. The user chose the Fontshare API for Gambarino.
 - 2026-09-30: T1 done. Greeting, machine, storage and layer with tests; Gambarino via `https://api.fontshare.com/v2/css?f[]=gambarino@400&display=swap` (verified with curl: serves woff2 from cdn.fontshare.com); `/resources/` gitignored. Route: delegated writer (2+ non-trivial files).
 - 2026-09-30: T2 done. Story view with 160x90 grain at 12 fps (paused when hidden, static on reduced motion), FLIP title morph via Web Animations, Gambarino lorem body. Hardware phase temporarily has a plain Entrar stub until T3.
+- 2026-09-30: T3 done. Journey chunk lazy via next/dynamic (fetched on idle at mount, mounted at the hardware step so the gate is ready before Entrar); offscreen sky warm-up on idle during the story; GPU classification + browser steps; onboarding_completed/onboarding_skipped/hw_accel_suggested. Fixed: HeadlessChrome UA misread as Safari; `--font-gambarino` theme token; ghost magnet on the hidden story button.
 
 ## Next step
 
-The writer runs T1–T3.
+T4: deliver (RDD per policy; push after the user approves).

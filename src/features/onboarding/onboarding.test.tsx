@@ -1,9 +1,16 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+const track = vi.fn()
+vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
+vi.mock("@/features/sky/warm-up", () => ({ warmUpSky: () => ({ webgl2: true, renderer: "Apple M2", compiled: true }) }))
+
 import { Onboarding } from "./onboarding"
 import { initialOnboarding, type OnboardingState } from "./onboarding-machine"
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  track.mockReset()
+})
 
 const at = (phase: OnboardingState["phase"]): OnboardingState => ({ ...initialOnboarding, phase, greeting: "buenanochee" })
 
@@ -28,5 +35,20 @@ describe("Onboarding", () => {
     render(<Onboarding state={at("life")} dispatch={dispatch} />)
     fireEvent.click(screen.getByRole("button", { name: "Saltar" }))
     expect(dispatch).toHaveBeenCalledWith({ type: "skip" })
+  })
+
+  it("tracks skipping without any payload", () => {
+    render(<Onboarding state={at("life")} dispatch={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Saltar" }))
+    expect(track.mock.calls).toEqual([["onboarding_skipped"]])
+  })
+
+  it("confirms hardware acceleration and enters the gate", () => {
+    const dispatch = vi.fn()
+    render(<Onboarding state={at("hardware")} dispatch={dispatch} />)
+    expect(screen.getByText("Tu navegador ya usa aceleración por hardware.")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
+    expect(dispatch).toHaveBeenCalledWith({ type: "enter" })
+    expect(track.mock.calls).toEqual([["onboarding_completed"]])
   })
 })

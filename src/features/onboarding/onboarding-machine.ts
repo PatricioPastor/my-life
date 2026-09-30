@@ -66,3 +66,8 @@ export function dueIn(state: OnboardingState, now: number): number | null {
   if (!isTimed(state)) return null
   return Math.max(0, state.enteredAt + HOLD_MS - now)
 }
+
+/** The heavy journey (sky, tunnel) is mounted early enough to be ready when the layer leaves, but not while text animates. */
+export function journeyWanted(state: OnboardingState): boolean {
+  return state.phase === "hardware" || state.phase === "done" || (state.returning && state.phase !== "idle")
+}

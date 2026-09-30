@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { HOLD_MS, dueIn, initialOnboarding, onboardingReducer, type OnboardingState } from "./onboarding-machine"
+import { HOLD_MS, dueIn, initialOnboarding, journeyWanted, onboardingReducer, type OnboardingState } from "./onboarding-machine"
 
 const start = (returning = false, now = 0): OnboardingState =>
   onboardingReducer(initialOnboarding, { type: "start", now, returning, greeting: "buenoniaa" })
@@ -75,5 +75,18 @@ describe("onboarding machine", () => {
     expect(dueIn(s, 5000)).toBe(0)
     expect(dueIn({ ...s, phase: "cta" }, 500)).toBeNull()
     expect(dueIn(initialOnboarding, 0)).toBeNull()
+  })
+})
+
+describe("journeyWanted", () => {
+  it("keeps the journey out of the way until the last step, or a returning visit", () => {
+    const s = start()
+    expect(journeyWanted(initialOnboarding)).toBe(false)
+    for (const phase of ["greeting", "life", "different", "cta", "story"] as const) {
+      expect(journeyWanted({ ...s, phase })).toBe(false)
+    }
+    expect(journeyWanted({ ...s, phase: "hardware" })).toBe(true)
+    expect(journeyWanted({ ...s, phase: "done" })).toBe(true)
+    expect(journeyWanted(start(true))).toBe(true)
   })
 })

@@ -3,6 +3,8 @@
 import { useRef, useState, type ActionDispatch } from "react"
 import { MagneticCursor } from "@/features/cursor"
 import { STORY_TITLE as CTA_LABEL } from "./story"
+import { track } from "@/shared/analytics"
+import { HardwareStep } from "./hardware-step"
 import { StoryView } from "./story-view"
 import type { OnboardingEvent, OnboardingPhase, OnboardingState } from "./onboarding-machine"
 
@@ -69,13 +71,16 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
       </div>
 
       {(phase === "story" || phase === "hardware") && (
-        <StoryView from={ctaRect} onContinue={() => dispatch({ type: "continue" })} />
+        <StoryView from={ctaRect} away={phase === "hardware"} onContinue={() => dispatch({ type: "continue" })} />
       )}
 
       {phase === "hardware" && (
-        <button type="button" className="ob-continue press" onClick={() => dispatch({ type: "enter" })}>
-          Entrar
-        </button>
+        <HardwareStep
+          onEnter={() => {
+            track("onboarding_completed")
+            dispatch({ type: "enter" })
+          }}
+        />
       )}
 
       {phase !== "idle" && !leaving && (
@@ -84,7 +89,10 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
           className="ob-skip press"
           data-magnetic="light"
           data-cursor-label="Saltar"
-          onClick={() => dispatch({ type: "skip" })}
+          onClick={() => {
+            track("onboarding_skipped")
+            dispatch({ type: "skip" })
+          }}
         >
           Saltar
         </button>
