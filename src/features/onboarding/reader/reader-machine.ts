@@ -175,7 +175,9 @@ export function readerStep(plan: ReaderPlan, s: ReaderState, event: ReaderEvent)
     case "measure": {
       if (event.ratios.length === s.ratios.length && event.ratios.every((r, i) => r === s.ratios[i])) return s
       const next = { ...s, ratios: event.ratios }
-      return { ...next, pan: Math.min(s.pan, stepsOf(next, s.activeIndex)) }
+      // The painting's own pan request is clamped with the pan, so it asks again once the paragraph grows back.
+      const steps = stepsOf(next, s.activeIndex)
+      return { ...next, pan: Math.min(s.pan, steps), follow: Math.min(s.follow, steps) }
     }
     case "prev":
       if (plan.paragraphs.length > 0 && s.pan > 0) return { ...s, pan: s.pan - 1 }

@@ -245,6 +245,17 @@ describe("reader machine: panning inside a tall paragraph", () => {
     expect(readerStep(PLAN, s, { type: "measure", ratios: [1, 1] }).pan).toBe(0)
   })
 
+  it("resumes following the painting after a shrink then a grow", () => {
+    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }], settleMs: 600 }
+    let s = run(plan, [{ type: "measure", ratios: [3] }, tick(0), tick(1000)])
+    expect(s.pan).toBe(4)
+    s = run(plan, [{ type: "measure", ratios: [1] }], s)
+    expect(s.pan).toBe(0)
+    expect(s.follow).toBe(0)
+    s = run(plan, [{ type: "measure", ratios: [3] }, tick(1100)], s)
+    expect(s.pan).toBe(4)
+  })
+
   it("has nothing to pan on a paragraph that fits", () => {
     const s = run(PLAN, [tick(0), { type: "next" }])
     expect(s.activeIndex).toBe(1)

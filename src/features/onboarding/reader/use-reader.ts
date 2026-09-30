@@ -52,12 +52,14 @@ export function useReader(blocks: readonly Block[], { startDelayMs = 0, now = cl
     initReader,
   )
   // A different story is a different plan: start over rather than reading the old state against the new paragraphs.
-  const [seen, setSeen] = useState(plan)
-  if (seen !== plan) {
-    setSeen(plan)
+  // The key is the content, not the identity of the array: a rerender that rebuilds equal blocks keeps the reader where it was.
+  const signature = useMemo(() => JSON.stringify(blocks), [blocks])
+  const [seen, setSeen] = useState(signature)
+  if (seen !== signature) {
+    setSeen(signature)
     dispatch({ type: "reset", plan })
   }
-  const state = seen === plan ? machine : initReader(plan)
+  const state = seen === signature ? machine : initReader(plan)
 
   // Reading starts once the story has settled on screen.
   const [started, setStarted] = useState(startDelayMs <= 0)
