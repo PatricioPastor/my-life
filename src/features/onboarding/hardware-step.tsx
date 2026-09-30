@@ -59,15 +59,17 @@ export function HardwareStep({ onEnter }: HardwareStepProps) {
           Tu navegador ya usa aceleración por hardware.
         </p>
       )}
-      <button
-        type="button"
-        className="ob-continue press"
-        data-magnetic="light"
-        data-cursor-label="Entrar"
-        onClick={onEnter}
-      >
-        Entrar
-      </button>
+      <div className="ob-foot">
+        <button
+          type="button"
+          className="ob-continue t-label press"
+          data-magnetic="light"
+          data-cursor-label="Entrar"
+          onClick={onEnter}
+        >
+          Entrar
+        </button>
+      </div>
     </div>
   )
 }
