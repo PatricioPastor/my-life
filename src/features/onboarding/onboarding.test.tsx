@@ -6,6 +6,13 @@ const probe = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 vi.mock("@/features/sky/warm-up", () => ({ warmUpSky: (...a: unknown[]) => warmUp(...a) }))
 vi.mock("./gpu-probe", () => ({ probeRenderer: () => probe() }))
+// The idle hand-off is a real 200 ms timer in jsdom; under CPU load it outlived findBy's 1 s default. Run it inline instead.
+vi.mock("./idle", () => ({
+  whenIdle: (task: () => void) => {
+    task()
+    return () => {}
+  },
+}))
 
 import { Onboarding } from "./onboarding"
 import { initialOnboarding, type OnboardingState } from "./onboarding-machine"
