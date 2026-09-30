@@ -69,6 +69,25 @@ Move the landing from the crimson preset to the user's palette. Every star is dr
 - 2026-09-30: T1 done. RED (12 failing tests) then GREEN (132 tests), typecheck clean. Palette module, periwinkle default preset, exact index-picked star tints, facet colors, theme vars.
 - 2026-09-30: T2 done. ring-colors and tunnel-math pure modules tested RED then GREEN; renderer draws per-ring palette colors at two levels, glow from the next ring, seed per mount. The tunnel no longer reads sky params (fixed ring palette).
 
+## Verification evidence
+
+- Writer: `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` passed 149/149 across 21 files; `pnpm build` passed.
+- Parent spot check: `pnpm test` passed 149/149; `pnpm typecheck` passed.
+- Not observed in a real browser yet. The glow color changes abruptly when a ring is born; there is no crossfade.
+- RDD slice `7343707..477058f` (DM request, mobile sizing, overscroll, palette, portal):
+  - Assessed medium, `slice_budget_reached`, 821 lines.
+  - Consent granted by the user.
+  - `review-reliability` → **approved**.
+  - Acknowledged; authority burned (lineage `review-a571dc24871f3b47`).
+  - Reviewed boundary is now `477058f`.
+
+## Review follow-ups (advisory, not accepted yet)
+
+- `R3-ring-cap-throws-in-draw-loop`: `phase` grows forever. After roughly 500 hours of an open gate tab, the ring index passes `MAX_RING` and `RangeError` freezes the tunnel; the memo also grows with phase. Fix: wrap the index modulo a period, or clamp instead of throwing in the render path.
+- `R3-per-ring-grouping-untested`: the renderer's group encoding (`palette*2 + level`), the `FULL_FROM` threshold and the glow mapping are untested.
+- `R3-rerequest-path-untested`: the `requested → requested` re-copy transition has no test.
+- `R3-navigator-stub-leak-on-failure`: `journey.test.tsx` removes its navigator stub in the test body instead of `afterEach`.
+
 ## Next step
 
-The writer runs T1 + T2.
+Fast-forward `main` and push once the user approves.
