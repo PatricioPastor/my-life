@@ -75,7 +75,7 @@ The cursor becomes part of the universe:
 
 - [x] **T0 — Hardening.** The four accepted follow-ups.
 - [x] **T1 — Cursor, magnetism and tooltip.** Plus label flipping on mobile.
-- [ ] **T2 — Contextual panel.** Dwell hint with glitch, Ctrl expands to the description, accessibility.
+- [x] **T2 — Contextual panel.** Dwell hint with glitch, Ctrl expands to the description, accessibility.
 - [ ] **T3 — Star focus.** Nebula dim and the entropic reveal in the shader. Screenshots.
 - [ ] **T4 — Deliver.** RDD per policy, then fast-forward `main` and push (pre-authorized).
 
@@ -92,6 +92,7 @@ The cursor becomes part of the universe:
 - 2026-09-30: Document created.
 - 2026-09-30: T0 done (delegated writer). RED: 4 failing site-url tests (bare host, garbage, https-prefixed Vercel host, always-parses); GREEN: 220 passing. `security.txt` uses `revalidate = 86400`; contact derives from `OWNER_HANDLE` (moved to `shared/site/owner.ts`, re-exported by access-request); `gate_submitted` fires in the submit handler (guard test added; it already passed under the old effect, so it is a regression guard, not a RED).
 - 2026-09-30: T1 done (delegated writer; route recorded: one writer for 2+ non-trivial files). RED: magnet.test.ts and label-side.test.ts failed on missing modules; GREEN: 220 -> 252 tests. Pure `magnet.ts` (pull/capture/hysteresis, exact spring, tooltip placement), `magnetic-cursor.tsx` (rAF + style.transform, fine pointers only), targets marked, facet labels flip left near the right edge.
+- 2026-09-30: T2 done (delegated writer). RED: context-machine, glitch-text and the facet description assertions failed before implementation; GREEN: 278 + 4 facet-stars tests. Reducer hidden -> hint (500 ms dwell) -> expanded (Ctrl/Meta) with blur reset; seeded glitch decode; panel is an aria-live region with a decoding visual layer. Descriptions are editable placeholders wired to `aria-describedby`.
 
 ## Next step
 

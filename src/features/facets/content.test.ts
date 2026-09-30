@@ -12,6 +12,15 @@ describe("facets content", () => {
     ])
   })
 
+  it("describes every facet in a short Spanish sentence", () => {
+    expect(FACETS.map((f) => f.description)).toEqual([
+      "Relatos de mi vida, en primera persona.",
+      "Ideas, notas y ensayos.",
+      "Cosas que construí y estoy construyendo.",
+      "En qué estoy enfocado hoy.",
+    ])
+  })
+
   it("gives every facet three placeholder entries", () => {
     for (const f of FACETS) expect(f.entries).toHaveLength(3)
     expect(FACETS[2].entries[0]).toEqual({ meta: "[Rol, año]", title: "[Nombre del proyecto]" })

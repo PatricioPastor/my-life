@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, findFacet } from "@/features/facets"
 import { checkHandle } from "@/features/gate/actions"
-import { MagneticCursor } from "@/features/cursor"
+import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
 import { GateScreen, gateReducer, initialGateState } from "@/features/gate"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
@@ -38,6 +38,7 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   const skyRef = useRef<HalftoneSkyHandle>(null)
   const layerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLElement>(null)
+  const [cursorTarget, setCursorTarget] = useState<CursorTarget | null>(null)
 
   const params = useMemo(() => resolveSkyParams(preset), [preset])
   const { screen } = journey
@@ -191,7 +192,8 @@ export function Journey({ preset = "ember" }: JourneyProps) {
           />
         </div>
       )}
-      <MagneticCursor stageRef={stageRef} />
+      <MagneticCursor stageRef={stageRef} onCapture={setCursorTarget} />
+      <ContextPanel target={cursorTarget} />
     </main>
   )
 }

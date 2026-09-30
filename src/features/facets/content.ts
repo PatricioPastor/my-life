@@ -9,6 +9,8 @@ export interface FacetEntry {
 export interface Facet {
   id: FacetId
   name: string
+  /** Editable placeholder: the sentence the cursor panel reveals with Ctrl, and what assistive tech reads. */
+  description: string
   /** Star position as 0..1 stage fractions, y up (the sky's convention). */
   x: number
   y: number
@@ -20,7 +22,7 @@ export interface Facet {
 // Placeholder copy from the design canvas; real content comes later.
 export const FACETS: readonly Facet[] = [
   {
-    id: "stories", name: "Historias", x: 0.21, y: 0.68, color: "gold",
+    id: "stories", name: "Historias", description: "Relatos de mi vida, en primera persona.", x: 0.21, y: 0.68, color: "gold",
     entries: [
       { meta: "[Año]", title: "[Título de la historia]" },
       { meta: "[Año]", title: "[Título de la historia]" },
@@ -28,7 +30,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "writing", name: "Escritos", x: 0.57, y: 0.79, color: "clay",
+    id: "writing", name: "Escritos", description: "Ideas, notas y ensayos.", x: 0.57, y: 0.79, color: "clay",
     entries: [
       { meta: "[Fecha]", title: "[Título del escrito]" },
       { meta: "[Fecha]", title: "[Título del escrito]" },
@@ -36,7 +38,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "projects", name: "Proyectos", x: 0.75, y: 0.45, color: "sandy",
+    id: "projects", name: "Proyectos", description: "Cosas que construí y estoy construyendo.", x: 0.75, y: 0.45, color: "sandy",
     entries: [
       { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
       { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
@@ -44,7 +46,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "now", name: "Ahora", x: 0.39, y: 0.29, color: "bronze",
+    id: "now", name: "Ahora", description: "En qué estoy enfocado hoy.", x: 0.39, y: 0.29, color: "bronze",
     entries: [
       { meta: "[Mes]", title: "[Foco actual]" },
       { meta: "[Mes]", title: "[Próximo compromiso]" },
