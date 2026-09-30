@@ -3,6 +3,7 @@ import {
   MAGNET,
   bendAmount,
   distanceToRect,
+  isInteractive,
   placeTooltip,
   resolveMagnet,
   shouldForwardClick,
@@ -218,8 +219,51 @@ describe("stepFollow", () => {
   })
 })
 
+describe("isInteractive", () => {
+  const stage = document.createElement("main")
+  const mk = (html: string) => {
+    stage.innerHTML = html
+    return stage.querySelector<HTMLElement>("#t")!
+  }
+  it.each([
+    ['<a id="t" href="/x">x</a>', "link"],
+    ['<button id="t">x</button>', "button"],
+    ['<input id="t">', "input"],
+    ['<textarea id="t"></textarea>', "textarea"],
+    ['<select id="t"></select>', "select"],
+    ['<label id="t">x</label>', "label"],
+    ['<div id="t" role="button">x</div>', "role=button"],
+    ['<div id="t" contenteditable="true">x</div>', "contenteditable"],
+    ['<div id="t" tabindex="0">x</div>', "tabindex 0"],
+  ])("treats %s (%s) as interactive", (html) => {
+    expect(isInteractive(mk(html), stage)).toBe(true)
+  })
+  it("treats a descendant of an interactive element as interactive", () => {
+    expect(isInteractive(mk('<button><span id="t">x</span></button>'), stage)).toBe(true)
+  })
+  it.each([
+    ['<div id="t">x</div>'],
+    ['<a id="t">no href</a>'],
+    ['<div id="t" tabindex="-1">x</div>'],
+    ['<div id="t" contenteditable="false">x</div>'],
+  ])("treats %s as plain space", (html) => {
+    expect(isInteractive(mk(html), stage)).toBe(false)
+  })
+  it("ignores interactive ancestors outside the stage", () => {
+    const outer = document.createElement("button")
+    const inner = document.createElement("main")
+    const t = document.createElement("div")
+    inner.append(t)
+    outer.append(inner)
+    expect(isInteractive(t, inner)).toBe(false)
+  })
+})
+
 describe("shouldForwardClick", () => {
-  const base = { capturedId: "a", insideCaptured: false, detail: 1 }
+  const base = { capturedId: "a", insideCaptured: false, detail: 1, onInteractive: false }
+  it("never swallows a click on another interactive control", () => {
+    expect(shouldForwardClick({ ...base, onInteractive: true })).toBe(false)
+  })
   it("forwards a pointer click that landed outside the captured element", () => {
     expect(shouldForwardClick(base)).toBe(true)
   })
@@ -254,5 +298,19 @@ describe("placeTooltip", () => {
     const p = placeTooltip({ cx: 500, top: 10, bottom: 50 }, tip, viewport)
     expect(p.below).toBe(true)
     expect(p.y).toBeGreaterThan(50)
+  })
+})
+
+describe("release hysteresis (no recapture while a star eases back)", () => {
+  const s = star("a", 200, 200)
+  const at = (gap: number) => ({ x: 200 + 24 + gap, y: 200 })
+  it("holds a capture out to capture + release, then lets go", () => {
+    expect(resolveMagnet(at(30), [s], "a").captured).toBe(true)
+    expect(resolveMagnet(at(33), [s], "a").captured).toBe(false)
+  })
+  it("does not recapture a released star until it is back inside the capture radius", () => {
+    expect(resolveMagnet(at(30), [s], null).captured).toBe(false)
+    expect(resolveMagnet(at(25), [s], null).captured).toBe(false)
+    expect(resolveMagnet(at(22), [s], null).captured).toBe(true)
   })
 })

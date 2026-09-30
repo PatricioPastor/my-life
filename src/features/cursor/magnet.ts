@@ -150,13 +150,30 @@ export function stepFollow(
   return { follow: { ox, oy }, position: { x: pointer.x + ox.x, y: pointer.y + oy.x } }
 }
 
+const INTERACTIVE =
+  "a[href],button,input,textarea,select,label,summary,[role='button'],[contenteditable]:not([contenteditable='false']),[tabindex]:not([tabindex='-1'])"
+
+/** True when `target`, or an ancestor inside `stage`, is a control the user can act on themselves. */
+export function isInteractive(target: Element, stage: Element): boolean {
+  for (let n: Element | null = target; n && n !== stage; n = n.parentElement) {
+    if (n.matches(INTERACTIVE)) return true
+  }
+  return false
+}
+
 /**
  * The native cursor is hidden, so the user clicks where the reticle is. A pointer click that lands
- * outside the captured target (inside its capture zone) must still activate it, once. Clicks that
- * already hit the target, and keyboard activation (detail 0), are left alone.
+ * on empty space outside the captured target (inside its capture zone) must still activate it, once.
+ * Clicks that already hit the target, clicks on any other control, and keyboard activation (detail 0)
+ * are left alone.
  */
-export function shouldForwardClick(c: { capturedId: string | null; insideCaptured: boolean; detail: number }): boolean {
-  return c.capturedId !== null && !c.insideCaptured && c.detail > 0
+export function shouldForwardClick(c: {
+  capturedId: string | null
+  insideCaptured: boolean
+  detail: number
+  onInteractive: boolean
+}): boolean {
+  return c.capturedId !== null && !c.insideCaptured && !c.onInteractive && c.detail > 0
 }
 
 const TIP_GAP = 12

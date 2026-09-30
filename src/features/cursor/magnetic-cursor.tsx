@@ -3,6 +3,7 @@
 import { useEffect, useRef, useSyncExternalStore, type RefObject } from "react"
 import {
   REST_FOLLOW,
+  isInteractive,
   placeTooltip,
   resolveMagnet,
   shouldForwardClick,
@@ -242,27 +243,40 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       wake()
     }
     const captured = () => (capturedId === null ? undefined : items.find((i) => i.target.id === capturedId))
+    // The captured item when a pointer event on `t` belongs to it rather than to what is under the pointer.
+    const forwardTo = (t: Node | null, detail: number) => {
+      const item = captured()
+      if (!item || !item.el.isConnected || !t || !stage.contains(t)) return null
+      const el = t instanceof Element ? t : t.parentElement
+      const ok = shouldForwardClick({
+        capturedId,
+        insideCaptured: item.el.contains(t),
+        detail,
+        onInteractive: !el || isInteractive(el, stage),
+      })
+      return ok ? item : null
+    }
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "touch") return
       pressed = true
       root.dataset.pressed = "on"
-      // The reticle sits on the target, so this press belongs to it: keep the sky from reacting to
-      // the empty space the real pointer is over.
-      const item = captured()
-      const t = e.target as Node | null
-      if (item && t && !item.el.contains(t)) e.stopPropagation()
+      // The reticle sits on the target, so a primary press on empty space beside it belongs to it: keep
+      // the sky from reacting there. Presses on other controls, other buttons and outside the stage pass.
+      if (e.button === 0 && forwardTo(e.target as Node | null, 1)) e.stopPropagation()
     }
     const onUp = () => {
       pressed = false
       delete root.dataset.pressed
       wake()
     }
+    // A press can end without a pointerup (alt-tab, tab switch): never leave the reticle stuck pressed.
+    const onHidden = () => {
+      if (document.hidden || document.visibilityState === "hidden") onUp()
+    }
     // What you see is what you click: the pull can leave the real pointer just outside the target.
     const onClick = (e: MouseEvent) => {
-      const item = captured()
-      const t = e.target as Node | null
-      if (!item || !item.el.isConnected || !t || !stage.contains(t)) return
-      if (!shouldForwardClick({ capturedId, insideCaptured: item.el.contains(t), detail: e.detail })) return
+      const item = forwardTo(e.target as Node | null, e.detail)
+      if (!item) return
       e.preventDefault()
       e.stopPropagation()
       item.el.click()
@@ -274,6 +288,8 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
     window.addEventListener("pointerup", onUp, { passive: true })
     window.addEventListener("pointercancel", onUp, { passive: true })
     window.addEventListener("click", onClick, { capture: true })
+    window.addEventListener("blur", onUp)
+    document.addEventListener("visibilitychange", onHidden)
     window.addEventListener("scroll", invalidate, { passive: true, capture: true })
     window.addEventListener("resize", invalidate)
     document.documentElement.addEventListener("mouseleave", onLeave)
@@ -292,6 +308,8 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       window.removeEventListener("pointerup", onUp)
       window.removeEventListener("pointercancel", onUp)
       window.removeEventListener("click", onClick, { capture: true })
+      window.removeEventListener("blur", onUp)
+      document.removeEventListener("visibilitychange", onHidden)
       window.removeEventListener("scroll", invalidate, { capture: true })
       window.removeEventListener("resize", invalidate)
       document.documentElement.removeEventListener("mouseleave", onLeave)

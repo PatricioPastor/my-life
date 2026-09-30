@@ -138,6 +138,16 @@ Fixes:
 
 RED (before the fix): `stepFollow`, `shouldForwardClick` and the click-forwarding, 1:1 movement, idling and press tests failed on missing exports or behaviour, 17 failures in total (for example `TypeError: stepFollow is not a function` and "expected 'held' to be 'under'"). GREEN: lint, typecheck, 320 tests and build pass; `/` stays static.
 
+### Review round 3 warnings, resolved (commit "never swallow clicks on other controls and ease parallax on release")
+
+- ~~`R3-click-forward-swallows-non-magnetic-targets`~~: `shouldForwardClick` now takes `onInteractive`, computed by the pure `isInteractive(target, stage)` (`a[href]`, `button`, `input`, `textarea`, `select`, `label`, `summary`, `[role=button]`, `[contenteditable]` except `false`, `[tabindex]` except `-1`; ancestors are checked up to the stage). Only empty space is forwarded. Tests: predicate table, the captured submit plus a click on the username input focuses the input and does not activate, links and labels are not prevented. Playwright: with the gate submit captured, a click 2 px left of the button (over the input) left `document.activeElement` on `#ig-handle` and the status unchanged.
+- ~~`R3-pointerdown-sky-suppression-untested`~~: pointerdown is suppressed only for `button === 0`, only inside the stage, and only under the same predicate. Tests use a stage-level listener as the sky's sparkle drop: silent for a forwarded press, fires for a press on the star, on another control, with button 2, and outside the stage.
+- ~~`R3-parallax-freeze-jump-and-untested`~~: new pure `stepParallax` (`journey/parallax.ts`): freeze holds the applied shift, the raw shift keeps updating, release eases with a critically damped spring (about 250 ms, exact closed form, frame-rate independent) and then tracks exactly again. Recapture: hysteresis verified by tests (a released star needs the pointer within the capture radius again, while holding survives capture + 10 px). Playwright: fast approach then release, gap 10 px between the frozen and the live shift, max per-frame delta after release 0.62 px (a snap would be 10 px).
+- ~~`R3-pressed-can-stick-without-pointerup`~~: `pressed` clears on window blur and on `visibilitychange` to hidden (tests for both).
+- ~~`R3-css-regex-test-cwd-dependent`~~: the stylesheet path is resolved from the test file (`import.meta.url`); the test passes from another cwd.
+
+RED before the fix: 24 failing tests (for example "isInteractive is not a function", "expected vi.fn() to be called 1 times, but got 0 times" for the sparkle listener, "expected 'on' to be null" for blur and visibility, and the missing `./parallax` module).
+
 ## Next step
 
 Feature delivered, with the feel fixes above on `fix/cursor-feel` (not pushed). Next, if the user wants: the remaining tests and cleanups listed above.

@@ -18,6 +18,7 @@ import {
   veilFor,
   zoomFor,
 } from "./journey-machine"
+import { PARALLAX_REST, stepParallax, type ParallaxState } from "./parallax"
 import { themeVars } from "./theme"
 
 // "Checking" is felt, not flashed: it lasts at least this long even if the server answers sooner.
@@ -49,8 +50,10 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   const gateActive = screen === "gate"
 
   // A star the reticle has captured must not drift out from under the pointer, so the parallax
-  // freezes while something is captured (which includes the press itself).
+  // freezes while something is captured (which includes the press itself). On release the layer
+  // eases back onto the live shift instead of jumping.
   const capturedRef = useRef(false)
+  const parallaxRef = useRef<{ state: ParallaxState; at: number }>({ state: PARALLAX_REST, at: 0 })
   const onCapture = useCallback((target: CursorTarget | null) => {
     capturedRef.current = target !== null
     setCursorTarget(target)
@@ -59,7 +62,12 @@ export function Journey({ preset = "ember" }: JourneyProps) {
   // Stable, so the sky's render loop never re-subscribes; it moves the label layer without React state.
   const onLayerShift = useCallback((x: number, y: number) => {
     const layer = layerRef.current
-    if (layer && !capturedRef.current) layer.style.transform = `translate(${x}px, ${y}px)`
+    const p = parallaxRef.current
+    const now = performance.now()
+    const dt = p.at === 0 ? 0 : Math.min((now - p.at) / 1000, 0.1)
+    p.at = now
+    p.state = stepParallax(p.state, { x, y }, capturedRef.current, dt)
+    if (layer) layer.style.transform = `translate(${p.state.x}px, ${p.state.y}px)`
   }, [])
 
   // Checking: ask the server, and hold for the minimum beat. Failures deny (fail closed).

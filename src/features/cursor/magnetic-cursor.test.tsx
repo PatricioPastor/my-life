@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { act, cleanup, fireEvent, render } from "@testing-library/react"
 import { useRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -61,6 +62,12 @@ function Stage({ onCapture, onActivate }: { onCapture: (t: CursorTarget | null) 
         Historias
       </button>
       <input aria-label="campo" />
+      <a href="#x" data-testid="link">
+        enlace
+      </a>
+      <label data-testid="label">
+        etiqueta
+      </label>
       <MagneticCursor stageRef={ref} onCapture={onCapture} />
     </main>
   )
@@ -142,7 +149,7 @@ describe("MagneticCursor", () => {
 
     it("does not jump when pressed: the press transform never reaches the position", () => {
       // Regression: `scale` on the same element as the translate multiplied the translation.
-      const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8")
+      const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../app/globals.css"), "utf8")
       expect(css).not.toMatch(/\.mc\[data-pressed="on"\]\s+\.mc-frame\s*\{/)
       expect(css).toMatch(/\.mc\[data-pressed="on"\]\s+\.mc-body\s*\{[^}]*scale/)
       mockMedia(true)
@@ -197,6 +204,109 @@ describe("MagneticCursor", () => {
       runFrames(2)
       fireEvent.click(container.querySelector("input")!, { detail: 0 })
       expect(onActivate).not.toHaveBeenCalled()
+    })
+
+    it("never swallows a click on another control while a star is captured", () => {
+      mockMedia(true)
+      const onActivate = vi.fn()
+      const { container, getByTestId } = render(<Stage onCapture={vi.fn()} onActivate={onActivate} />)
+      fireEvent.pointerMove(container.querySelector("main")!, { clientX: 260, clientY: 224, pointerType: "mouse" })
+      runFrames(2)
+      expect(container.querySelector(".mc")?.getAttribute("data-state")).toBe("captured")
+      for (const el of [container.querySelector("input")!, getByTestId("link"), getByTestId("label")]) {
+        const notPrevented = fireEvent.click(el, { detail: 1 })
+        expect(notPrevented).toBe(true)
+      }
+      expect(onActivate).not.toHaveBeenCalled()
+    })
+
+    it("focuses a text field clicked while the submit is captured, without submitting", () => {
+      mockMedia(true)
+      const onActivate = vi.fn()
+      const { container } = render(<Stage onCapture={vi.fn()} onActivate={onActivate} />)
+      fireEvent.pointerMove(container.querySelector("main")!, { clientX: 260, clientY: 224, pointerType: "mouse" })
+      runFrames(2)
+      const input = container.querySelector("input")!
+      fireEvent.pointerDown(input, { pointerType: "mouse", button: 0 })
+      fireEvent.mouseDown(input)
+      input.focus()
+      fireEvent.pointerUp(input, { pointerType: "mouse", button: 0 })
+      fireEvent.click(input, { detail: 1 })
+      expect(document.activeElement).toBe(input)
+      expect(onActivate).not.toHaveBeenCalled()
+    })
+
+    describe("pointerdown suppression (stands in for the sky's sparkle drop)", () => {
+      const setup = () => {
+        mockMedia(true)
+        const { container } = render(<Stage onCapture={vi.fn()} />)
+        const main = container.querySelector("main")!
+        const sparkle = vi.fn()
+        main.addEventListener("pointerdown", sparkle)
+        fireEvent.pointerMove(main, { clientX: 260, clientY: 224, pointerType: "mouse" })
+        runFrames(2)
+        expect(container.querySelector(".mc")?.getAttribute("data-state")).toBe("captured")
+        return { container, main, sparkle }
+      }
+
+      it("does not fire for a primary press that will be forwarded", () => {
+        const { main, sparkle } = setup()
+        fireEvent.pointerDown(main, { clientX: 260, clientY: 224, pointerType: "mouse", button: 0 })
+        expect(sparkle).not.toHaveBeenCalled()
+      })
+
+      it("fires for a normal press on the captured star itself", () => {
+        const { container, sparkle } = setup()
+        fireEvent.pointerDown(container.querySelector("button")!, { pointerType: "mouse", button: 0 })
+        expect(sparkle).toHaveBeenCalledTimes(1)
+      })
+
+      it("fires for a press on another control", () => {
+        const { container, sparkle } = setup()
+        fireEvent.pointerDown(container.querySelector("input")!, { pointerType: "mouse", button: 0 })
+        expect(sparkle).toHaveBeenCalledTimes(1)
+      })
+
+      it("fires for a non-primary button", () => {
+        const { main, sparkle } = setup()
+        fireEvent.pointerDown(main, { clientX: 260, clientY: 224, pointerType: "mouse", button: 2 })
+        expect(sparkle).toHaveBeenCalledTimes(1)
+      })
+
+      it("fires for a press that lands outside the stage", () => {
+        const { sparkle } = setup()
+        const outside = document.createElement("div")
+        document.body.append(outside)
+        outside.addEventListener("pointerdown", sparkle)
+        fireEvent.pointerDown(outside, { pointerType: "mouse", button: 0 })
+        expect(sparkle).toHaveBeenCalledTimes(1)
+        outside.remove()
+      })
+    })
+
+    describe("a press that never gets its pointerup", () => {
+      const pressed = () => document.querySelector(".mc")?.getAttribute("data-pressed")
+      it("clears when the window loses focus", () => {
+        mockMedia(true)
+        const { container } = render(<Stage onCapture={vi.fn()} />)
+        fireEvent.pointerDown(container.querySelector("main")!, { pointerType: "mouse", button: 0 })
+        expect(pressed()).toBe("on")
+        fireEvent.blur(window)
+        expect(pressed()).toBeNull()
+      })
+
+      it("clears when the page becomes hidden", () => {
+        mockMedia(true)
+        const { container } = render(<Stage onCapture={vi.fn()} />)
+        fireEvent.pointerDown(container.querySelector("main")!, { pointerType: "mouse", button: 0 })
+        expect(pressed()).toBe("on")
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => true })
+        fireEvent(document, new Event("visibilitychange"))
+        delete (document as unknown as Record<string, unknown>).visibilityState
+        delete (document as unknown as Record<string, unknown>).hidden
+        expect(pressed()).toBeNull()
+      })
     })
 
     it("idles once the pointer is still and everything has settled (free and captured)", () => {
