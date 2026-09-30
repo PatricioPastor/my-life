@@ -5,10 +5,12 @@ export interface TimelineOpts {
   holdMs: number
   /** Whether the phrase fades out again (the last phrase stays for the CTA). */
   exit: boolean
-  /** Base left-to-right step between letters. */
+  /** Base left-to-right step between letters; it shrinks for long phrases so the assembly never outlasts the cap. */
   stepMs?: number
-  /** Extra seeded delay per letter; keep it below `stepMs` so the order is preserved. */
+  /** Most extra seeded delay per letter; it is held under the step so the order is preserved. */
   jitterMs?: number
+  /** The assembly (first letter starts to the last one settling) never takes longer than this. */
+  enterCapMs?: number
 }
 
 export interface LetterSpec {
@@ -41,12 +43,14 @@ export interface LetterTimeline {
 }
 
 export const STEP_MS = 65
-export const JITTER_MS = 60
-const DUR_MIN = 900
-const DUR_MAX = 1200
-const EXIT_STAGGER_MS = 180
-const EXIT_DUR_MIN = 440
-const EXIT_DUR_MAX = 470
+export const JITTER_MS = 30
+/** The whole assembly of a phrase, whatever its length: a phrase cycle is about two seconds (enter + hold + exit). */
+export const ENTER_CAP_MS = 1000
+const DUR_MIN = 550
+const DUR_MAX = 700
+const EXIT_STAGGER_MS = 50
+const EXIT_DUR_MIN = 230
+const EXIT_DUR_MAX = 250
 
 /** FNV-1a: turns any seed into a 32-bit number. */
 function hash(seed: string | number): number {
@@ -73,8 +77,11 @@ function rng(seed: number): () => number {
 const r1 = (n: number) => Math.round(n * 10) / 10
 
 export function letterTimeline(text: string, seed: string | number, opts: TimelineOpts): LetterTimeline {
-  const step = opts.stepMs ?? STEP_MS
-  const jitter = opts.jitterMs ?? JITTER_MS
+  const cap = opts.enterCapMs ?? ENTER_CAP_MS
+  // What is left of the cap once the slowest travel fits: long phrases get a tighter step, short ones keep the base.
+  const step = Math.min(opts.stepMs ?? STEP_MS, Math.max(0, (cap - DUR_MAX) / Math.max(1, Array.from(text).length)))
+  // Held well under the step, so the order of the letters stays strict.
+  const jitter = Math.min(opts.jitterMs ?? JITTER_MS, step * 0.6)
   const rand = rng(hash(seed))
   const between = (lo: number, hi: number) => lo + rand() * (hi - lo)
   const sign = () => (rand() < 0.5 ? -1 : 1)
@@ -92,7 +99,7 @@ export function letterTimeline(text: string, seed: string | number, opts: Timeli
       scale: Math.round(between(0.85, 0.95) * 100) / 100,
       blur: r1(between(4, 6)),
       // Index keeps left-to-right; jitter (< step) keeps the order strict.
-      delay: Math.round(i * step + between(0, jitter)),
+      delay: r1(i * step + between(0, jitter)),
       dur: Math.round(between(DUR_MIN, DUR_MAX)),
       xy: r1(between(-6, -3)),
       xdelay: Math.round(between(0, EXIT_STAGGER_MS)),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { letterTimeline } from "./letter-timeline"
+import { ENTER_CAP_MS, JITTER_MS, letterTimeline, STEP_MS } from "./letter-timeline"
 
-const OPTS = { holdMs: 2500, exit: true }
+const OPTS = { holdMs: 700, exit: true }
 
 describe("letterTimeline", () => {
   it("marks spaces and gives them no animation", () => {
@@ -39,8 +39,8 @@ describe("letterTimeline", () => {
       expect(l.scale).toBeLessThanOrEqual(0.95)
       expect(l.blur).toBeGreaterThanOrEqual(4)
       expect(l.blur).toBeLessThanOrEqual(6)
-      expect(l.dur).toBeGreaterThanOrEqual(900)
-      expect(l.dur).toBeLessThanOrEqual(1200)
+      expect(l.dur).toBeGreaterThanOrEqual(550)
+      expect(l.dur).toBeLessThanOrEqual(700)
     }
     // Irregular: not every letter starts on the same side.
     expect(new Set(moving.map((l) => Math.sign(l.dx))).size).toBe(2)
@@ -58,17 +58,38 @@ describe("letterTimeline", () => {
     const t = letterTimeline("esta, es mi vida", "sum", OPTS)
     const end = Math.max(...t.letters.filter((l) => !l.space).map((l) => l.delay + l.dur))
     expect(t.enterMs).toBe(end)
-    expect(t.holdMs).toBe(2500)
-    expect(t.exitMs).toBeGreaterThanOrEqual(600)
-    expect(t.exitMs).toBeLessThanOrEqual(700)
+    expect(t.holdMs).toBe(700)
+    expect(t.exitMs).toBeGreaterThanOrEqual(230)
+    expect(t.exitMs).toBeLessThanOrEqual(300)
     expect(t.totalMs).toBe(t.enterMs + t.holdMs + t.exitMs)
     expect(t.exitAtMs).toBe(t.enterMs + t.holdMs)
   })
 
-  it("grows with the phrase and drops the exit when asked", () => {
+  it("caps the assembly at about a second whatever the phrase length", () => {
+    for (const text of ["buenoniaa", "buenanochee", "esta, es mi vida", "pero narrada de una forma diferente", "a".repeat(120)]) {
+      for (const seed of ["a", "b", "c", text]) {
+        expect(letterTimeline(text, seed, OPTS).enterMs, text).toBeLessThanOrEqual(ENTER_CAP_MS)
+      }
+    }
+  })
+
+  it("squeezes the stagger for long phrases but never above the base step, keeping the order", () => {
+    const short = letterTimeline("ab", "x", OPTS)
+    const long = letterTimeline("pero narrada de una forma diferente", "x", OPTS)
+    const gap = (t: typeof short) => {
+      const d = t.letters.filter((l) => !l.space).map((l) => l.delay)
+      return (d[d.length - 1]! - d[0]!) / (d.length - 1)
+    }
+    expect(gap(short)).toBeLessThanOrEqual(STEP_MS + JITTER_MS)
+    expect(gap(long)).toBeLessThan(gap(short))
+    const delays = long.letters.filter((l) => !l.space).map((l) => l.delay)
+    for (let i = 1; i < delays.length; i++) expect(delays[i]).toBeGreaterThan(delays[i - 1]!)
+  })
+
+  it("grows with the phrase (until the cap) and drops the exit when asked", () => {
     const short = letterTimeline("ab", "x", { holdMs: 700, exit: false })
     const long = letterTimeline("pero narrada de una forma diferente", "x", { holdMs: 700, exit: false })
-    expect(long.enterMs).toBeGreaterThan(short.enterMs)
+    expect(long.enterMs).toBeGreaterThanOrEqual(short.enterMs)
     expect(short.exitMs).toBe(0)
     expect(short.totalMs).toBe(short.enterMs + 700)
   })

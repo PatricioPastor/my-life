@@ -6,10 +6,10 @@ export type PhaseDurations = Record<PhraseKind, number>
 export const LIFE_PHRASE = "esta, es mi vida"
 export const DIFFERENT_PHRASE = "pero narrada de una forma diferente"
 
-/** How long each fully formed phrase stays. The last one hands over to the CTA after a short beat instead of leaving. */
-const HOLD_MS: Record<PhraseKind, number> = { greeting: 1800, life: 1800, different: 700 }
+/** How long each fully formed phrase stays (a cycle is about 2 s: ~1 s to assemble, this, ~0.3 s to leave). The last one hands over to the CTA after a short beat instead of leaving. */
+const HOLD_MS: Record<PhraseKind, number> = { greeting: 700, life: 700, different: 400 }
 /** A returning visitor only sees the greeting: a brief hold, no exit (the layer itself fades). */
-const RETURNING_HOLD_MS = 600
+const RETURNING_HOLD_MS = 300
 
 export function phraseTimeline(kind: PhraseKind, text: string, returning: boolean): LetterTimeline {
   const quick = returning && kind === "greeting"

@@ -108,6 +108,14 @@ User request: "¿Qué pasa si quiero ver toda la intro de nuevo? ... un CTA que 
 - **A11y.** Native button named "Ver intro"; reduced motion follows the existing onboarding rules.
 - **TDD.** Machine, `forcedIntro`, timings, analytics allow-list, Journey control and an `Experience` test (click "Ver intro" on the gate restarts the greeting and walks the full sequence with the Journey mounted once).
 
+## Two seconds per phrase (2026-09-30)
+
+User: "la transición de la intro ... modificarlo a 2 segundos, sino tarda mucho tiempo entre cada una."
+
+- **Cycle.** Each phrase cycle (enter + hold + exit) is about 2 s for the greeting and "esta, es mi vida": enter ~0.9 s, hold 700 ms, exit ~0.29 s. Measured totals: buenoniaa 1899.5 ms (911.5 + 700 + 288), buenanochee 1888 ms, "esta, es mi vida" 1917.8 ms. The last phrase enters in 963.7 ms, holds a 400 ms beat and hands over to the CTA (1363.7 ms, no exit). A returning visitor's greeting is 911.5 + 300 hold = 1211.5 ms, no exit.
+- **Letters.** The assembly is capped at `ENTER_CAP_MS` = 1000 ms whatever the phrase length: stagger = `min(65 ms, (cap - 700) / letters)`, seeded jitter up to 30 ms and never above 60% of the stagger (the left-to-right order stays strict). Travel 550-700 ms with the same no-overshoot ease, exit stagger 0-50 ms and 230-250 ms per letter. Origins, rotations, blur and scale ranges are unchanged, and the letters still settle exactly.
+- **TDD.** Failing tests for the new totals, the cap, the squeezed stagger and the holds first; `letter-timeline.test.ts` and `phrases.test.ts`.
+
 ## Next step
 
 T4: deliver (RDD per policy; push after the user approves).
