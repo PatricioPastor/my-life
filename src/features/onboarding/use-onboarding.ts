@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useReducer } from "react"
+import { FONT_WAIT_MS, fontReadyOrTimeout, loadGambarino } from "./font"
 import { greetingFor } from "./greeting"
 import { HOLD_MS, dueIn, initialOnboarding, onboardingReducer } from "./onboarding-machine"
 import { markSeen, readSeen } from "./onboarding-storage"
@@ -12,11 +13,15 @@ export function useOnboarding() {
 
   useEffect(() => {
     if (phase !== "idle") return
-    const id = setTimeout(
-      () => dispatch({ type: "start", now: performance.now(), returning: readSeen(), greeting: greetingFor(new Date()) }),
-      0,
-    )
-    return () => clearTimeout(id)
+    // The first phrase waits (up to a cap) for Gambarino, so it never swaps faces mid-fade.
+    let cancelled = false
+    void fontReadyOrTimeout(loadGambarino, FONT_WAIT_MS).then(() => {
+      if (cancelled) return
+      dispatch({ type: "start", now: performance.now(), returning: readSeen(), greeting: greetingFor(new Date()) })
+    })
+    return () => {
+      cancelled = true
+    }
   }, [phase])
 
   useEffect(() => {

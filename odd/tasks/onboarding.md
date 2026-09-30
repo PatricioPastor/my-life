@@ -23,7 +23,7 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
   - Each phrase holds ~1.5 s with smooth transitions (opacity, blur and a slight letter-spacing settle). No hard cuts.
   - The CTA copy is "¿por qué creé esto?" ("creé" from *crear*, assumed from the user's "cree").
 - **Font: Gambarino.**
-  - Served through the **Fontshare API** (`api.fontshare.com`), which the FFL license contemplates.
+  - Served through the **Fontshare API** (`api.fontshare.com`), which the FFL license contemplates. The stylesheet is injected by the onboarding (not the root layout) and the first phrase waits up to ~800 ms for the face, so there is no swap.
   - The repo is public and the FFL forbids distributing the font files through a repository or publicly accessible servers. **No font file is ever committed**: `resources/` is gitignored and the user's zip stays local.
   - No subsetting or conversion, which the license also forbids.
 - **Story view.**
@@ -36,8 +36,10 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
   - The WebGL sky program is compiled once offscreen ("warm-up"), so the first real mount is instant.
 - **Hardware acceleration.**
   - At the end, detect WebGL2 and the unmasked renderer.
-  - Software renderers (SwiftShader, llvmpipe, Microsoft Basic Render, "software"), or no WebGL2, show a suggestion with browser-specific steps.
-  - Otherwise show a short confirmation.
+  - Software renderers (SwiftShader, llvmpipe, Microsoft Basic Render, "software"), or no WebGL2, show a suggestion with browser-specific steps and track `hw_accel_suggested`.
+  - A masked renderer (WebGL2 works, unmasked renderer hidden) is `unknown`: a soft line ("Si notas tirones, ...") with the steps behind a "Cómo" disclosure, and no event.
+  - A hardware renderer shows a short confirmation.
+  - The probe reads the renderer only, off the render path; the sky program compile stays in the idle warm-up.
   - Then "Entrar" leads to the gate.
 - **Returning visitors.**
   - A "Saltar" control is always available.
@@ -81,6 +83,7 @@ Before the Instagram input, a smooth onboarding runs. It greets, tells the premi
 - 2026-09-30: T1 done. Greeting, machine, storage and layer with tests; Gambarino via `https://api.fontshare.com/v2/css?f[]=gambarino@400&display=swap` (verified with curl: serves woff2 from cdn.fontshare.com); `/resources/` gitignored. Route: delegated writer (2+ non-trivial files).
 - 2026-09-30: T2 done. Story view with 160x90 grain at 12 fps (paused when hidden, static on reduced motion), FLIP title morph via Web Animations, Gambarino lorem body. Hardware phase temporarily has a plain Entrar stub until T3.
 - 2026-09-30: T3 done. Journey chunk lazy via next/dynamic (fetched on idle at mount, mounted at the hardware step so the gate is ready before Entrar); offscreen sky warm-up on idle during the story; GPU classification + browser steps; onboarding_completed/onboarding_skipped/hw_accel_suggested. Fixed: HeadlessChrome UA misread as Safari; `--font-gambarino` theme token; ghost magnet on the hidden story button.
+- 2026-09-30: Review follow-up: Gambarino stylesheet moved out of the render-blocking root head (preconnect kept) and awaited with an 800 ms cap; unknown GPU verdict is soft and silent; the renderer probe is light and off the render path.
 
 ## Next step
 

@@ -439,6 +439,25 @@
     line-height: 1.15;
     text-wrap: balance;
   }
+  .ob-hw-soft {
+    font-size: clamp(1.2rem, 2.4vw, 1.7rem);
+    color: var(--ink-muted);
+  }
+  .ob-hw-how {
+    color: var(--ink-muted);
+  }
+  .ob-hw-how summary {
+    display: inline-block;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+  .ob-hw-how .ob-hw-steps {
+    margin-top: 12px;
+  }
   .ob-hw-line svg {
     display: inline-block;
     margin-right: 0.35em;

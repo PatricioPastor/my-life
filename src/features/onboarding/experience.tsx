@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 import { warmUpSky } from "@/features/sky/warm-up"
+import { probeRenderer } from "./gpu-probe"
 import { whenIdle } from "./idle"
 import { Onboarding } from "./onboarding"
 import { journeyWanted } from "./onboarding-machine"
@@ -28,7 +29,10 @@ export function Experience() {
   // Compile the sky program offscreen while the visitor reads, so the real mount is instant.
   useEffect(() => {
     if (phase !== "story") return
-    return whenIdle(() => void warmUpSky())
+    return whenIdle(() => {
+      probeRenderer()
+      warmUpSky()
+    })
   }, [phase])
 
   useEffect(() => {

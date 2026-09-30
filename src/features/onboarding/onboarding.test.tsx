@@ -1,8 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 const track = vi.fn()
+const warmUp = vi.fn()
+const probe = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
-vi.mock("@/features/sky/warm-up", () => ({ warmUpSky: () => ({ webgl2: true, renderer: "Apple M2", compiled: true }) }))
+vi.mock("@/features/sky/warm-up", () => ({ warmUpSky: (...a: unknown[]) => warmUp(...a) }))
+vi.mock("./gpu-probe", () => ({ probeRenderer: () => probe() }))
 
 import { Onboarding } from "./onboarding"
 import { initialOnboarding, type OnboardingState } from "./onboarding-machine"
@@ -10,6 +13,8 @@ import { initialOnboarding, type OnboardingState } from "./onboarding-machine"
 afterEach(() => {
   cleanup()
   track.mockReset()
+  warmUp.mockReset()
+  probe.mockReset()
 })
 
 const at = (phase: OnboardingState["phase"]): OnboardingState => ({ ...initialOnboarding, phase, greeting: "buenanochee" })
@@ -43,12 +48,36 @@ describe("Onboarding", () => {
     expect(track.mock.calls).toEqual([["onboarding_skipped"]])
   })
 
-  it("confirms hardware acceleration and enters the gate", () => {
+  it("confirms hardware acceleration and enters the gate", async () => {
+    probe.mockReturnValue({ webgl2: true, renderer: "Apple M2", vendor: "Apple" })
     const dispatch = vi.fn()
     render(<Onboarding state={at("hardware")} dispatch={dispatch} />)
-    expect(screen.getByText("Tu navegador ya usa aceleración por hardware.")).toBeTruthy()
+    expect(await screen.findByText("Tu navegador ya usa aceleración por hardware.")).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
     expect(dispatch).toHaveBeenCalledWith({ type: "enter" })
     expect(track.mock.calls).toEqual([["onboarding_completed"]])
+  })
+
+  it("strongly suggests acceleration on a software renderer and tracks it", async () => {
+    probe.mockReturnValue({ webgl2: true, renderer: "SwiftShader", vendor: "Google" })
+    render(<Onboarding state={at("hardware")} dispatch={vi.fn()} />)
+    expect(await screen.findByText(/activa la aceleración por hardware de tu navegador/)).toBeTruthy()
+    expect(track.mock.calls).toEqual([["hw_accel_suggested"]])
+  })
+
+  it("stays soft and silent when the renderer is masked, steps behind a disclosure", async () => {
+    probe.mockReturnValue({ webgl2: true })
+    render(<Onboarding state={at("hardware")} dispatch={vi.fn()} />)
+    expect(await screen.findByText(/Si notas tirones/)).toBeTruthy()
+    expect(screen.queryByText(/activa la aceleración por hardware de tu navegador/)).toBeNull()
+    expect(screen.getByText("Cómo").closest("details")).toBeTruthy()
+    expect(track).not.toHaveBeenCalled()
+  })
+
+  it("never compiles the sky program on the render path", async () => {
+    probe.mockReturnValue({ webgl2: true, renderer: "Apple M2" })
+    render(<Onboarding state={at("hardware")} dispatch={vi.fn()} />)
+    await screen.findByText("Tu navegador ya usa aceleración por hardware.")
+    expect(warmUp).not.toHaveBeenCalled()
   })
 })

@@ -27,10 +27,6 @@ const spectral = Spectral({
   style: ["normal", "italic"],
 });
 
-// Gambarino is licensed under the Fontshare FFL: it may only be served through the Fontshare API,
-// never committed or self-hosted, subset or converted.
-const GAMBARINO_CSS = "https://api.fontshare.com/v2/css?f[]=gambarino@400&display=swap";
-
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const TITLE = "patriciopastor";
 const DESCRIPTION = "Historias, escritos y proyectos de Patricio Pastor. Solo con invitación.";
@@ -57,9 +53,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${doto.variable} ${silkscreen.variable} ${spectral.variable} dark h-full antialiased`}
     >
       <head>
+        {/* Gambarino's stylesheet is injected by the onboarding, off the critical path. */}
         <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="anonymous" />
-        <link rel="stylesheet" href={GAMBARINO_CSS} />
       </head>
       <body className="h-full">
         {children}
