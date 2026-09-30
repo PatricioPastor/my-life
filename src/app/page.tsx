@@ -1,5 +1,5 @@
-import { Journey } from "@/features/journey"
+import { Experience } from "@/features/onboarding"
 
 export default function Home() {
-  return <Journey />
+  return <Experience />
 }

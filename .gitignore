@@ -42,3 +42,6 @@ next-env.d.ts
 
 # codegraph index
 .codegraph/
+
+# local-only assets (font licenses forbid publishing the files)
+/resources/

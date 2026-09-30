@@ -260,6 +260,120 @@
   }
 }
 
+/* Onboarding: a full-screen layer above the journey. */
+@layer components {
+  .ob {
+    --ink: #f6e2e8;
+    --ink-muted: rgba(246, 226, 232, 0.68);
+    --ink-faint: rgba(246, 226, 232, 0.24);
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    overflow: hidden;
+    color: var(--ink);
+    background: #0a0600;
+    opacity: 1;
+    transition: opacity 800ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .ob[data-leaving="true"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ob-stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(28px, 6vh, 56px);
+    padding: 0 24px;
+    transition: opacity 500ms ease;
+  }
+  .ob[data-phase="story"] .ob-stage,
+  .ob[data-phase="hardware"] .ob-stage {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* The lines share one grid cell, so the box is as tall as the tallest and nothing jumps. */
+  .ob-lines {
+    display: grid;
+    place-items: center;
+    max-width: min(22ch, 100%);
+  }
+  .ob-line {
+    grid-area: 1 / 1;
+    margin: 0;
+    text-align: center;
+    text-wrap: balance;
+    font-size: clamp(2.5rem, 8.4vw, 6.5rem);
+    line-height: 1.04;
+    letter-spacing: 0.05em;
+    opacity: 0;
+    filter: blur(10px);
+    transition:
+      opacity 460ms cubic-bezier(0.55, 0, 1, 0.45),
+      filter 460ms cubic-bezier(0.55, 0, 1, 0.45),
+      letter-spacing 460ms cubic-bezier(0.55, 0, 1, 0.45);
+  }
+  .ob-line[data-on="true"] {
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: -0.005em;
+    transition:
+      opacity 760ms cubic-bezier(0.16, 1, 0.3, 1) 200ms,
+      filter 760ms cubic-bezier(0.16, 1, 0.3, 1) 200ms,
+      letter-spacing 980ms cubic-bezier(0.16, 1, 0.3, 1) 200ms;
+  }
+  .ob-cta {
+    padding: 14px 22px !important;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    border: 1px solid var(--ink-faint) !important;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition:
+      opacity 640ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 640ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ob-cta[data-on="true"] {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .ob-skip {
+    position: absolute;
+    right: max(20px, 3vw);
+    bottom: max(20px, 3vh);
+    padding: 12px 6px !important;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted) !important;
+    animation: fade 600ms ease 400ms both;
+  }
+  .ob-skip:hover {
+    color: var(--ink) !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ob-line,
+    .ob-line[data-on="true"] {
+      filter: none;
+      letter-spacing: -0.005em;
+      transition: opacity 400ms ease;
+    }
+    .ob-cta,
+    .ob-cta[data-on="true"] {
+      transform: none;
+      transition: opacity 400ms ease;
+    }
+    .ob-stage,
+    .ob {
+      transition-duration: 400ms;
+    }
+  }
+}
+
 @keyframes rise {
   from {
     opacity: 0;
