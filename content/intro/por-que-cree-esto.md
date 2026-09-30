@@ -29,7 +29,7 @@ Esa idea, nace de una pregunta.
 
 > "¿Como puedo contar una historia y que se puedan apreciar **TODOS** los detalles?"
 
-Y ahí pensé: Que increíble sería, un lugar donde pueda narrar una historia, vincular videos que se muestren en cierto momento (o que quienes participen de la historia lo agreguen, por eso ingresar con un **Instagram** ), audios, fotos, puntos de vista y sea interactivo.
+Y ahí pensé: Que increíble sería, un lugar donde pueda narrar una historia, vincular videos que se muestren en cierto momento o que quienes participen de la historia lo agreguen audios, fotos, puntos de vista y sea interactivo, (por eso ingresar con un **Instagram** ).
 
 Y ahi dije listo, este tiene que ser el lugar; pero no solo para contar historias, sino para contar mis ideas, proyectos, mi forma de ver la vida....
 
