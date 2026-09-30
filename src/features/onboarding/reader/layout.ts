@@ -1,19 +1,20 @@
 /**
  * The geometry of the reading stack. Pure, and run every animation frame, so it only does arithmetic on numbers measured once.
  *
- * Every block is laid out small (the resting size) and absolutely positioned; the focused one is scaled up with a transform.
- * Uniform scaling keeps every line break where it was, so focus never reflows text, and only transforms move.
+ * Every block is laid out at the focused reading size and absolutely positioned; the ones out of focus are scaled DOWN with a
+ * transform (by 1 / `scale`). The focused block therefore renders at its native font size, never stretched, which is what keeps
+ * it sharp. Uniform scaling keeps every line break where it was, so focus never reflows text, and only transforms move.
  */
 
 export interface StackBlock {
-  /** Laid-out height at the resting size (a transform does not change it). */
+  /** Laid-out height at the focused size (a transform does not change it). */
   height: number
   /** Index among the readable blocks, or -1 for a subheading or break: those never take the focus. */
   readable: number
 }
 
 export interface LayoutParams {
-  /** How much the focused block grows (1 for reduced motion). */
+  /** How much bigger the focused size is than the resting size (1 for reduced motion): out of focus, blocks take 1 / scale. */
   scale: number
   /** Space between blocks at rest. */
   gap: number
@@ -43,14 +44,39 @@ export const PAN_STEP = 0.65
 /** While painting, the painted word is kept above this share of the reading area. */
 export const PAN_FOLLOW = 0.85
 
+/** The scale of a block out of focus. */
+export function restScale(p: Pick<LayoutParams, "scale">): number {
+  return 1 / Math.max(1, p.scale)
+}
+
 /**
- * The scale a paragraph takes when focused: the full `scale`, or less when that would make it taller than the reading area,
- * but never below 1. A block that is not measured yet counts as fitting.
+ * The scale a paragraph takes when focused: 1 (its native size), or smaller when it would be taller than the reading area,
+ * but never below the resting scale. A block that is not measured yet counts as fitting.
  */
 export function focusScaleFor(height: number, p: Pick<LayoutParams, "scale" | "top" | "bottom">): number {
   const room = p.bottom - p.top
-  if (height <= 0 || room <= 0) return p.scale
-  return Math.max(1, Math.min(p.scale, room / height))
+  if (height <= 0 || room <= 0) return 1
+  return Math.max(restScale(p), Math.min(1, room / height))
+}
+
+/** Rounds a CSS px length to a whole device pixel, so resting text lands on the pixel grid. */
+export function snapPx(v: number, dpr: number): number {
+  const d = Number.isFinite(dpr) && dpr > 0 ? dpr : 1
+  return Math.round(v * d) / d
+}
+
+/**
+ * The layout at rest: stack and block offsets on whole device pixels, and a scale that is 1 within noise is exactly 1.
+ * `origin` is where the stack's box starts on the page (the stage's top, which may sit between pixels): the stack offset is
+ * snapped so that `origin + y` lands on the grid, and the block offsets (whole pixels) keep it there.
+ */
+export function snapLayout(layout: StackLayout, dpr: number, origin = 0): StackLayout {
+  return {
+    weights: layout.weights,
+    scales: layout.scales.map((s) => (Math.abs(s - 1) < 1e-3 ? 1 : s)),
+    tops: layout.tops.map((t) => snapPx(t, dpr)),
+    y: snapPx(layout.y + origin, dpr) - origin,
+  }
 }
 
 /** How many reading areas tall each readable paragraph is at its focus scale (above 1 means it needs panning). */
@@ -79,7 +105,8 @@ export function autoPanStep(ratio: number, fraction: number): number {
  */
 export function layoutStack(blocks: readonly StackBlock[], f: number, p: LayoutParams, pans: readonly number[] = []): StackLayout {
   const weights = blocks.map((b) => (b.readable >= 0 ? clamp(1 - Math.abs(f - b.readable), 0, 1) : 0))
-  const scales = weights.map((w, i) => 1 + (focusScaleFor(blocks[i]!.height, p) - 1) * w)
+  const rest = restScale(p)
+  const scales = weights.map((w, i) => rest + (focusScaleFor(blocks[i]!.height, p) - rest) * w)
   const visual = blocks.map((b, i) => b.height * scales[i]!)
 
   const tops: number[] = []

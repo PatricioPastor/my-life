@@ -355,6 +355,10 @@
     overflow: hidden;
     color: var(--ink);
     background: #0a0600;
+    /* Light text on dark: grayscale smoothing keeps the stems from blooming (macOS only), and legibility keeps kerning on. */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     opacity: 1;
     transition: opacity 800ms cubic-bezier(0.23, 1, 0.32, 1);
   }
@@ -400,15 +404,22 @@
   }
   .ob-letter {
     display: inline-block;
+  }
+  /* A phrase that is not on stage keeps its letters hidden (in place, so nothing reflows). */
+  .ob-line:not([data-on="true"]) .ob-letter {
     opacity: 0;
   }
-  /* Enter: each letter starts from its own irregular origin and settles exactly. Exit: a soft, slightly staggered fade. */
+  /*
+   * Enter: each letter starts from its own irregular origin and settles exactly. The entrance fills only backwards (hidden during
+   * its delay): once it ends the letter is plain, untransformed, unfiltered text, not a layer held by a finished animation.
+   * Exit: a soft, slightly staggered fade.
+   */
   .ob-line[data-on="true"] .ob-letter {
-    animation: ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) both;
+    animation: ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) backwards;
   }
   .ob-line[data-on="true"][data-exit="true"] .ob-letter {
     animation:
-      ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) both,
+      ob-letter-in var(--dur) cubic-bezier(0.22, 0.75, 0.3, 1) var(--delay) backwards,
       ob-letter-out var(--xdur) cubic-bezier(0.55, 0, 1, 0.45) calc(var(--exit-at) + var(--xdelay)) forwards;
   }
   /* will-change lives only while letters move; the component flips this flag. */
@@ -455,7 +466,7 @@
     position: absolute;
     inset: 0;
     background: #060504;
-    animation: fade 700ms ease both;
+    animation: fade 700ms ease backwards;
   }
   .ob-vignette {
     position: absolute;
@@ -506,7 +517,6 @@
     width: fit-content;
     margin: 0 0 var(--space-4);
     font-size: var(--type-5);
-    will-change: transform, opacity;
   }
   /* The stage clips the stack and fades its ends, so blocks slide out under the title and the bottom zone instead of colliding. */
   .rd-stage {
@@ -519,7 +529,7 @@
     overflow: hidden;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 32px, #000 calc(100% - 40px), transparent 100%);
-    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 600ms both;
+    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 600ms backwards;
   }
   .rd-stack {
     position: absolute;
@@ -528,33 +538,44 @@
     right: var(--space-1);
   }
   /*
-   * Every block is laid out at the resting size, at 1/--rd-s of the column, and the focused one is scaled up by --rd-s: a uniform
-   * scale keeps every line break where it was, so focus never reflows text. Position, scale, opacity and blur are written per
-   * frame by use-stack-motion (transform, opacity and filter only).
+   * Every block is laid out at the FOCUSED reading size (the type-3 step, the full column) and the ones out of focus are scaled
+   * DOWN by 1/--rd-s: the paragraph being read is never stretched, so it renders at its native font size. A uniform scale keeps
+   * every line break where it was, so focus never reflows text. Position, scale, opacity and blur are written per frame by
+   * use-stack-motion (transform, opacity and filter only); at rest the focused block has no scale, only a whole-pixel translate.
+   * Reduced motion has --rd-s of 1 and the body step, so everything is one size.
    */
+  .rd-stage {
+    --rd-fs: var(--type-3);
+  }
+  .rd-stage[data-reduced="true"] {
+    --rd-fs: var(--type-1);
+  }
   .rd-block {
     position: absolute;
     top: 0;
     left: 0;
-    width: calc(100% / var(--rd-s, 1));
+    width: 100%;
     margin: 0;
     transform-origin: 0 0;
     color: var(--ink);
+    font-size: var(--rd-fs);
   }
   /*
-   * Outline to fill. An unpainted word is a glyph outline (transparent fill, a hairline stroke); a painted one fills in and the
-   * stroke fades. The stroke is set in resting-size px, so it reads as about 0.75 px once the focused block is scaled up.
+   * Outline to fill. An unpainted word is a glyph outline (transparent fill, a hairline stroke); a painted one fills in solid, in
+   * the ink itself, and has no stroke at all (a transparent stroke would still soften the glyph edge).
    */
   .rd-w {
     color: rgb(246 226 232 / 0);
-    -webkit-text-stroke: calc(0.75px / var(--rd-s, 1)) rgb(246 226 232 / 0.62);
+    -webkit-text-stroke: 0.75px rgb(246 226 232 / 0.62);
     transition:
       color 420ms var(--rd-ease),
+      -webkit-text-stroke-width 420ms var(--rd-ease),
       -webkit-text-stroke-color 420ms var(--rd-ease);
   }
   .rd-w[data-p] {
-    color: rgb(246 226 232 / 0.9);
-    -webkit-text-stroke-color: rgb(246 226 232 / 0);
+    color: var(--ink);
+    -webkit-text-stroke-width: 0;
+    -webkit-text-stroke-color: transparent;
   }
   /* em: Gambarino ships only its 400 roman, so the slant is the browser's; strong stays 400 and takes the full ink. */
   .rd-block em {
@@ -567,20 +588,21 @@
     color: var(--ink);
   }
   .rd-quote {
-    padding-left: var(--space-3);
-    border-left: 1px solid var(--ink-faint);
+    padding-left: calc(var(--space-3) * var(--rd-s, 1));
+    border-left: calc(1px * var(--rd-s, 1)) solid var(--ink-faint);
   }
   .rd-quote .rd-w[data-p] {
     color: var(--ink-muted);
   }
+  /* Sizes that are meant to read at rest size are set up by --rd-s, which the block's resting scale then takes back out. */
   .rd-sub {
-    font-size: var(--type-2);
+    font-size: calc(var(--type-2) * var(--rd-s, 1));
   }
   .rd-break {
-    width: var(--space-8);
+    width: calc(var(--space-8) * var(--rd-s, 1));
     height: 0;
     border: 0;
-    border-top: 1px solid var(--ink-faint);
+    border-top: calc(1px * var(--rd-s, 1)) solid var(--ink-faint);
   }
   /* Reduced motion: every word is filled from the start, so there is nothing to fade. */
   .rd-stage[data-reduced="true"] .rd-w {
@@ -597,7 +619,7 @@
     gap: var(--space-3);
     padding: var(--page-pad) var(--page-pad) calc(var(--bottom-pad) + var(--control-h) + var(--space-3));
     text-align: center;
-    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both;
+    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 350ms backwards;
   }
   .ob-hw-line {
     max-width: 22em;
@@ -734,11 +756,11 @@
     }
     /* Fade only: a small stagger, no travel, rotation or blur. The holds stay the same. */
     .ob-line[data-on="true"] .ob-letter {
-      animation: ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) both;
+      animation: ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) backwards;
     }
     .ob-line[data-on="true"][data-exit="true"] .ob-letter {
       animation:
-        ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) both,
+        ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) backwards,
         ob-letter-fade-out 450ms ease-in calc(var(--exit-at) + var(--xdelay)) forwards;
     }
     .ob-cta,
@@ -810,7 +832,7 @@
   to {
     opacity: 1;
     transform: none;
-    filter: blur(0);
+    filter: none;
   }
 }
 @keyframes turn {
@@ -820,7 +842,7 @@
   }
   to {
     opacity: 1;
-    filter: blur(0);
+    filter: none;
   }
 }
 @keyframes fade {

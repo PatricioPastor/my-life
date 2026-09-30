@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
-import { layoutStack, panRatios, type LayoutParams, type StackBlock } from "./layout"
+import { layoutStack, panRatios, snapLayout, type LayoutParams, type StackBlock } from "./layout"
 import { isSettled, settleProfile, stepSettle, type SettleState } from "./settle"
 
-/** How much the focused paragraph grows: two steps of the 1.25 type scale, so 18 px body reads at 28 px. */
+/** How much bigger the focused size is than the resting one: two steps of the 1.25 type scale (18 px body at rest, 28 px focused). */
 export const FOCUS_SCALE = 1.5625
 /** Opacity and blur of a paragraph that is not in focus. */
 export const DIM_OPACITY = 0.34
@@ -37,6 +37,10 @@ interface Options {
  * Drives the stack with a spring, straight on the DOM: one transform on the stack, and transform / opacity / filter on the blocks
  * near the focus. Nothing here goes through React state, and nothing reads layout while it animates: the block heights are
  * measured once (and again when the stage, a block or the font changes).
+ *
+ * While the spring moves, offsets are fractional 3D translates (smooth, compositor friendly). When it settles, the stack is
+ * written once more for rest: offsets snapped to whole device pixels, plain 2D translates (no 3D layer), no scale on the focused
+ * block (it renders at its native font size), exact opacity and `filter: none`. A block is never given `will-change`.
  */
 export function useStackMotion({ stage, stack, blocks, readable, target, pan, reduced, onMeasure }: Options) {
   const spring = useRef<SettleState>({ x: target, v: 0 })
@@ -49,7 +53,9 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     onMeasureRef.current = onMeasure
   })
   const raf = useRef(0)
-  const apply = useRef<(f: number) => void>(() => {})
+  const apply = useRef<(f: number, rest: boolean) => void>(() => {})
+  // Whether the springs have settled, so a re-measure while at rest writes the snapped layout again.
+  const atRest = useRef(false)
   const measure = useRef<() => void>(() => {})
 
   // Measure and paint at the current position. Layout effect: the first frame is already in place.
@@ -62,16 +68,20 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     let params: LayoutParams = { scale, gap: GAP_PX, focusGap: FOCUS_GAP_PX, line: 0, top: EDGE_TOP_PX, bottom: 0 }
     const last: { t: string; o: string; f: string }[] = readable.map(() => ({ t: "", o: "", f: "" }))
     let lastStack = ""
+    // Where the stack starts on the page, so resting offsets can land on the page's pixel grid.
+    let origin = 0
 
-    const write = (f: number) => {
+    const write = (f: number, rest: boolean) => {
       const els = blocks.current
-      const layout = layoutStack(
+      const moving = layoutStack(
         stackBlocks,
         f,
         params,
         pans.current.map((s) => s.x),
       )
-      const y = `translate3d(0, ${layout.y.toFixed(2)}px, 0)`
+      const layout = rest ? snapLayout(moving, window.devicePixelRatio || 1, origin) : moving
+      stackEl.dataset.settled = rest ? "true" : "false"
+      const y = rest ? `translate(0, ${layout.y.toFixed(4)}px)` : `translate3d(0, ${layout.y.toFixed(2)}px, 0)`
       if (y !== lastStack) {
         stackEl.style.transform = y
         lastStack = y
@@ -80,8 +90,11 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
         const el = els[i]
         if (!el) return
         const w = layout.weights[i]!
-        const t = `translate3d(0, ${layout.tops[i]!.toFixed(2)}px, 0) scale(${layout.scales[i]!.toFixed(4)})`
-        const o = (b.readable >= 0 ? DIM_OPACITY + (1 - DIM_OPACITY) * w : el.tagName === "HR" ? BREAK_OPACITY : STILL_OPACITY).toFixed(3)
+        const bs = layout.scales[i]!
+        const t = rest
+          ? `translate(0, ${layout.tops[i]}px)${bs === 1 ? "" : ` scale(${bs.toFixed(4)})`}`
+          : `translate3d(0, ${layout.tops[i]!.toFixed(2)}px, 0) scale(${bs.toFixed(4)})`
+        const o = w === 1 ? "1" : (b.readable >= 0 ? DIM_OPACITY + (1 - DIM_OPACITY) * w : el.tagName === "HR" ? BREAK_OPACITY : STILL_OPACITY).toFixed(3)
         const blur = b.readable >= 0 && !reduced ? DIM_BLUR_PX * (1 - w) : 0
         const fl = blur < 0.05 ? "none" : `blur(${blur.toFixed(2)}px)`
         const c = last[i]!
@@ -95,6 +108,7 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
       const els = blocks.current
       stackBlocks = readable.map((r, i) => ({ height: els[i]?.offsetHeight ?? 0, readable: r }))
       const rect = stageEl.getBoundingClientRect()
+      origin = rect.top
       // The reading line is a share of the viewport, measured from the top of the stage.
       const viewport = stageEl.closest<HTMLElement>(".ob")?.clientHeight || window.innerHeight
       params = { ...params, scale, line: viewport * READING_LINE - rect.top, bottom: stageEl.clientHeight - EDGE_BOTTOM_PX }
@@ -104,7 +118,7 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     apply.current = write
     measure.current = () => {
       read()
-      write(spring.current.x)
+      write(spring.current.x, atRest.current)
     }
     measure.current()
 
@@ -116,7 +130,13 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     fonts?.addEventListener?.("loadingdone", onFonts)
     void fonts?.ready?.then(onFonts)
     window.addEventListener("resize", onFonts)
+    // The stage rises in (a transform animation) while it is first measured: measure again where it really ends up.
+    const onRise = (e: AnimationEvent) => {
+      if (e.target === stageEl) measure.current()
+    }
+    stageEl.addEventListener("animationend", onRise)
     return () => {
+      stageEl.removeEventListener("animationend", onRise)
       observer?.disconnect()
       fonts?.removeEventListener?.("loadingdone", onFonts)
       window.removeEventListener("resize", onFonts)
@@ -130,6 +150,7 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
     if (!pans.current[target]) pans.current[target] = { x: pan, v: 0 }
     const profile = settleProfile(reduced)
     cancelAnimationFrame(raf.current)
+    atRest.current = false
     let prev = performance.now()
     const frame = (t: number) => {
       const dt = Math.min(0.05, Math.max(0, (t - prev) / 1000))
@@ -144,7 +165,8 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
         moving = true
         return next
       })
-      apply.current(spring.current.x)
+      atRest.current = !moving
+      apply.current(spring.current.x, !moving)
       if (moving) raf.current = requestAnimationFrame(frame)
     }
     raf.current = requestAnimationFrame(frame)

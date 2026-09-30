@@ -17,7 +17,7 @@ interface ReaderStageProps {
 }
 
 /**
- * The stack of blocks. Every block is laid out small and scaled up when it takes the focus, so the line breaks never move;
+ * The stack of blocks. Every block is laid out at the focused size and scaled down when it leaves the focus, so the paragraph being read renders at its native size;
  * `useStackMotion` slides the stack on a spring so the focused block lands on the reading line.
  */
 export function ReaderStage({ blocks, readables, state, reduced, onMeasure }: ReaderStageProps) {
