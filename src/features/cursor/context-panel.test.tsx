@@ -82,6 +82,16 @@ describe("ContextPanel", () => {
     expect(final?.textContent).toBe(HINT_TEXT)
   })
 
+  it("keeps the panel text reachable by screen readers", () => {
+    const { container } = render(<ContextPanel target={STAR} />)
+    act(() => vi.advanceTimersByTime(DWELL_MS + 10))
+    const region = container.querySelector("[aria-live]")
+    expect(region?.textContent).toBe(HINT_TEXT)
+    expect(region?.closest("[aria-hidden='true']")).toBeNull()
+    fireEvent.keyDown(window, { key: "Control" })
+    expect(region?.textContent).toBe(`Historias. ${STAR.context}`)
+  })
+
   it("cancels the decode when it unmounts", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }))
     const { unmount } = render(<ContextPanel target={STAR} />)

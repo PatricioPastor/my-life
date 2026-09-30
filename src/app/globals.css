@@ -486,7 +486,7 @@
 }
 .cp-final {
   display: block;
-  visibility: hidden;
+  color: transparent;
 }
 .cp-overlay {
   position: absolute;
