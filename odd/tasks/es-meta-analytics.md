@@ -86,6 +86,39 @@ The user asked for these changes:
 - 2026-09-30: T3 done. Allow-listed `track` port, Vercel Analytics, Speed Insights, env-gated GA4, journey wiring. RED: missing modules and 2 failing journey tests; GREEN: 209 passing, `/` still static.
 - 2026-09-30: T4 done. Dark halo replaces the additive gas boost, porcelain cores, stronger anchors, ember threshold 0.6 and density 0.46. Verified with 1440x900 and 390x844 screenshots. Final: lint, typecheck, 213 tests, build all pass.
 
+## Verification evidence
+
+- Writer:
+  - `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` passed 213/213 across 30 files.
+  - `pnpm build` passed. `/`, `/icon`, `/opengraph-image` and `/.well-known/security.txt` are all static.
+  - `curl` on the dev server: `security.txt` is `text/plain` with four fields, and the four security headers are present.
+- Parent spot check: `pnpm test` passed 213/213. The only tracked env file is `.env.example`. The `stars-sky-desktop.png` screenshot shows the four facet stars white-hot, with labels legible.
+- RDD slice `f81921f..8e89242` (ember galaxy plus this feature):
+  - Assessed **high** (a `security.txt` route).
+  - Consent granted by the user.
+  - Four lenses (risk, resilience, readability, reliability) → **approved**.
+  - Acknowledged; authority burned (lineage `review-0f7e255762563aa9`).
+  - Reviewed boundary is now `8e89242`.
+
+## Review follow-ups
+
+Accepted: correctness of this feature's own deliverables. They are fixed in `odd/tasks/magnetic-cursor.md` T0.
+
+- `R4/R3-security-txt-expires-frozen-at-build`: `force-static` freezes `Expires` at build time. Revalidate periodically.
+- `R4/R3-metadatabase-unvalidated-url`: a bare host in `NEXT_PUBLIC_SITE_URL` makes `new URL` throw and takes down every route. Validate and normalize.
+- `R2-security-contact-duplicates-owner-handle`: derive the contact from `OWNER_HANDLE`.
+- `R3-gate-submitted-in-effect-double-fires`: move `gate_submitted` to the submit path.
+
+Advisory, not accepted yet:
+
+- `R2-star-hex-gold-name-collision`: `STAR_HEX.gold` is `#FFC15E` while `PALETTE.gold` is `#F3B61F`.
+- `R2-portal-hex-literals-duplicated`: hex literals are repeated instead of using `PORTAL`; the OG image uses the off-palette `#F7F1E8`.
+- `R2-default-startints-dead`: the default tint list is never used.
+- `R2-facetid-owned-by-analytics`: `FacetId` lives in analytics instead of facets.
+- `R2-task-doc-drift`: this doc omits `interest-cohort=()`.
+- `R3-star-tints-uniform-wiring-untested`: the tint upload into the uniform is untested.
+- `R2/R3-anchor-boost-assumes-first-four`: the shader assumes `i < 4` are the anchors. The magnetic-cursor feature replaces this with an explicit anchor count and focus uniforms.
+
 ## Next step
 
-T1–T4 done; awaiting user review before any push.
+T0 hardening and the magnetic cursor, in `odd/tasks/magnetic-cursor.md`. The user pre-authorized pushing everything to `main` when done.
