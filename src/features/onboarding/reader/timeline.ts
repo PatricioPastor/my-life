@@ -12,8 +12,8 @@ export interface TimingOptions {
   paragraphPause: number
 }
 
-/** About 220 wpm is 272 ms a word; the pauses are what make it read like a voice instead of a ticker. */
-export const DEFAULT_TIMING: TimingOptions = { wpm: 220, clausePause: 120, sentencePause: 300, paragraphPause: 500 }
+/** About 300 wpm is 200 ms a word; the pauses are what make it read like a voice instead of a ticker. */
+export const DEFAULT_TIMING: TimingOptions = { wpm: 300, clausePause: 90, sentencePause: 220, paragraphPause: 300 }
 
 /** One block of the story on the reading timeline. Times are ms from the moment the block takes the focus. */
 export interface ReadingEntry {

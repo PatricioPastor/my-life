@@ -620,6 +620,13 @@
     border: 0;
     border-top: calc(1px * var(--rd-s, 1)) solid var(--ink-faint);
   }
+  /* A paragraph the visitor completed by hand fills its remaining words quickly (about 150 ms), not at reading pace. */
+  .rd-block[data-rush] .rd-w {
+    transition-duration: 150ms;
+  }
+  .rd-block[data-rush] .rd-w::before {
+    transition: opacity 150ms var(--rd-ease);
+  }
   /* Reduced motion: every word is filled from the start, so there is nothing to fade. */
   .rd-stage[data-reduced="true"] .rd-w,
   .rd-stage[data-reduced="true"] .rd-w::before {
@@ -700,6 +707,46 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* In the story the bottom zone lets taps through: a tap anywhere outside its controls is a tap on the reader. */
+  .ob-story .ob-foot {
+    pointer-events: none;
+  }
+  .ob-story .ob-foot > * {
+    pointer-events: auto;
+  }
+  /*
+   * The hint to go on: Silkscreen, centred between the progress and Saltar on the same baseline and control height. It fades in
+   * only after the paragraph is painted and then breathes slowly (opacity, never a blink). Continuar takes its place on the last one.
+   */
+  .ob-story .ob-foot > .rd-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    min-height: var(--control-h);
+    margin: 0;
+    color: var(--ink-muted);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-50%);
+    pointer-events: none;
+    transition: opacity 600ms var(--rd-ease, ease);
+  }
+  .ob-story .ob-foot > .rd-hint[data-on="true"] {
+    opacity: 1;
+    transition-delay: 350ms;
+  }
+  .rd-hint-text {
+    display: block;
+  }
+  .rd-hint[data-on="true"] .rd-hint-text {
+    animation: rd-breathe 2.4s ease-in-out 1s infinite;
+  }
+  /* A tap anywhere on the reader goes on; iOS only fires the click on something that looks clickable. */
+  .ob-scroll {
+    cursor: pointer;
+  }
   .ob-hw .ob-continue {
     animation: none;
   }
@@ -771,6 +818,10 @@
     .rd-ring-fill {
       transition: none;
     }
+    /* The hint stays still: it fades in and out, it does not breathe. */
+    .rd-hint[data-on="true"] .rd-hint-text {
+      animation: none;
+    }
     /* Fade only: a small stagger, no travel, rotation or blur. The holds stay the same. */
     .ob-line[data-on="true"] .ob-letter {
       animation: ob-letter-fade 500ms ease-out calc(var(--delay) * 0.3) backwards;
@@ -792,6 +843,15 @@
   }
 }
 
+@keyframes rd-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @keyframes ob-letter-in {
   from {
     opacity: 0;

@@ -9,6 +9,8 @@ interface ReaderBlockProps {
   /** Every word filled from the start (reduced motion). */
   fill: boolean
   active: boolean
+  /** The visitor completed this paragraph by hand: its remaining words fill in quickly instead of at reading pace. */
+  rush: boolean
   blockRef: (el: HTMLElement | null) => void
 }
 
@@ -41,17 +43,17 @@ function Words({ runs, painted, fill }: { runs: readonly InlineRun[]; painted: n
  * One block of the story. Text blocks are split into word spans so painting is a class flip per word; the text stays whole
  * and in order in the DOM, so a screen reader reads it as plain text. React text nodes only: nothing is parsed as HTML.
  */
-export const ReaderBlock = memo(function ReaderBlock({ block, painted, fill, active, blockRef }: ReaderBlockProps) {
+export const ReaderBlock = memo(function ReaderBlock({ block, painted, fill, active, rush, blockRef }: ReaderBlockProps) {
   switch (block.type) {
     case "paragraph":
       return (
-        <p ref={blockRef} className="rd-block t-body" aria-current={active ? "true" : undefined}>
+        <p ref={blockRef} className="rd-block t-body" aria-current={active ? "true" : undefined} data-rush={rush ? "true" : undefined}>
           <Words runs={block.runs} painted={painted} fill={fill} />
         </p>
       )
     case "quote":
       return (
-        <blockquote ref={blockRef} className="rd-block rd-quote t-body" aria-current={active ? "true" : undefined}>
+        <blockquote ref={blockRef} className="rd-block rd-quote t-body" aria-current={active ? "true" : undefined} data-rush={rush ? "true" : undefined}>
           <Words runs={block.runs} painted={painted} fill={fill} />
         </blockquote>
       )

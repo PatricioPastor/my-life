@@ -3,21 +3,20 @@ import { autoPanStep, panSteps } from "./layout"
 /**
  * The focused-reading state machine. Pure: time is injected through `tick`, so nothing here knows about timers or the DOM.
  *
- * One paragraph is active. It paints word by word on its timeline; when it is done and has rested for `settleMs`, the next
- * one takes the focus. A user gesture (`goto`, `next`, `prev`) overrides that: the paragraph being left is completed at once.
+ * One paragraph is active. It paints word by word on its timeline and then waits: nothing ever advances by itself. The visitor
+ * moves on with a `tap` (complete the paragraph if it is still painting, otherwise go to the next one) or with `next` / `prev`
+ * (wheel, swipe, arrows); the paragraph being left is always completed.
  */
 
 export interface ParagraphPlan {
   /** When each word starts to paint, in ms from the moment the paragraph took the focus. */
   wordStarts: readonly number[]
-  /** When the paragraph is done, in the same time base. */
+  /** When the paragraph is done (its last word plus a closing beat), in the same time base. */
   endMs: number
 }
 
 export interface ReaderPlan {
   paragraphs: readonly ParagraphPlan[]
-  /** How long a finished paragraph rests before the next one takes over by itself. */
-  settleMs: number
 }
 
 export interface ReaderState {
@@ -29,10 +28,12 @@ export interface ReaderState {
   /** The `now` of the last tick, or null until the first tick after a focus change. */
   lastNow: number | null
   /**
-   * `auto`: the active paragraph is painting on its own and will hand over by itself.
-   * `manual`: it is already read (the visitor came back to it, or it is the last one): it stays put until a gesture.
+   * `auto`: the active paragraph is still painting on its own rhythm.
+   * `manual`: it is done (or the visitor completed it, or came back to it): it stays put until a gesture.
    */
   mode: "auto" | "manual"
+  /** The paragraph the visitor completed by hand while it was painting (its rest fills in quickly), or -1. */
+  rush: number
   /** Every word of the story is painted. */
   completed: boolean
   /** Pan step inside the active paragraph, when it is taller than the reading area (0 is its start). */
@@ -48,6 +49,8 @@ export type ReaderEvent =
   | { type: "goto"; index: number }
   | { type: "next" }
   | { type: "prev" }
+  /** A tap, click, Enter or Space: complete the active paragraph while it paints, otherwise go on. */
+  | { type: "tap" }
   | { type: "measure"; ratios: readonly number[] }
 
 /** A tick after a stall (a hidden tab, a throttled timer) advances the clock by at most this, so it never leaps ahead. */
@@ -69,6 +72,7 @@ export function initReader(plan: ReaderPlan): ReaderState {
     clock: 0,
     lastNow: null,
     mode: plan.paragraphs.length > 0 && wordCount(plan, 0) > 0 ? "auto" : "manual",
+    rush: -1,
     completed: false,
     pan: 0,
     follow: 0,
@@ -89,6 +93,11 @@ export function readerProgress(plan: ReaderPlan, s: ReaderState): number {
 
 export function canContinue(plan: ReaderPlan, s: ReaderState): boolean {
   return readerProgress(plan, s) === 100
+}
+
+/** The focused paragraph is fully painted and its closing beat is over: the moment to invite a tap. */
+export function activeDone(plan: ReaderPlan, s: ReaderState): boolean {
+  return plan.paragraphs.length > 0 && s.mode === "manual" && isRead(plan, s.painted, s.activeIndex)
 }
 
 /** How many words of a paragraph have started by `clock`. */
@@ -115,6 +124,7 @@ function activate(plan: ReaderPlan, s: ReaderState, painted: readonly number[], 
     lastNow: null,
     pan,
     follow: 0,
+    rush: -1,
     mode: isRead(plan, painted, index) ? "manual" : "auto",
   })
 }
@@ -140,30 +150,34 @@ function tick(plan: ReaderPlan, s: ReaderState, now: number): ReaderState {
   }
   if (s.mode === "manual") return s
 
-  for (;;) {
-    const p = plan.paragraphs[s.activeIndex]!
-    const n = paintedAt(p.wordStarts, s.clock)
-    if (n > s.painted[s.activeIndex]!) {
-      const painted = s.painted.slice()
-      painted[s.activeIndex] = n
-      s = { ...s, painted }
-    }
-    // Keep the word being painted in view: pan when it reaches the edge of the reading area.
-    const want = autoPanStep(s.ratios[s.activeIndex] ?? 1, s.painted[s.activeIndex]! / p.wordStarts.length)
-    if (want > s.follow) s = { ...s, follow: want, pan: Math.max(s.pan, want) }
-    if (s.clock < p.endMs) break
-    const last = s.activeIndex === plan.paragraphs.length - 1
-    if (last) {
-      s = { ...s, mode: "manual", painted: complete(plan, s.painted, s.activeIndex) }
-      break
-    }
-    if (s.clock < p.endMs + plan.settleMs) break
-    // Rested long enough: hand over, keeping the clock's remainder so the rhythm does not drift.
-    const carry = s.clock - (p.endMs + plan.settleMs)
-    s = { ...activate(plan, s, complete(plan, s.painted, s.activeIndex), s.activeIndex + 1), lastNow: now, clock: carry }
-    if (s.mode === "manual") break
+  const p = plan.paragraphs[s.activeIndex]!
+  const n = paintedAt(p.wordStarts, s.clock)
+  if (n > s.painted[s.activeIndex]!) {
+    const painted = s.painted.slice()
+    painted[s.activeIndex] = n
+    s = { ...s, painted }
   }
+  // Keep the word being painted in view: pan when it reaches the edge of the reading area.
+  const want = autoPanStep(s.ratios[s.activeIndex] ?? 1, s.painted[s.activeIndex]! / p.wordStarts.length)
+  if (want > s.follow) s = { ...s, follow: want, pan: Math.max(s.pan, want) }
+  // Painted and past its closing beat: it waits here for the visitor, however long that takes.
+  if (s.clock >= p.endMs) s = { ...s, mode: "manual", painted: complete(plan, s.painted, s.activeIndex) }
   return withCompleted(plan, s)
+}
+
+/** Paint what is left of the active paragraph at once (the view fills it in quickly) and let it wait. */
+function finishActive(plan: ReaderPlan, s: ReaderState): ReaderState {
+  return withCompleted(plan, { ...s, painted: complete(plan, s.painted, s.activeIndex), mode: "manual", rush: s.activeIndex })
+}
+
+/** Forward: pan down a tall paragraph first; then finish it if it is still painting; only then go to the next one. */
+function forward(plan: ReaderPlan, s: ReaderState, panFirst: boolean): ReaderState {
+  if (plan.paragraphs.length === 0) return s
+  if (panFirst && s.pan < stepsOf(s, s.activeIndex)) return { ...s, pan: s.pan + 1 }
+  if (!isRead(plan, s.painted, s.activeIndex)) return finishActive(plan, s)
+  if (s.activeIndex < plan.paragraphs.length - 1) return goto(plan, s, s.activeIndex + 1)
+  // The last paragraph is read: there is nowhere to go.
+  return s.mode === "manual" ? s : { ...s, mode: "manual" }
 }
 
 export function readerStep(plan: ReaderPlan, s: ReaderState, event: ReaderEvent): ReaderState {
@@ -182,21 +196,16 @@ export function readerStep(plan: ReaderPlan, s: ReaderState, event: ReaderEvent)
     case "prev":
       if (plan.paragraphs.length > 0 && s.pan > 0) return { ...s, pan: s.pan - 1 }
       return goto(plan, s, s.activeIndex - 1)
-    case "next": {
-      if (plan.paragraphs.length === 0) return s
-      // Pan down the paragraph first; only once its end is in view does the next gesture move on.
-      if (s.pan < stepsOf(s, s.activeIndex)) return { ...s, pan: s.pan + 1 }
-      if (s.activeIndex < plan.paragraphs.length - 1) return goto(plan, s, s.activeIndex + 1)
-      // On the last paragraph there is nowhere to go: finish painting it instead.
-      const painted = complete(plan, s.painted, s.activeIndex)
-      if (painted === s.painted && s.mode === "manual") return s
-      return withCompleted(plan, { ...s, painted, mode: "manual" })
-    }
+    case "next":
+      return forward(plan, s, true)
+    case "tap":
+      // A tap on a paragraph that is still painting finishes it at once (even a tall one); on a finished one it moves on.
+      return forward(plan, s, plan.paragraphs.length > 0 && isRead(plan, s.painted, s.activeIndex))
   }
 }
 
 /**
- * Milliseconds until the next moment the state changes by itself (a word, the end of the paragraph, the hand-over),
+ * Milliseconds until the next moment the state changes by itself (a word, or the end of the paragraph),
  * or null when nothing will: the caller sleeps that long and ticks. Zero means "tick now".
  */
 export function nextDueMs(plan: ReaderPlan, s: ReaderState): number | null {
@@ -204,9 +213,6 @@ export function nextDueMs(plan: ReaderPlan, s: ReaderState): number | null {
   if (s.lastNow === null) return 0
   const p = plan.paragraphs[s.activeIndex]!
   const k = s.painted[s.activeIndex]!
-  let at: number
-  if (k < p.wordStarts.length) at = p.wordStarts[k]!
-  else if (s.clock < p.endMs) at = p.endMs
-  else at = p.endMs + plan.settleMs
+  const at = k < p.wordStarts.length ? p.wordStarts[k]! : p.endMs
   return Math.max(0, at - s.clock)
 }

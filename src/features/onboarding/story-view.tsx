@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react"
 import { track } from "@/shared/analytics"
 import type { Story } from "@/shared/content"
 import { FilmGrain } from "./film-grain"
-import { ReaderStage, ReadingProgress, useReader, useReaderGestures, useReducedMotion } from "./reader"
+import { ReaderStage, ReadingProgress, useCoarsePointer, useReader, useReaderGestures, useReducedMotion } from "./reader"
 
 interface StoryViewProps {
   story: Story
@@ -26,6 +26,9 @@ export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
   const reduced = useReducedMotion()
   const reader = useReader(story.blocks, { startDelayMs: READ_START_MS })
   const { canContinue } = reader
+  const coarse = useCoarsePointer()
+  // The invitation to go on: once the paragraph is fully painted, except on the last one, where Continuar takes its place.
+  const hintOn = reader.done && !canContinue && !away
 
   // FLIP: the title is laid out in its final place, then animated from the CTA's rect (centre and width).
   useLayoutEffect(() => {
@@ -48,11 +51,11 @@ export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
     return () => anim?.cancel()
   }, [from])
 
-  // The surface takes the keyboard (it is focusable, not a tab stop) and owns wheel, swipe and keys while it is on stage.
+  // The surface takes the keyboard (it is focusable, not a tab stop) and owns wheel, swipe, taps and keys while it is on stage.
   useEffect(() => {
     surfaceRef.current?.focus({ preventScroll: true })
   }, [])
-  useReaderGestures(surfaceRef, reader.step, !away)
+  useReaderGestures(surfaceRef, { onStep: reader.step, onTap: reader.tap }, !away)
 
   // Finishing the reading is the one thing worth knowing about it: once, with no payload.
   const reported = useRef(false)
@@ -76,6 +79,9 @@ export function StoryView({ story, from, away, onContinue }: StoryViewProps) {
       </div>
       <div className="ob-foot" data-away={away} inert={away}>
         <ReadingProgress value={reader.progress} />
+        <p className="rd-hint t-label" data-on={hintOn} aria-hidden={!hintOn}>
+          <span className="rd-hint-text">{coarse ? "Toca para continuar" : "Haz clic para continuar"}</span>
+        </p>
         <button
           type="button"
           className="ob-continue t-label press"

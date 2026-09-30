@@ -48,12 +48,19 @@ describe("readingTimeline", () => {
     expect(b!.wordStarts[1]).toBeLessThan(250 * 2)
   })
 
-  it("reads at about 220 words per minute by default", () => {
-    const words = Array.from({ length: 220 }, () => "abcde").join(" ")
+  it("reads at about 300 words per minute by default: 200 ms for an average word", () => {
+    const words = Array.from({ length: 300 }, () => "abcde").join(" ")
     const [e] = readingTimeline([para(words)]).entries
-    const lastStart = e!.wordStarts[219]!
-    expect(lastStart).toBeGreaterThan(219 * 272 * 0.99)
-    expect(lastStart).toBeLessThan(219 * 273 * 1.01)
+    const lastStart = e!.wordStarts[299]!
+    expect(lastStart).toBeGreaterThan(299 * 200 * 0.99)
+    expect(lastStart).toBeLessThan(299 * 200 * 1.01)
+  })
+
+  it("keeps its pauses proportionally short by default: comma 90, full stop 220, paragraph end 300", () => {
+    expect(DEFAULT_TIMING).toEqual({ wpm: 300, clausePause: 90, sentencePause: 220, paragraphPause: 300 })
+    const [e] = readingTimeline([para("abcde, abcde. abcde")]).entries
+    expect(e!.wordStarts).toEqual([0, 200 + 90, 400 + 90 + 220])
+    expect(e!.endMs).toBe(400 + 90 + 220 + 200 + 300)
   })
 
   it("reads a quote like a paragraph", () => {

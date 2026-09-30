@@ -1,5 +1,5 @@
 import { act, cleanup, render } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Block } from "@/shared/content"
 import { initReader, type ReaderPlan } from "./reader-machine"
 import { ReaderStage } from "./reader-stage"
@@ -17,7 +17,6 @@ const PLAN: ReaderPlan = {
     { wordStarts: [0, 100, 200, 300, 400], endMs: 600 },
     { wordStarts: [0, 100], endMs: 300 },
   ],
-  settleMs: 600,
 }
 
 const READABLES = [0, 1]
@@ -25,6 +24,9 @@ const stateWith = (painted: number[]) => ({ ...initReader(PLAN), painted })
 const ui = (painted: number[]) => <ReaderStage blocks={BLOCKS} readables={READABLES} state={stateWith(painted)} reduced={false} onMeasure={() => {}} />
 
 afterEach(cleanup)
+
+/** The stack springs to its first position on mount; painting is only compared once it is at rest. */
+const settled = () => vi.waitFor(() => expect(document.querySelector<HTMLElement>(".rd-stack")!.dataset.settled).toBe("true"))
 
 describe("painting a word", () => {
   it("keeps every word span mounted: the same nodes before and after", () => {
@@ -38,7 +40,7 @@ describe("painting a word", () => {
 
   it("only ever sets data-p on the word that was painted", async () => {
     const view = render(ui([1, 0]))
-    await act(async () => {})
+    await settled()
     const seen: string[] = []
     const observer = new MutationObserver((list) => {
       for (const m of list) seen.push(`${m.type}:${m.attributeName ?? ""}:${(m.target as Element).className}`)
@@ -54,7 +56,7 @@ describe("painting a word", () => {
 
   it("never touches the stack or the blocks (their compositing state is not a function of painting)", async () => {
     const view = render(ui([1, 0]))
-    await act(async () => {})
+    await settled()
     const stack = document.querySelector<HTMLElement>(".rd-stack")!
     const snapshot = () => [stack.getAttribute("style"), stack.dataset.settled, ...Array.from(document.querySelectorAll(".rd-block")).map((b) => b.getAttribute("style"))]
     const before = snapshot()

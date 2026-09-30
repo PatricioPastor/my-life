@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   canContinue,
   initReader,
+  activeDone,
   MAX_TICK_MS,
   nextDueMs,
   readerProgress,
@@ -11,13 +12,12 @@ import {
   type ReaderState,
 } from "./reader-machine"
 
-// Two paragraphs: 3 words over 500 ms, then 2 words over 300 ms. 600 ms of settle between them.
+// Two paragraphs: 3 words over 500 ms, then 2 words over 300 ms.
 const PLAN: ReaderPlan = {
   paragraphs: [
     { wordStarts: [0, 100, 200], endMs: 500 },
     { wordStarts: [0, 100], endMs: 300 },
   ],
-  settleMs: 600,
 }
 const THREE: ReaderPlan = {
   paragraphs: [
@@ -25,7 +25,6 @@ const THREE: ReaderPlan = {
     { wordStarts: [0, 100], endMs: 300 },
     { wordStarts: [0, 100], endMs: 300 },
   ],
-  settleMs: 600,
 }
 
 const run = (plan: ReaderPlan, events: ReaderEvent[], from: ReaderState = initReader(plan)) =>
@@ -57,26 +56,34 @@ describe("reader machine", () => {
   })
 
   it("never rounds up to 100 before every word is painted", () => {
-    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 300 }, (_, i) => i), endMs: 400 }], settleMs: 600 }
+    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 300 }, (_, i) => i), endMs: 400 }] }
     const s = run(plan, [tick(0), tick(298)])
     expect(s.painted[0]).toBe(299)
     expect(readerProgress(plan, s)).toBe(99)
   })
 
-  it("waits out the settle, then springs to the next paragraph by itself", () => {
+  it("never advances by itself: once a paragraph is painted the reader waits, however long", () => {
     let s = run(PLAN, [tick(0), tick(500)])
     expect(s.activeIndex).toBe(0)
     expect(s.painted[0]).toBe(3)
-    s = run(PLAN, [tick(1000)], s)
+    expect(s.mode).toBe("manual")
+    s = run(PLAN, [tick(1000), tick(1100), tick(60_000), tick(600_000)], s)
     expect(s.activeIndex).toBe(0)
-    s = run(PLAN, [tick(1100)], s)
-    expect(s.activeIndex).toBe(1)
-    expect(s.painted[1]).toBe(1)
-    expect(s.mode).toBe("auto")
+    expect(s.painted).toEqual([3, 0])
+    expect(nextDueMs(PLAN, s)).toBeNull()
+  })
+
+  it("reports a paragraph as done only once it is fully painted and its closing beat has passed", () => {
+    let s = run(PLAN, [tick(0), tick(250)])
+    expect(s.painted[0]).toBe(3)
+    expect(activeDone(PLAN, s)).toBe(false) // the last word just started: its beat is still running
+    s = run(PLAN, [tick(500)], s)
+    expect(activeDone(PLAN, s)).toBe(true)
+    expect(activeDone(PLAN, initReader(PLAN))).toBe(false)
   })
 
   it("completes the story on the last paragraph without advancing past it", () => {
-    let s = run(PLAN, [tick(0), tick(500), tick(1100)])
+    let s = run(PLAN, [tick(0), tick(500), { type: "tap" }])
     expect(s.activeIndex).toBe(1)
     s = run(PLAN, [tick(1200), tick(1400), tick(1500)], s)
     expect(s.painted).toEqual([3, 2])
@@ -123,10 +130,10 @@ describe("reader machine", () => {
     expect(s.activeIndex).toBe(0)
   })
 
-  it("next and prev move one paragraph and stay in range", () => {
+  it("next and prev move one paragraph (once it is painted) and stay in range", () => {
     let s = run(THREE, [{ type: "prev" }])
     expect(s.activeIndex).toBe(0)
-    s = run(THREE, [{ type: "next" }, { type: "next" }], s)
+    s = run(THREE, [{ type: "next" }, { type: "next" }, { type: "next" }, { type: "next" }], s)
     expect(s.activeIndex).toBe(2)
     s = run(THREE, [{ type: "goto", index: 99 }], s)
     expect(s.activeIndex).toBe(2)
@@ -135,7 +142,7 @@ describe("reader machine", () => {
   })
 
   it("next on the last paragraph finishes it instead of doing nothing", () => {
-    let s = run(PLAN, [tick(0), { type: "next" }, tick(10)])
+    let s = run(PLAN, [tick(0), { type: "next" }, { type: "next" }, tick(10)])
     expect(s.activeIndex).toBe(1)
     s = run(PLAN, [{ type: "next" }], s)
     expect(s.activeIndex).toBe(1)
@@ -163,16 +170,16 @@ describe("reader machine", () => {
     expect(s.painted[0]).toBe(3)
     expect(nextDueMs(PLAN, s)).toBe(250) // endMs 500 - clock 250
     s = run(PLAN, [tick(500)], s)
-    expect(nextDueMs(PLAN, s)).toBe(600)
+    expect(nextDueMs(PLAN, s)).toBeNull() // it waits for a tap now
   })
 
   it("has nothing to wake for once the story is complete", () => {
-    const s = run(PLAN, [{ type: "next" }, { type: "next" }])
+    const s = run(PLAN, [{ type: "next" }, { type: "next" }, { type: "next" }])
     expect(nextDueMs(PLAN, s)).toBeNull()
   })
 
   it("handles a story with nothing to read as already complete", () => {
-    const empty: ReaderPlan = { paragraphs: [], settleMs: 600 }
+    const empty: ReaderPlan = { paragraphs: [] }
     const s = initReader(empty)
     expect(readerProgress(empty, s)).toBe(100)
     expect(canContinue(empty, s)).toBe(true)
@@ -202,15 +209,15 @@ describe("reader machine: panning inside a tall paragraph", () => {
     expect(s.pan).toBe(2)
   })
 
-  it("advances only once the end is visible, completing the paragraph then", () => {
-    const s = measured([{ type: "next" }, { type: "next" }, { type: "next" }])
+  it("advances only once the end is visible and the paragraph is painted", () => {
+    const s = measured([{ type: "next" }, { type: "next" }, { type: "next" }, { type: "next" }])
     expect(s.activeIndex).toBe(1)
     expect(s.pan).toBe(0)
     expect(s.painted[0]).toBe(3)
   })
 
   it("prev pans back up first, then goes to the paragraph before, landing on its end", () => {
-    let s = measured([{ type: "next" }, { type: "next" }, { type: "next" }]) // now on paragraph 1
+    let s = measured([{ type: "next" }, { type: "next" }, { type: "next" }, { type: "next" }]) // now on paragraph 1
     s = run(PLAN, [{ type: "prev" }], s)
     expect(s.activeIndex).toBe(0)
     expect(s.pan).toBe(2)
@@ -222,7 +229,7 @@ describe("reader machine: panning inside a tall paragraph", () => {
   })
 
   it("on the last paragraph, pans to the end before it finishes the story", () => {
-    let s = run(PLAN, [{ type: "measure", ratios: [1, 1.5] }, { type: "next" }]) // on paragraph 1 (one step)
+    let s = run(PLAN, [{ type: "measure", ratios: [1, 1.5] }, { type: "next" }, { type: "next" }]) // on paragraph 1 (one step)
     s = run(PLAN, [{ type: "next" }], s)
     expect(s.pan).toBe(1)
     expect(canContinue(PLAN, s)).toBe(false)
@@ -231,7 +238,7 @@ describe("reader machine: panning inside a tall paragraph", () => {
   })
 
   it("follows the painting down the paragraph without forcing the visitor back afterwards", () => {
-    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }], settleMs: 600 }
+    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }] }
     let s = run(plan, [{ type: "measure", ratios: [3] }, tick(0)])
     expect(s.pan).toBe(0)
     s = run(plan, [tick(1000)], s)
@@ -246,7 +253,7 @@ describe("reader machine: panning inside a tall paragraph", () => {
   })
 
   it("resumes following the painting after a shrink then a grow", () => {
-    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }], settleMs: 600 }
+    const plan: ReaderPlan = { paragraphs: [{ wordStarts: Array.from({ length: 10 }, (_, i) => i * 100), endMs: 1200 }] }
     let s = run(plan, [{ type: "measure", ratios: [3] }, tick(0), tick(1000)])
     expect(s.pan).toBe(4)
     s = run(plan, [{ type: "measure", ratios: [1] }], s)
@@ -257,8 +264,85 @@ describe("reader machine: panning inside a tall paragraph", () => {
   })
 
   it("has nothing to pan on a paragraph that fits", () => {
-    const s = run(PLAN, [tick(0), { type: "next" }])
+    const s = run(PLAN, [tick(0), { type: "next" }, { type: "next" }])
     expect(s.activeIndex).toBe(1)
     expect(s.pan).toBe(0)
+  })
+})
+
+describe("reader machine: tap to continue", () => {
+  it("completes a paragraph that is still painting, and stays on it", () => {
+    const s = run(PLAN, [tick(0), tick(150), { type: "tap" }])
+    expect(s.activeIndex).toBe(0)
+    expect(s.painted).toEqual([3, 0])
+    expect(s.mode).toBe("manual")
+    expect(activeDone(PLAN, s)).toBe(true)
+    expect(readerProgress(PLAN, s)).toBe(60)
+  })
+
+  it("marks the paragraph as rushed, so the rest fills quickly, and clears it on the next focus", () => {
+    let s = run(PLAN, [tick(0), { type: "tap" }])
+    expect(s.rush).toBe(0)
+    s = run(PLAN, [{ type: "tap" }], s)
+    expect(s.activeIndex).toBe(1)
+    expect(s.rush).toBe(-1)
+  })
+
+  it("advances to the next paragraph when this one is done, painting it from its first word", () => {
+    let s = run(PLAN, [tick(0), tick(500), { type: "tap" }])
+    expect(s.activeIndex).toBe(1)
+    expect(s.painted).toEqual([3, 0])
+    expect(s.mode).toBe("auto")
+    s = run(PLAN, [tick(5000)], s)
+    expect(s.painted[1]).toBe(1)
+  })
+
+  it("takes two taps on an untouched paragraph: complete, then advance", () => {
+    const s = run(PLAN, [{ type: "tap" }])
+    expect(s.activeIndex).toBe(0)
+    expect(run(PLAN, [{ type: "tap" }], s).activeIndex).toBe(1)
+  })
+
+  it("counts a paragraph whose last word has started as done for the tap, even inside its closing beat", () => {
+    const s = run(PLAN, [tick(0), tick(250), { type: "tap" }])
+    expect(s.activeIndex).toBe(1)
+  })
+
+  it("does nothing on the last paragraph once it is fully painted", () => {
+    const s = run(PLAN, [{ type: "tap" }, { type: "tap" }, { type: "tap" }]) // complete 0, go to 1, complete 1
+    expect(s.activeIndex).toBe(1)
+    expect(canContinue(PLAN, s)).toBe(true)
+    expect(readerStep(PLAN, s, { type: "tap" })).toBe(s)
+  })
+
+  it("keeps the story complete and its progress exact through taps", () => {
+    let s = initReader(PLAN)
+    const seen: number[] = []
+    for (let i = 0; i < 4; i++) {
+      s = readerStep(PLAN, s, { type: "tap" })
+      seen.push(readerProgress(PLAN, s))
+    }
+    expect(seen).toEqual([60, 60, 100, 100])
+  })
+
+  it("a forward gesture (next) on a painting paragraph completes it first instead of skipping it", () => {
+    const s = run(PLAN, [tick(0), { type: "next" }])
+    expect(s.activeIndex).toBe(0)
+    expect(s.painted[0]).toBe(3)
+    expect(s.rush).toBe(0)
+    expect(run(PLAN, [{ type: "next" }], s).activeIndex).toBe(1)
+  })
+
+  it("is not undone by a late tick: a completed paragraph stays put", () => {
+    const s = run(PLAN, [tick(0), { type: "tap" }, tick(10_000)])
+    expect(s.activeIndex).toBe(0)
+    expect(s.painted[0]).toBe(3)
+  })
+
+  it("handles a story with nothing to read", () => {
+    const empty: ReaderPlan = { paragraphs: [] }
+    const s = initReader(empty)
+    expect(readerStep(empty, s, { type: "tap" })).toBe(s)
+    expect(activeDone(empty, s)).toBe(false)
   })
 })

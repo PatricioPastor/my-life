@@ -6,19 +6,32 @@ import { createWheelGate, normalizeWheelDelta } from "./wheel-gate"
 /** Finger travel (px) that counts as one swipe. */
 export const SWIPE_PX = 56
 
-const NEXT_KEYS = new Set(["ArrowDown", "PageDown", " "])
+const NEXT_KEYS = new Set(["ArrowDown", "PageDown"])
 const PREV_KEYS = new Set(["ArrowUp", "PageUp"])
+/** Enter and Space do what a tap does. */
+const TAP_KEYS = new Set(["Enter", " "])
 // A key that belongs to a control (Space on a button, arrows in a field) is never ours.
 const OWN_KEYS = "button, a, input, textarea, select, summary, [contenteditable='true']"
+// A tap on a control (or the progress) is that control's, not a tap on the story.
+const OWN_TAPS = "button, a, input, textarea, select, summary, [role='progressbar'], [contenteditable='true']"
+
+export interface ReaderGestureHandlers {
+  /** Wheel, swipe and arrows: one step, forward (1) or back (-1). */
+  onStep: (direction: 1 | -1) => void
+  /** A tap or click anywhere on the stage, Enter or Space. */
+  onTap: () => void
+}
 
 /**
- * Wheel, swipe and keys as one-paragraph-per-gesture steps. The surface swallows the page scroll (and its chaining) so the
- * story is moved by the reader only; a trackpad fling counts once (see the wheel gate).
+ * Wheel, swipe and keys as one-paragraph-per-gesture steps, and a tap (click, Enter, Space) to go on. The surface swallows the
+ * page scroll (and its chaining) so the story is moved by the reader only; a trackpad fling counts once (see the wheel gate).
  */
-export function useReaderGestures(surface: RefObject<HTMLElement | null>, onStep: (direction: 1 | -1) => void, enabled: boolean) {
+export function useReaderGestures(surface: RefObject<HTMLElement | null>, { onStep, onTap }: ReaderGestureHandlers, enabled: boolean) {
   const stepRef = useRef(onStep)
+  const tapRef = useRef(onTap)
   useEffect(() => {
     stepRef.current = onStep
+    tapRef.current = onTap
   })
 
   useEffect(() => {
@@ -57,10 +70,21 @@ export function useReaderGestures(surface: RefObject<HTMLElement | null>, onStep
       // A held key repeats: one press is one step, like one wheel gesture.
       if (e.repeat || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.target instanceof Element && e.target.closest(OWN_KEYS)) return
+      if (TAP_KEYS.has(e.key)) {
+        e.preventDefault()
+        tapRef.current()
+        return
+      }
       const direction = NEXT_KEYS.has(e.key) ? 1 : PREV_KEYS.has(e.key) ? -1 : 0
       if (direction === 0) return
       e.preventDefault()
       stepRef.current(direction)
+    }
+
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      if (e.target instanceof Element && e.target.closest(OWN_TAPS)) return
+      tapRef.current()
     }
 
     el.addEventListener("wheel", onWheel, { passive: false })
@@ -68,6 +92,7 @@ export function useReaderGestures(surface: RefObject<HTMLElement | null>, onStep
     el.addEventListener("touchmove", onTouchMove, { passive: false })
     el.addEventListener("touchend", onTouchEnd)
     el.addEventListener("touchcancel", onTouchEnd)
+    el.addEventListener("click", onClick)
     document.addEventListener("keydown", onKeyDown)
     return () => {
       el.removeEventListener("wheel", onWheel)
@@ -75,6 +100,7 @@ export function useReaderGestures(surface: RefObject<HTMLElement | null>, onStep
       el.removeEventListener("touchmove", onTouchMove)
       el.removeEventListener("touchend", onTouchEnd)
       el.removeEventListener("touchcancel", onTouchEnd)
+      el.removeEventListener("click", onClick)
       document.removeEventListener("keydown", onKeyDown)
     }
   }, [surface, enabled])

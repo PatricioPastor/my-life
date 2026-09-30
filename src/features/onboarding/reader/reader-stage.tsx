@@ -50,6 +50,7 @@ export function ReaderStage({ blocks, readables, state, reduced, onMeasure }: Re
               painted={r >= 0 ? state.painted[r]! : 0}
               fill={reduced}
               active={r === state.activeIndex}
+              rush={r >= 0 && r === state.rush}
               blockRef={setters[i]!}
             />
           )

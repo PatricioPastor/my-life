@@ -11,6 +11,7 @@ const story = (second = "second paragraph here"): Block[] => [
 describe("useReader story identity", () => {
   it("keeps the position and progress when the blocks are rebuilt with the same content", () => {
     const { result, rerender } = renderHook(({ blocks }) => useReader(blocks), { initialProps: { blocks: story() } })
+    act(() => result.current.next()) // completes the painting paragraph
     act(() => result.current.next())
     expect(result.current.state.activeIndex).toBe(1)
     const painted = result.current.state.painted
@@ -22,6 +23,7 @@ describe("useReader story identity", () => {
 
   it("starts over when the content really changes", () => {
     const { result, rerender } = renderHook(({ blocks }) => useReader(blocks), { initialProps: { blocks: story() } })
+    act(() => result.current.next())
     act(() => result.current.next())
     expect(result.current.state.activeIndex).toBe(1)
     rerender({ blocks: story("another story entirely") })

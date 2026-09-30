@@ -42,6 +42,20 @@ describe("text sharpness rules", () => {
     for (const r of css.match(/[^{}]*\.rd-w[^{}]*\{[^}]*\}/g) ?? []) expect(r).not.toMatch(/transition:[^;]*-webkit-text-stroke/)
   })
 
+  it("fills a hand-completed paragraph in about 150 ms", () => {
+    expect(rule(".rd-block[data-rush] .rd-w")).toMatch(/transition-duration:\s*150ms/)
+    expect(rule(".rd-block[data-rush] .rd-w::before")).toMatch(/opacity 150ms/)
+  })
+
+  it("breathes the hint slowly between 0.55 and 1 (never a blink), and keeps it still under reduced motion", () => {
+    expect(css).toMatch(/\.rd-hint\[data-on="true"\] \.rd-hint-text \{\s*animation: rd-breathe 2\.4s ease-in-out/)
+    const at = css.indexOf("@keyframes rd-breathe")
+    const frames = css.slice(at, css.indexOf("@keyframes ob-letter-in"))
+    expect(frames).toMatch(/opacity:\s*0\.55/)
+    expect(frames).toMatch(/opacity:\s*1/)
+    expect(rules('.rd-hint[data-on="true"] .rd-hint-text').some((r) => /animation:\s*none/.test(r))).toBe(true)
+  })
+
   it("does not hold a finished animation on the containers of text (fill-mode backwards only)", () => {
     // These three rules carry an `animation` shorthand: check it is there, so the guard cannot pass on an empty match.
     for (const s of [".rd-stage", ".ob-hw", ".ob-story"]) {

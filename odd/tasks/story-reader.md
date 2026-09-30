@@ -31,7 +31,8 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
 
 ## Decisions
 
-- **Reading rhythm: MIXED** (the user's choice).
+- **Reading rhythm: TAP TO CONTINUE** (changed from MIXED at the user's request, 2026-09-30; see "Per-word flicker, tap to continue"). The MIXED decision below is superseded.
+- ~~Reading rhythm: MIXED~~ (the user's first choice).
   - The focused paragraph paints itself at reading pace (~220 wpm, longer for long words, extra pauses at commas and periods).
   - When it finishes, the next paragraph springs into focus.
   - A user scroll, swipe or key snaps to any paragraph and instantly completes the one being left.
@@ -125,6 +126,15 @@ User: "se ve como titilando cada palabra ... la intro palabra por palabra en 2 s
   - Refuted: (a) `will-change` / `data-settled` toggling per word (MutationObserver over a whole first paragraph: 23 `data-p` flips and one stack write, `will-change: auto` throughout), (b) re-mounting (0 childList mutations), (d) snapLayout re-applying translates (one stack transform write per motion, none per word). Neighbour words (already painted, not yet painted) are pixel-identical while one word paints, before and after.
   - Fix: the outline is its own layer, `.rd-w::before` with `content: attr(data-t) / ""`, that fades with opacity (300 ms, 140 ms delay) while the fill layer (`.rd-w`, color only) fades in over 420 ms. The fill layer never has a stroke, so the resting word is solid ink with no stroke and no filter. `use-stack-motion` also stopped re-writing `data-settled` with the same value.
   - Guards: `painting.test.tsx` (same span nodes across a paint, only `data-p` mutates, stack and blocks untouched) and `sharpness.test.ts` (no stroke on the fill layer, outline fades by opacity, no stroke-width transition).
+
+### Tap to continue (same branch)
+
+- **Pace.** 300 wpm (200 ms for an average word, length scaling x0.7-1.9 kept), pauses comma/semicolon/colon 90 ms, full stop/question/exclamation/ellipsis 220 ms, paragraph end 300 ms.
+- **No auto-advance.** `paragraphDone` hand-over and `settleMs` are gone. A paragraph paints, then waits however long the visitor takes.
+- **Tap / click** anywhere on the stage outside buttons, links and the progress: while painting it completes the paragraph (the rest fills in ~150 ms via `data-rush`); once done it advances with the same snap spring. Enter and Space do the same. Wheel, swipe and ArrowDown/PageDown keep snap and pan: pan first if tall, then complete a painting paragraph, then advance. The bottom zone lets taps through (`pointer-events`), and the surface has `cursor: pointer` so iOS fires the click.
+- **Hint.** Silkscreen `t-label`, centred in the bottom zone (same baseline and `--control-h` as the progress and Saltar): "Toca para continuar" on `(pointer: coarse)`, "Haz clic para continuar" otherwise. It fades in (600 ms, 350 ms delay) only once the paragraph is done, breathes 0.55 to 1 over 2.4 s ease-in-out (static under reduced motion), and is hidden on the last paragraph, where Continuar (existing, at 100%) takes its place.
+- **Progress and `story_completed`** are unchanged.
+- **Evidence.** Machine, timeline, story-view and CSS-guard tests first (RED), then GREEN; Playwright Chromium 1440x900 and WebKit iPhone 13 (screenshots `tap-*.png`): hint centred at the same y as the progress and Saltar (828 on desktop, 616 on the phone, 9 px and 17 px clear of its neighbours at 390 px), a tap advanced the focus, and the last paragraph shows Continuar with the hint off.
 
 ## Next step
 
