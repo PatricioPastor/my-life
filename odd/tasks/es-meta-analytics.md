@@ -66,7 +66,7 @@ The user asked for these changes:
 ## Tasks
 
 - [x] **T1 — Spanish and metadata.** Copy, name mark, `lang`, metadata, OG image, icon, theme color, `.env.example`.
-- [ ] **T2 — Security.** The `security.txt` route handler and security headers.
+- [x] **T2 — Security.** The `security.txt` route handler and security headers.
 - [ ] **T3 — Analytics.** Vercel Analytics, Speed Insights, env-gated GA4, the `track` port and journey events.
 - [ ] **T4 — Star visibility.** Shader and params changes, plus screenshots.
 
@@ -82,6 +82,7 @@ The user asked for these changes:
 
 - 2026-09-30: Document created.
 - 2026-09-30: T1 done. Spanish copy, name mark, metadata, generated OG image and icon, `.env.example`. Route: delegated writer. RED: 22 failing tests before implementation; GREEN: 194 passing.
+- 2026-09-30: T2 done. Static security.txt route and four security headers. RED: missing modules; GREEN: 199 passing, build lists the route.
 
 ## Next step
 
