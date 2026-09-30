@@ -2,7 +2,7 @@
 
 import type { Ref, RefObject } from "react"
 import type { HalftoneSkyHandle } from "@/features/sky"
-import { PALETTE } from "@/shared/lib/palette"
+import { STAR_HEX } from "@/shared/lib/palette"
 import type { Facet } from "./content"
 
 interface FacetStarsProps {
@@ -38,8 +38,8 @@ export function FacetStars({ facets, hovered, sky, onHover, onOpen, layerRef }: 
             onBlur={() => onHover(null)}
           >
             <span
-              className="absolute top-1/2 left-11 -translate-y-1/2 text-xs tracking-[0.08em] whitespace-nowrap text-ink [text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
-              style={hovered === f.id ? { color: PALETTE[f.color] } : undefined}
+              className="absolute top-1/2 left-11 -translate-y-1/2 text-xs tracking-[0.08em] whitespace-nowrap text-ink [text-shadow:0_0_2px_#0A0600,0_0_5px_rgba(10,6,0,0.95),0_1px_14px_rgba(10,6,0,0.95)]"
+              style={hovered === f.id ? { color: STAR_HEX[f.color] } : undefined}
             >
               {f.name}
             </span>

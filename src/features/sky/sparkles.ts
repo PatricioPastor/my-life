@@ -15,7 +15,7 @@ export interface Sparkle {
 export interface SparkleAnchor {
   x: number
   y: number
-  /** Star color index (see STAR_COLORS): 0 gold, 1 porcelain, 2 periwinkle. */
+  /** Star color index 0..3 (see STAR_COLORS), resolved by the preset's `starTints`. */
   tint: number
 }
 

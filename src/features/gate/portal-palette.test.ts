@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { hexToRgb } from "@/shared/lib/color"
+import { PORTAL as SHARED } from "@/shared/lib/palette"
 import { PORTAL } from "./portal-palette"
 
 const lum = (hex: string) => {
@@ -8,6 +9,10 @@ const lum = (hex: string) => {
 }
 
 describe("PORTAL palette", () => {
+  it("is the one shared palette the sky also reads", () => {
+    expect(PORTAL).toBe(SHARED)
+  })
+
   it("holds the four exact ring colors and Coffee Bean", () => {
     expect(PORTAL.rings).toEqual(["#FFC15E", "#F7B05B", "#F7934C", "#CC5803"])
     expect(PORTAL.coffee).toBe("#1F1300")

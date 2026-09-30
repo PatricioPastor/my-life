@@ -1,4 +1,4 @@
-import { GAS_TINTS, PALETTE } from "@/shared/lib/palette"
+import { EMBER_GAS, GAS_TINTS, PALETTE, PORTAL } from "@/shared/lib/palette"
 
 export interface SkyParams {
   pixel: number
@@ -39,9 +39,11 @@ export interface SkyParams {
   crimsonColor: string
   hotColor: string
   starColor: string
+  /** Exact sparkle colors by tint index 0..3; decoupled from the gas ramp. */
+  starTints: readonly [string, string, string, string]
 }
 
-export type SkyPresetName = "periwinkle" | "crimson" | "ultraviolet" | "abyssal" | "solar" | "phosphor"
+export type SkyPresetName = "ember" | "periwinkle" | "crimson" | "ultraviolet" | "abyssal" | "solar" | "phosphor"
 
 // The planet sits top-right in every preset unless a preset resizes or drops it.
 export const SKY_DEFAULTS: SkyParams = {
@@ -54,13 +56,27 @@ export const SKY_DEFAULTS: SkyParams = {
   vignette: 0.5, grain: 0.035,
   voidColor: "#050309", hazeColor: "#161a38", duskColor: "#3b1646", wineColor: "#5c0d31",
   crimsonColor: "#c01245", hotColor: "#ff1f5a", starColor: "#f6e2e8",
+  starTints: ["#ff1f5a", "#f6e2e8", "#c01245", "#f6e2e8"],
 }
 
+/** Tints for a preset that predates the explicit list: hot, star, crimson, star. */
+const legacyTints = (p: Pick<SkyParams, "hotColor" | "starColor" | "crimsonColor">): SkyParams["starTints"] => [
+  p.hotColor, p.starColor, p.crimsonColor, p.starColor,
+]
+
 export const SKY_PRESETS: Record<SkyPresetName, Partial<SkyParams>> = {
-  // The landing's default: Shadow Grey gas rising through Periwinkle to Sunflower Gold, Porcelain stars.
+  // The default: the portal's warm palette. Coffee Bean gas rising through Bronze Spice and Sandy Brown to
+  // Sunflower Gold over the portal's near-black; Porcelain only for the white-hot sparkle cores.
+  ember: {
+    voidColor: PORTAL.deep, hazeColor: EMBER_GAS.haze, duskColor: EMBER_GAS.dusk, wineColor: EMBER_GAS.wine,
+    crimsonColor: EMBER_GAS.crimson, hotColor: EMBER_GAS.hot, starColor: PALETTE.ink,
+    starTints: PORTAL.rings, threshold: 0.57,
+  },
+  // The earlier periwinkle sky: Shadow Grey gas rising through Periwinkle to Sunflower Gold, Porcelain stars.
   periwinkle: {
     voidColor: PALETTE.void, hazeColor: GAS_TINTS.haze, duskColor: GAS_TINTS.dusk, wineColor: GAS_TINTS.wine,
     crimsonColor: PALETTE.periwinkle, hotColor: PALETTE.gold, starColor: PALETTE.ink,
+    starTints: [PALETTE.gold, PALETTE.ink, PALETTE.periwinkle, PALETTE.ink],
   },
   crimson: {},
   ultraviolet: { hazeColor: "#10183f", duskColor: "#2a1a5e", wineColor: "#3d1478", crimsonColor: "#7b2cf0", hotColor: "#c77dff", starColor: "#eef0ff", bandAngle: 2.2, bandOffset: 0.3, seed: 4 },
@@ -74,7 +90,10 @@ export function resolveSkyParams(
   preset: SkyPresetName = "crimson",
   overrides: Partial<SkyParams> = {},
 ): SkyParams {
-  const base: SkyParams = { ...SKY_DEFAULTS, ...(SKY_PRESETS[preset] ?? {}) }
+  const chosen = SKY_PRESETS[preset] ?? {}
+  const base: SkyParams = { ...SKY_DEFAULTS, ...chosen }
+  // A preset that sets its own ramp without a tint list gets tints derived from that ramp.
+  if (!chosen.starTints) base.starTints = legacyTints(base)
   const px = Number(overrides.pixel)
   const pixel = px >= 2 && px <= 16 ? px : base.pixel
   return { ...base, ...overrides, pixel }

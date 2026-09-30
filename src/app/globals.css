@@ -94,8 +94,8 @@
 
 .dark {
   color-scheme: dark;
-  /* Shadow Grey, the same hex as PALETTE.void in shared/lib/palette.ts. */
-  --background: #191923;
+  /* The portal's near-black, the same hex as PORTAL.deep in shared/lib/palette.ts. */
+  --background: #0A0600;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);

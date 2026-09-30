@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest"
 import { layoutSkySparkles, mulberry32, pickTint, pushSparkle, type Sparkle } from "./sparkles"
 
 const ANCHORS = [
-  { x: 0.21, y: 0.68, tint: 2 },
+  { x: 0.21, y: 0.68, tint: 0 },
   { x: 0.57, y: 0.79, tint: 1 },
-  { x: 0.75, y: 0.45, tint: 0 },
-  { x: 0.39, y: 0.29, tint: 2 },
+  { x: 0.75, y: 0.45, tint: 2 },
+  { x: 0.39, y: 0.29, tint: 3 },
 ]
 
 const spark = (user: boolean, x = 0.5): Sparkle => ({
@@ -79,25 +79,25 @@ describe("layoutSkySparkles", () => {
     expect(layoutSkySparkles(3, [])).toHaveLength(6)
   })
 
-  it("gives the seeded small sparkles only the three star tints, and uses all three across seeds", () => {
+  it("gives the seeded small sparkles only the four star tints, and uses all four across seeds", () => {
     const seen = new Set<number>()
     for (let seed = 1; seed <= 40; seed++) {
       for (const s of layoutSkySparkles(seed, ANCHORS).slice(ANCHORS.length)) {
-        expect([0, 1, 2]).toContain(s.tint)
+        expect([0, 1, 2, 3]).toContain(s.tint)
         seen.add(s.tint)
       }
     }
-    expect([...seen].sort()).toEqual([0, 1, 2])
+    expect([...seen].sort()).toEqual([0, 1, 2, 3])
   })
 })
 
 describe("pickTint", () => {
-  it("maps a unit random to an exact index in {0, 1, 2}", () => {
-    expect([0, 0.32, 0.34, 0.66, 0.67, 0.999999].map(pickTint)).toEqual([0, 0, 1, 1, 2, 2])
+  it("maps a unit random to an exact index in {0, 1, 2, 3}", () => {
+    expect([0, 0.24, 0.26, 0.49, 0.51, 0.74, 0.76, 0.999999].map(pickTint)).toEqual([0, 0, 1, 1, 2, 2, 3, 3])
   })
 
   it("stays inside the palette even for a degenerate 1", () => {
-    expect(pickTint(1)).toBe(2)
+    expect(pickTint(1)).toBe(3)
   })
 })
 

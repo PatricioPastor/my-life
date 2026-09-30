@@ -11,7 +11,7 @@ export interface Facet {
   /** Star position as 0..1 stage fractions, y up (the sky's convention). */
   x: number
   y: number
-  /** Palette key for the star, its hover label and the place title. */
+  /** Star color key (a portal ring color) for the star, its hover label and the place title. */
   color: StarColorKey
   entries: FacetEntry[]
 }
@@ -19,7 +19,7 @@ export interface Facet {
 // Placeholder copy from the design canvas; real content comes later.
 export const FACETS: readonly Facet[] = [
   {
-    id: "stories", name: "Stories", x: 0.21, y: 0.68, color: "periwinkle",
+    id: "stories", name: "Stories", x: 0.21, y: 0.68, color: "gold",
     entries: [
       { meta: "[Year]", title: "[Story title]" },
       { meta: "[Year]", title: "[Story title]" },
@@ -27,7 +27,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "writing", name: "Writing", x: 0.57, y: 0.79, color: "ink",
+    id: "writing", name: "Writing", x: 0.57, y: 0.79, color: "clay",
     entries: [
       { meta: "[Date]", title: "[Post title]" },
       { meta: "[Date]", title: "[Post title]" },
@@ -35,7 +35,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "projects", name: "Projects", x: 0.75, y: 0.45, color: "gold",
+    id: "projects", name: "Projects", x: 0.75, y: 0.45, color: "sandy",
     entries: [
       { meta: "[Role, year]", title: "[Project name]" },
       { meta: "[Role, year]", title: "[Project name]" },
@@ -43,7 +43,7 @@ export const FACETS: readonly Facet[] = [
     ],
   },
   {
-    id: "now", name: "Now", x: 0.39, y: 0.29, color: "periwinkle",
+    id: "now", name: "Now", x: 0.39, y: 0.29, color: "bronze",
     entries: [
       { meta: "[Month]", title: "[Current focus]" },
       { meta: "[Month]", title: "[Next commitment]" },

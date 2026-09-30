@@ -91,7 +91,7 @@ export function createSkyRenderer(
     res: loc("uRes"), dpr: loc("uDpr"), time: loc("uTime"),
     pointer: loc("uPointer"), pointerOn: loc("uPointerOn"), look: loc("uLook"),
     sparkCount: loc("uSparkCount"), spark: loc("uSpark"), sparkB: loc("uSparkB"),
-    ripple: loc("uRipple"), planet: loc("uPlanet"),
+    ripple: loc("uRipple"), planet: loc("uPlanet"), starTints: loc("uStarTints"),
   }
   const vao = ctx.createVertexArray()
 
@@ -104,6 +104,7 @@ export function createSkyRenderer(
   const sparkA = new Float32Array(MAX_SPARKS * 4)
   const sparkB = new Float32Array(MAX_SPARKS * 4)
   const ripples = new Float32Array(MAX_RIPPLES * 4)
+  const tints = new Float32Array(12)
   let rippleNext = 0
   const t0 = performance.now()
   // Reduced motion freezes the clock on a well-developed frame.
@@ -228,6 +229,8 @@ export function createSkyRenderer(
       if (kind === "c") ctx.uniform3fv(at, hexToRgb(String(v)))
       else ctx.uniform1f(at, Number(v))
     }
+    p.starTints.forEach((hex, i) => tints.set(hexToRgb(hex), i * 3))
+    ctx.uniform3fv(U.starTints, tints)
     ctx.uniform2f(U.res, canvas.width, canvas.height)
     ctx.uniform1f(U.dpr, canvas.width / cssW)
     ctx.uniform1f(U.time, t)

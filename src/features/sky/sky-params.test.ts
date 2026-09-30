@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { hexToRgb } from "@/shared/lib/color"
 import { SKY_DEFAULTS, SKY_PRESETS, resolveSkyParams, skyFallbackGradient } from "./sky-params"
 
 describe("resolveSkyParams", () => {
@@ -23,12 +24,54 @@ describe("resolveSkyParams", () => {
     expect(Object.keys(SKY_PRESETS).sort()).toEqual([
       "abyssal",
       "crimson",
+      "ember",
       "periwinkle",
       "phosphor",
       "solar",
       "ultraviolet",
     ])
     expect(resolveSkyParams("solar").planetRadius).toBe(0.09)
+  })
+
+  it("builds the ember preset from the portal palette only", () => {
+    const p = resolveSkyParams("ember")
+    expect(p.voidColor).toBe("#0A0600")
+    expect(p.hazeColor).toBe("#1F1300")
+    expect(p.duskColor).toBe("#532801")
+    expect(p.wineColor).toBe("#CC5803")
+    expect(p.crimsonColor).toBe("#F7934C")
+    expect(p.hotColor).toBe("#FFC15E")
+    expect(p.starColor).toBe("#FBFEF9")
+    expect(p.starTints).toEqual(["#FFC15E", "#F7B05B", "#F7934C", "#CC5803"])
+    expect(p.warp).toBe(SKY_DEFAULTS.warp)
+    expect(p.planet).toBe(true)
+  })
+
+  it("derives the ember dusk as Coffee Bean mixed 30% toward Bronze Spice", () => {
+    const coffee = hexToRgb("#1F1300")
+    const bronze = hexToRgb("#CC5803")
+    const hex = coffee
+      .map((c, i) => Math.round((c + (bronze[i] - c) * 0.3) * 255).toString(16).padStart(2, "0"))
+      .join("")
+    expect(`#${hex}`.toUpperCase()).toBe("#532801")
+  })
+
+  it("never uses School Bus Yellow in the ember or periwinkle skies", () => {
+    for (const name of ["ember", "periwinkle"] as const) {
+      const p = resolveSkyParams(name)
+      const colors = [...Object.values(p).filter((v) => typeof v === "string"), ...p.starTints]
+      expect(colors.map((c) => String(c).toUpperCase())).not.toContain("#FFC600")
+    }
+  })
+
+  it("gives every preset four star tints, and the older ones a sensible list", () => {
+    for (const name of Object.keys(SKY_PRESETS) as (keyof typeof SKY_PRESETS)[]) {
+      expect(resolveSkyParams(name).starTints).toHaveLength(4)
+    }
+    const p = resolveSkyParams("periwinkle")
+    expect(p.starTints).toEqual([p.hotColor, p.starColor, p.crimsonColor, p.starColor])
+    const s = resolveSkyParams("solar")
+    expect(s.starTints).toEqual([s.hotColor, s.starColor, s.crimsonColor, s.starColor])
   })
 
   it("builds the periwinkle preset from the palette and leaves the rest at the defaults", () => {
@@ -42,11 +85,6 @@ describe("resolveSkyParams", () => {
     expect(p.starColor).toBe("#FBFEF9")
     expect(p.warp).toBe(SKY_DEFAULTS.warp)
     expect(p.planet).toBe(true)
-  })
-
-  it("never uses School Bus Yellow in the periwinkle sky", () => {
-    const colors = Object.values(resolveSkyParams("periwinkle")).filter((v) => typeof v === "string")
-    expect(colors.map((c) => String(c).toUpperCase())).not.toContain("#FFC600")
   })
 
   it("applies overrides on top of the preset", () => {
@@ -79,6 +117,15 @@ describe("skyFallbackGradient", () => {
     expect(css).toContain(p.wineColor)
     expect(css).toContain(p.duskColor)
     expect(css.endsWith(p.voidColor)).toBe(true)
+  })
+
+  it("stands in with the ember palette over the portal darkness", () => {
+    const css = skyFallbackGradient(resolveSkyParams("ember"))
+    expect(css).toContain("#FFC15E")
+    expect(css).toContain("#F7934C")
+    expect(css).toContain("#CC5803")
+    expect(css).toContain("#532801")
+    expect(css.endsWith("#0A0600")).toBe(true)
   })
 
   it("stands in with palette colors only for the periwinkle sky", () => {

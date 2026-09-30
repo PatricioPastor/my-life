@@ -56,6 +56,16 @@ describe("buildSkyFragment", () => {
     expect(src).toContain("vec3 tint = starTint(b.x);")
   })
 
+  it("feeds the four star tints as their own uniform array, decoupled from the gas ramp", () => {
+    expect(src).toContain("uniform vec3 uStarTints[4];")
+    const body = src.slice(src.indexOf("vec3 starTint(float idx)"), src.indexOf("vec2 shift("))
+    expect(body).toContain("uStarTints[")
+    expect(body).not.toContain("mix(")
+    expect(body).not.toContain("uHotColor")
+    expect(body).not.toContain("uCrimsonColor")
+    expect(src).toContain("starTint(floor(h2 * 4.0))")
+  })
+
   it("has no duplicate slot names", () => {
     const names = SKY_UNIFORM_SLOTS.map(([k]) => k)
     expect(new Set(names).size).toBe(names.length)

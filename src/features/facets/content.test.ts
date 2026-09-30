@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { STAR_HEX } from "@/shared/lib/palette"
 import { FACETS, FACET_ANCHORS, findFacet } from "./content"
 
 describe("facets content", () => {
@@ -16,21 +17,23 @@ describe("facets content", () => {
     expect(FACETS[2].entries[0]).toEqual({ meta: "[Role, year]", title: "[Project name]" })
   })
 
-  it("colors each facet star from the palette", () => {
+  it("gives each facet its own ring color", () => {
     expect(FACETS.map((f) => [f.id, f.color])).toEqual([
-      ["stories", "periwinkle"],
-      ["writing", "ink"],
-      ["projects", "gold"],
-      ["now", "periwinkle"],
+      ["stories", "gold"],
+      ["writing", "clay"],
+      ["projects", "sandy"],
+      ["now", "bronze"],
     ])
+    expect(FACETS.map((f) => STAR_HEX[f.color])).toEqual(["#FFC15E", "#F7B05B", "#F7934C", "#CC5803"])
+    expect(new Set(FACETS.map((f) => f.color)).size).toBe(FACETS.length)
   })
 
   it("hangs the sky anchors with the facet tint indices", () => {
     expect(FACET_ANCHORS).toEqual([
-      { x: 0.21, y: 0.68, tint: 2 },
+      { x: 0.21, y: 0.68, tint: 0 },
       { x: 0.57, y: 0.79, tint: 1 },
-      { x: 0.75, y: 0.45, tint: 0 },
-      { x: 0.39, y: 0.29, tint: 2 },
+      { x: 0.75, y: 0.45, tint: 2 },
+      { x: 0.39, y: 0.29, tint: 3 },
     ])
   })
 
