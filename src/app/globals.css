@@ -565,17 +565,33 @@
    * the ink itself, and has no stroke at all (a transparent stroke would still soften the glyph edge).
    */
   .rd-w {
+    position: relative;
+    display: inline-block;
     color: rgb(246 226 232 / 0);
+    transition: color 420ms var(--rd-ease);
+  }
+  /*
+   * The outline is its own layer, a copy of the word (data-t) that only fades. A stroke width cannot be animated (it jumps to 0
+   * at once), which made every word blink out before it filled in: now the outline fades out while the fill fades in, and the
+   * fill layer itself never has a stroke.
+   */
+  .rd-w::before {
+    content: attr(data-t) / "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: transparent;
     -webkit-text-stroke: 0.75px rgb(246 226 232 / 0.62);
-    transition:
-      color 420ms var(--rd-ease),
-      -webkit-text-stroke-width 420ms var(--rd-ease),
-      -webkit-text-stroke-color 420ms var(--rd-ease);
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    transition: opacity 300ms var(--rd-ease) 140ms;
   }
   .rd-w[data-p] {
     color: var(--ink);
-    -webkit-text-stroke-width: 0;
-    -webkit-text-stroke-color: transparent;
+  }
+  .rd-w[data-p]::before {
+    opacity: 0;
   }
   /* em: Gambarino ships only its 400 roman, so the slant is the browser's; strong stays 400 and takes the full ink. */
   .rd-block em {
@@ -605,7 +621,8 @@
     border-top: calc(1px * var(--rd-s, 1)) solid var(--ink-faint);
   }
   /* Reduced motion: every word is filled from the start, so there is nothing to fade. */
-  .rd-stage[data-reduced="true"] .rd-w {
+  .rd-stage[data-reduced="true"] .rd-w,
+  .rd-stage[data-reduced="true"] .rd-w::before {
     transition: none;
   }
   .ob-hw {

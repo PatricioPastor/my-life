@@ -23,7 +23,8 @@ function Words({ runs, painted, fill }: { runs: readonly InlineRun[]; painted: n
             s.kind === "space" ? (
               s.text
             ) : (
-              <span key={i} className="rd-w" data-p={fill || s.word! < painted ? "true" : undefined}>
+              // data-t feeds the outline layer (::before): it fades out as the fill fades in, so a word never blinks out between them.
+              <span key={i} className="rd-w" data-t={s.text} data-p={fill || s.word! < painted ? "true" : undefined}>
                 {s.text}
               </span>
             ),

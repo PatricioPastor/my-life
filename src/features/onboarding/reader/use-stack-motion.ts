@@ -80,7 +80,9 @@ export function useStackMotion({ stage, stack, blocks, readable, target, pan, re
         pans.current.map((s) => s.x),
       )
       const layout = rest ? snapLayout(moving, window.devicePixelRatio || 1, origin) : moving
-      stackEl.dataset.settled = rest ? "true" : "false"
+      // Only when it changes: a write of the same value is still a DOM mutation, and nothing here may churn per frame or per word.
+      const settled = rest ? "true" : "false"
+      if (stackEl.dataset.settled !== settled) stackEl.dataset.settled = settled
       const y = rest ? `translate(0, ${layout.y.toFixed(4)}px)` : `translate3d(0, ${layout.y.toFixed(2)}px, 0)`
       if (y !== lastStack) {
         stackEl.style.transform = y

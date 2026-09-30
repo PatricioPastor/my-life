@@ -114,6 +114,18 @@ Turn the onboarding's "¿por qué creé esto?" into a reading experience:
   - **Not a cause.** The grain canvas and vignette sit beneath the column in DOM order; the foot scrim only covers the bottom edge, which the mask already fades.
   - Checks: layout and snap tests first (RED, then GREEN), CSS guard test `sharpness.test.ts`, and before/after screenshots `sharp-{before,after}-*.png`.
 
+## Per-word flicker, tap to continue (branch `feat/reader-tap`, 2026-09-30)
+
+User: "se ve como titilando cada palabra ... la intro palabra por palabra en 2 segundos ... más velocidad y un 'Tap para continuar' ... que pase según esa persona tapee."
+
+- **Flicker: confirmed cause (c).** Measured with Playwright (Chromium 1440x900, 2x): one word's paint transition was seeked frame by frame (`getAnimations()` paused, `currentTime` stepped, 2x clip screenshots, mean luma of the word rect).
+  - `-webkit-text-stroke-width` does not interpolate in Chrome: only `color` and `-webkit-text-stroke-color` showed up as running transitions. The width jumped 0.75 to 0 at t=0, so the outline vanished at once and the fill faded in from nothing.
+  - Before: outline 29.35, at t=0 of the paint 12.84 (the background, a 56% drop), then a slow rise to 38.72 over 420 ms: every word blinked out, then in.
+  - After: outline layer 28.32 at t=0, never below 28.3, peak 38.43 (3.6% over the final 37.11, from the two layers overlapping), no dip.
+  - Refuted: (a) `will-change` / `data-settled` toggling per word (MutationObserver over a whole first paragraph: 23 `data-p` flips and one stack write, `will-change: auto` throughout), (b) re-mounting (0 childList mutations), (d) snapLayout re-applying translates (one stack transform write per motion, none per word). Neighbour words (already painted, not yet painted) are pixel-identical while one word paints, before and after.
+  - Fix: the outline is its own layer, `.rd-w::before` with `content: attr(data-t) / ""`, that fades with opacity (300 ms, 140 ms delay) while the fill layer (`.rd-w`, color only) fades in over 420 ms. The fill layer never has a stroke, so the resting word is solid ink with no stroke and no filter. `use-stack-motion` also stopped re-writing `data-settled` with the same value.
+  - Guards: `painting.test.tsx` (same span nodes across a paint, only `data-p` mutates, stack and blocks untouched) and `sharpness.test.ts` (no stroke on the fill layer, outline fades by opacity, no stroke-width transition).
+
 ## Next step
 
 T4: RDD per policy, then push after the user approves.

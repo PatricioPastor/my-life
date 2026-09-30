@@ -27,10 +27,19 @@ describe("text sharpness rules", () => {
     expect(block).toMatch(/font-size:\s*var\(--rd-fs\)/)
   })
 
-  it("fills painted words with the ink itself and drops their stroke", () => {
-    const painted = rule(".rd-w[data-p]")
-    expect(painted).toMatch(/color:\s*var\(--ink\)/)
-    expect(painted).toMatch(/-webkit-text-stroke-width:\s*0/)
+  it("fills painted words with the ink itself, and the fill layer never carries a stroke", () => {
+    expect(rule(".rd-w[data-p]")).toMatch(/color:\s*var\(--ink\)/)
+    for (const s of [".rd-w", ".rd-w[data-p]"]) for (const r of rules(s)) expect(r, s).not.toMatch(/-webkit-text-stroke/)
+  })
+
+  it("draws the outline on its own layer and fades it with opacity, never by animating the stroke (the per-word flicker)", () => {
+    const outline = rule(".rd-w::before")
+    expect(outline).toMatch(/-webkit-text-stroke:/)
+    expect(outline).toMatch(/content:\s*attr\(data-t\)/)
+    expect(outline).toMatch(/transition:[^;]*opacity/)
+    expect(rule(".rd-w[data-p]::before")).toMatch(/opacity:\s*0/)
+    // A stroke width can't be animated: it jumps, and the word blinks out before it fills in.
+    for (const r of css.match(/[^{}]*\.rd-w[^{}]*\{[^}]*\}/g) ?? []) expect(r).not.toMatch(/transition:[^;]*-webkit-text-stroke/)
   })
 
   it("does not hold a finished animation on the containers of text (fill-mode backwards only)", () => {
