@@ -7,7 +7,7 @@ export const LIFE_PHRASE = "esta, es mi vida"
 export const DIFFERENT_PHRASE = "pero narrada de una forma diferente"
 
 /** How long each fully formed phrase stays. The last one hands over to the CTA after a short beat instead of leaving. */
-const HOLD_MS: Record<PhraseKind, number> = { greeting: 2000, life: 2300, different: 700 }
+const HOLD_MS: Record<PhraseKind, number> = { greeting: 1800, life: 1800, different: 700 }
 /** A returning visitor only sees the greeting: a brief hold, no exit (the layer itself fades). */
 const RETURNING_HOLD_MS = 600
 

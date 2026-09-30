@@ -52,7 +52,7 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
         </div>
         <button
           type="button"
-          className="ob-cta press"
+          className="ob-cta t-label press"
           data-on={ctaOn}
           data-magnetic={ctaOn ? "light" : undefined}
           data-cursor-label={CTA_LABEL}
@@ -83,7 +83,7 @@ export function Onboarding({ state, dispatch }: OnboardingProps) {
       {phase !== "idle" && !leaving && (
         <button
           type="button"
-          className="ob-skip press"
+          className="ob-skip t-label press"
           data-magnetic="light"
           data-cursor-label="Saltar"
           onClick={() => {

@@ -94,6 +94,49 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/*
+ * Type and spacing system (Gambarino for reading, Silkscreen for UI labels).
+ *
+ * Scale: ratio 1.25 from an 18px body. Each step is fluid: it holds its minimum at 360px viewport width and
+ * below, grows linearly, and reaches its maximum (the ratio step) at 480px and above.
+ *   clamp(min, intercept + slope * 100vw, max)   with slope = (max - min) / 120 (in vw) and intercept = min - slope * 3.6px
+ * Steps (min -> max): 1: 16 -> 18, 2: 20 -> 22.5, 3: 25 -> 28, 4: 31 -> 35, 5: 39 -> 44, 6: 49 -> 55.
+ * --type-display extends the same ratio (55 * 1.25^3 = 107) for the hero phrases: 40 -> 107 over 360-1600px.
+ */
+:root {
+  --type-1: clamp(16px, calc(10px + 1.6667vw), 18px);
+  --type-2: clamp(20px, calc(12.5px + 2.0833vw), 22.5px);
+  --type-3: clamp(25px, calc(16px + 2.5vw), 28px);
+  --type-4: clamp(31px, calc(19px + 3.3333vw), 35px);
+  --type-5: clamp(39px, calc(24px + 4.1667vw), 44px);
+  --type-6: clamp(49px, calc(31px + 5vw), 55px);
+  --type-display: clamp(40px, calc(40px + (100vw - 360px) * 0.0540), 107px);
+  --type-label: 12px;
+
+  --lh-body: 1.5;
+  --lh-title: 1.1;
+  --track-body: 0;
+  --track-title: -0.01em;
+  --track-label: 0.12em;
+
+  /* Spacing grid: multiples of 8px. */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-8: 64px;
+  --space-10: 80px;
+  --space-12: 96px;
+  /* Uniform page margin on all four sides: 24px on phones, 48px from 1200px, fluid in between. */
+  --page-pad: clamp(24px, calc(24px + (100vw - 480px) * 0.03333), 48px);
+  /* The bottom zone keeps the same margin, plus the device's bottom inset (Safari toolbar, home indicator). */
+  --bottom-pad: calc(var(--page-pad) + env(safe-area-inset-bottom, 0px));
+  /* Shared height of every control that sits in the bottom zone, so they share one baseline. */
+  --control-h: 48px;
+}
+
 .dark {
   color-scheme: dark;
   /* The portal's near-black, the same hex as PORTAL.deep in shared/lib/palette.ts. */
@@ -262,6 +305,41 @@
   }
 }
 
+/*
+ * Case roles. Gambarino is never set in sustained caps, so neither Gambarino role transforms case:
+ *   tt  (.t-title) titles: lowercase, written that way in the content;
+ *   Tt  (.t-body)  body: sentence case, as written;
+ *   TT  (.t-label) UI labels: Silkscreen, uppercase.
+ * Size comes from the scale (--type-N) set by the element or its container.
+ */
+@layer components {
+  .t-title {
+    font-family: var(--font-gambarino);
+    font-weight: 400;
+    font-size: var(--type-5);
+    line-height: var(--lh-title);
+    letter-spacing: var(--track-title);
+    text-transform: none;
+  }
+  .t-body {
+    font-family: var(--font-gambarino);
+    font-weight: 400;
+    font-size: var(--type-1);
+    line-height: var(--lh-body);
+    letter-spacing: var(--track-body);
+    text-transform: none;
+  }
+  /* `.ui .t-label` outranks `.ui button { font: inherit }` so labels on buttons keep their own size. */
+  .t-label,
+  .ui .t-label {
+    font-family: var(--font-sans);
+    font-size: var(--type-label);
+    line-height: 1;
+    letter-spacing: var(--track-label);
+    text-transform: uppercase;
+  }
+}
+
 /* Onboarding: a full-screen layer above the journey. */
 @layer components {
   .ob {
@@ -269,7 +347,10 @@
     --ink-muted: rgba(246, 226, 232, 0.68);
     --ink-faint: rgba(246, 226, 232, 0.24);
     position: fixed;
-    inset: 0;
+    inset: 0 0 auto 0;
+    /* dvh follows Safari's collapsing toolbar; the vh line is the fallback for older browsers. */
+    height: 100vh;
+    height: 100dvh;
     z-index: 50;
     overflow: hidden;
     color: var(--ink);
@@ -288,8 +369,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: clamp(28px, 6vh, 56px);
-    padding: 0 24px;
+    gap: clamp(32px, 6vh, 56px);
+    padding: var(--page-pad) var(--page-pad) var(--bottom-pad);
     transition: opacity 500ms ease;
   }
   .ob[data-phase="story"] .ob-stage,
@@ -302,16 +383,15 @@
     display: grid;
     place-items: center;
     width: min(100%, 13em);
-    font-size: clamp(2.5rem, 8.4vw, 6.5rem);
+    font-size: var(--type-display);
   }
+  /* Role, line height and tracking come from .t-title; the size is the container's display step. */
   .ob-line {
     grid-area: 1 / 1;
     margin: 0;
     text-align: center;
     text-wrap: balance;
     font-size: 1em;
-    line-height: 1.04;
-    letter-spacing: -0.005em;
   }
   /* Words never break; each letter sits in its final place from the first frame (opacity 0), so nothing reflows. */
   .ob-word {
@@ -335,10 +415,12 @@
   .ob-line[data-animating="true"] .ob-letter {
     will-change: transform, opacity, filter;
   }
+  /* Controls (TT role, Silkscreen): one height, so those in the bottom zone share a baseline. */
   .ob-cta {
-    padding: 14px 22px !important;
-    font-size: 12px;
-    letter-spacing: 0.08em;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-h);
+    padding: 0 var(--space-3) !important;
     border: 1px solid var(--ink-faint) !important;
     opacity: 0;
     transform: translateY(8px);
@@ -354,11 +436,13 @@
   }
   .ob-skip {
     position: absolute;
-    right: max(20px, 3vw);
-    bottom: max(20px, 3vh);
-    padding: 12px 6px !important;
-    font-size: 11px;
-    letter-spacing: 0.1em;
+    right: var(--page-pad);
+    bottom: var(--bottom-pad);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-h);
+    padding: 0 !important;
     color: var(--ink-muted) !important;
     animation: fade 600ms ease 400ms both;
   }
@@ -399,23 +483,19 @@
   }
   .ob-col {
     width: 100%;
-    max-width: 68ch;
+    max-width: calc(68ch + 2 * var(--page-pad));
     margin: auto;
-    padding: clamp(72px, 14vh, 140px) 24px clamp(96px, 16vh, 140px);
-    font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+    /* Top and sides follow the page margin; the bottom leaves room for the bottom zone (controls + safe area). */
+    padding: clamp(72px, 14vh, 144px) var(--page-pad) calc(var(--bottom-pad) + var(--control-h) + var(--space-3));
   }
   .ob-title {
     width: fit-content;
-    margin: 0 0 clamp(24px, 5vh, 44px);
-    font-size: clamp(2rem, 5.2vw, 3.6rem);
-    font-weight: 400;
-    line-height: 1.08;
-    letter-spacing: -0.005em;
+    margin: 0 0 var(--space-5);
+    font-size: var(--type-5);
     will-change: transform, opacity;
   }
   .ob-body p {
-    margin: 0 0 1.15em;
-    line-height: 1.6;
+    margin: 0 0 var(--space-3);
     color: rgba(246, 226, 232, 0.82);
     animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -434,20 +514,19 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 22px;
-    padding: 0 24px;
+    gap: var(--space-3);
+    padding: var(--page-pad) var(--page-pad) calc(var(--bottom-pad) + var(--control-h) + var(--space-3));
     text-align: center;
     animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both;
   }
   .ob-hw-line {
     max-width: 22em;
     margin: 0;
-    font-size: clamp(1.6rem, 3.6vw, 2.6rem);
-    line-height: 1.15;
+    font-size: var(--type-3);
     text-wrap: balance;
   }
   .ob-hw-soft {
-    font-size: clamp(1.2rem, 2.4vw, 1.7rem);
+    font-size: var(--type-2);
     color: var(--ink-muted);
   }
   .ob-hw-how {
@@ -456,14 +535,11 @@
   .ob-hw-how summary {
     display: inline-block;
     cursor: pointer;
-    font-family: var(--font-sans);
-    font-size: 11px;
-    letter-spacing: 0.1em;
     text-decoration: underline;
     text-underline-offset: 4px;
   }
   .ob-hw-how .ob-hw-steps {
-    margin-top: 12px;
+    margin-top: var(--space-2);
   }
   .ob-hw-line svg {
     display: inline-block;
@@ -475,20 +551,32 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: clamp(1rem, 1.5vw, 1.2rem);
-    line-height: 1.5;
+    font-size: var(--type-1);
     color: var(--ink-muted);
   }
+  /* The bottom zone: one guide on each side (page margin) and on the bottom (margin + safe area). */
+  .ob-foot {
+    position: absolute;
+    left: var(--page-pad);
+    right: var(--page-pad);
+    bottom: var(--bottom-pad);
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    transition: opacity 500ms ease;
+  }
+  .ob-foot[data-away="true"] {
+    opacity: 0;
+    pointer-events: none;
+  }
   .ob-hw .ob-continue {
-    margin-top: 14px !important;
     animation: none;
   }
   .ob-continue {
-    margin-top: 1.2rem !important;
-    padding: 14px 22px !important;
-    font-family: var(--font-sans);
-    font-size: 12px;
-    letter-spacing: 0.08em;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-h);
+    padding: 0 var(--space-3) !important;
     border: 1px solid var(--ink-faint) !important;
     animation: rise 800ms cubic-bezier(0.16, 1, 0.3, 1) 1400ms both;
   }

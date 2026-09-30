@@ -44,27 +44,29 @@ export function StoryView({ from, away, onContinue }: StoryViewProps) {
       <div className="ob-vignette" aria-hidden="true" />
       <FilmGrain />
       <div className="ob-scroll" data-away={away} inert={away}>
-        <div className="ob-col font-gambarino">
-          <h2 id="ob-story-title" ref={titleRef} className="ob-title">
+        <div className="ob-col">
+          <h2 id="ob-story-title" ref={titleRef} className="ob-title t-title">
             {STORY_TITLE}
           </h2>
-          <div className="ob-body">
+          <div className="ob-body t-body">
             {STORY_PARAGRAPHS.map((text, i) => (
               <p key={i} style={{ animationDelay: `${MORPH_MS - 100 + i * 140}ms` }}>
                 {text}
               </p>
             ))}
           </div>
-          <button
-            type="button"
-            className="ob-continue press"
-            data-magnetic={away ? undefined : "light"}
-            data-cursor-label="Continuar"
-            onClick={onContinue}
-          >
-            Continuar
-          </button>
         </div>
+      </div>
+      <div className="ob-foot" data-away={away} inert={away}>
+        <button
+          type="button"
+          className="ob-continue t-label press"
+          data-magnetic={away ? undefined : "light"}
+          data-cursor-label="Continuar"
+          onClick={onContinue}
+        >
+          Continuar
+        </button>
       </div>
     </section>
   )

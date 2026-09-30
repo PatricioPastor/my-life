@@ -44,7 +44,7 @@ export function PhraseLine({ kind, text, active, returning }: PhraseLineProps) {
   return (
     <p
       ref={ref}
-      className="ob-line font-gambarino"
+      className="ob-line t-title"
       data-on={active}
       data-exit={timeline.exitMs > 0 ? "true" : "false"}
       data-animating="false"

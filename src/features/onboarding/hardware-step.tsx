@@ -33,7 +33,7 @@ export function HardwareStep({ onEnter }: HardwareStepProps) {
   )
 
   return (
-    <div className="ob-hw font-gambarino">
+    <div className="ob-hw t-body">
       {shown === "software" && (
         <>
           <p className="ob-hw-line">Para verlo como fue pensado, activa la aceleración por hardware de tu navegador.</p>
@@ -46,7 +46,7 @@ export function HardwareStep({ onEnter }: HardwareStepProps) {
             Si notas tirones, revisa que la aceleración por hardware de tu navegador esté activa.
           </p>
           <details className="ob-hw-how">
-            <summary>Cómo</summary>
+            <summary className="t-label">Cómo</summary>
             {steps}
           </details>
         </>
