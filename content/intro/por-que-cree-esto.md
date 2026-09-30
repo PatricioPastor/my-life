@@ -23,18 +23,20 @@ updated: 2026-09-30
   Este comentario no se muestra en el sitio.
 -->
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua, y todo empezó con una idea pequeña que no quería quedarse quieta.
+Desde hace tiempo que tengo una idea dando vueltas y si alguna vez hablamos, sabes que esas cosas a mi, me vuelven loco.
 
-Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore.
+Esa idea, nace de varias inquietudes. 
 
-Aquí va una frase corta, *solo una*.
+> *"Como puedo contar una historia que se puedan apreciar todos los detalles"*
 
-Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt, y eso que nadie me lo había preguntado.
+Y ahí pensé: Que increíble sería, un lugar donde pueda narrar una historia, vincular videos que se muestren en cierto momento (o que quienes participen de la historia lo agreguen, por eso ingresar con un *Instagram*), audios, fotos, puntos de vista y sea interactivo.
 
-> Texto de relleno para una cita: neque porro quisquam est qui dolorem ipsum quia dolor sit amet.
+Y ahi dije listo, este tiene que ser el lugar; pero no solo para contar historias, sino para contar mis ideas, proyectos, mi forma de ver la vida....
 
 ---
 
-Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet. **Aquí va la razón de verdad**, cuando esté escrita.
+*En definitiva, contar y mostrar todo, de la forma más transparente*.
 
-Y un último párrafo de relleno, de largo medio, para cerrar la lectura antes de seguir.
+Si llegaste hasta acá, algo hemos compartido y por eso, quiero hacerte parte de este "Universo"
+
+##Pronto, vas a ver como :p.
