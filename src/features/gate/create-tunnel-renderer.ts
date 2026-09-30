@@ -1,11 +1,14 @@
 import { rgba } from "@/shared/lib/color"
-import type { SkyParams } from "@/features/sky"
+import { PALETTE } from "@/shared/lib/palette"
 import type { GateStatus } from "./gate-machine"
+import { createRingColorSequence } from "./ring-colors"
+import { dimTint, nextRingIndex, ringDepth } from "./tunnel-math"
 
 export interface TunnelOptions {
   /** Read every frame, so a state change never restarts the loop. */
   getGate: () => GateStatus
-  getParams: () => SkyParams
+  /** Seeds the ring colors; by default drawn once per visit so every visit paints its own sequence. */
+  seed?: number
 }
 
 export interface TunnelRenderer {
@@ -15,6 +18,12 @@ export interface TunnelRenderer {
 const RAMP = " .:-=+*#%@"
 const CW = 10
 const CH = 16
+
+// Ring colors: Porcelain, Periwinkle and Sunflower Gold. School Bus Yellow stays out (UI details only).
+const RING_PALETTE = [PALETTE.ink, PALETTE.periwinkle, PALETTE.gold] as const
+// Each ring color has exactly two levels: full for bright glyphs, and a fixed dim tint for faint ones and wall dots.
+const DIM_PALETTE = RING_PALETTE.map(dimTint)
+const FULL_FROM = 0.36
 
 function hash(a: number, b: number): number {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0
@@ -57,7 +66,9 @@ export function createTunnelRenderer(
   let raf = 0
   let visible = true
   let alive = true
-  const buckets: number[][] = [[], [], [], [], []]
+  // One draw list per (palette color, level), so a frame changes fillStyle at most six times.
+  const groups: number[][] = RING_PALETTE.flatMap(() => [[], []] as number[][])
+  const rings = createRingColorSequence(options.seed ?? Math.floor(Math.random() * 0x100000000), RING_PALETTE)
 
   // next/font hashes the family name; the CSS variable carries the real one.
   const family = getComputedStyle(canvas).getPropertyValue("--font-doto").trim() || "Doto"
@@ -66,7 +77,6 @@ export function createTunnelRenderer(
   function draw(dt: number) {
     if (!alive || !ctx) return
     const gate = options.getGate()
-    const p = options.getParams()
     speed += (targetSpeed(gate) - speed) * (1 - Math.exp(-dt * (gate === "granted" ? 1.4 : 3)))
     phase += speed * dt
     twist += speed * dt * 0.012
@@ -77,7 +87,7 @@ export function createTunnelRenderer(
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.globalCompositeOperation = "source-over"
-    ctx.fillStyle = p.voidColor
+    ctx.fillStyle = PALETTE.void
     ctx.fillRect(0, 0, W, H)
 
     const cols = Math.ceil(W / CW)
@@ -85,7 +95,7 @@ export function createTunnelRenderer(
     const cx = vx * W
     const cy = vy * H
     const minSide = Math.min(W, H)
-    for (const b of buckets) b.length = 0
+    for (const g of groups) g.length = 0
 
     for (let j = 0; j < rows; j++) {
       const y = j * CH + CH / 2
@@ -95,8 +105,7 @@ export function createTunnelRenderer(
         const dx = (x - cx) / minSide
         const r = Math.sqrt(dx * dx + dy * dy) + 1e-4
         // Depth into the tunnel; rings live at whole steps of u and race outward.
-        const z = 0.32 / r
-        const u = z * 1.25 + phase
+        const u = ringDepth(r, phase)
         const ringIdx = Math.floor(u)
         const ph = u - ringIdx
         let ring = ph < 0.22 ? 1 - ph / 0.22 : 0
@@ -108,19 +117,19 @@ export function createTunnelRenderer(
         if (hash(i * 31 + ringIdx * 7, j) > 0.955) v = Math.max(v, 0.14 * fog * gain)
         if (v < 0.07) continue
         const ci = Math.min(RAMP.length - 1, Math.max(1, Math.round(v * (RAMP.length - 1))))
-        const bucket = v < 0.22 ? 0 : v < 0.44 ? 1 : v < 0.66 ? 2 : v < 0.88 ? 3 : 4
-        buckets[bucket].push(x, y, ci)
+        // Brightness picks the glyph; the ring picks the color, at full or dim level only.
+        groups[rings.indexAt(ringIdx) * 2 + (v >= FULL_FROM ? 0 : 1)].push(x, y, ci)
       }
     }
 
-    const palette = [p.duskColor, p.wineColor, p.crimsonColor, p.hotColor, p.starColor]
     ctx.font = font
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    for (let b = 0; b < buckets.length; b++) {
-      const list = buckets[b]
+    for (let g = 0; g < groups.length; g++) {
+      const list = groups[g]
       if (!list.length) continue
-      ctx.fillStyle = palette[b]
+      const color = g >> 1
+      ctx.fillStyle = g & 1 ? DIM_PALETTE[color] : RING_PALETTE[color]
       for (let k = 0; k < list.length; k += 3) ctx.fillText(RAMP[list[k + 2]], list[k], list[k + 1])
     }
 
@@ -128,8 +137,10 @@ export function createTunnelRenderer(
     ctx.globalCompositeOperation = "lighter"
     const glowR = minSide * (0.16 + 0.1 * Math.min(speed / 7, 1))
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR)
-    grad.addColorStop(0, rgba(p.hotColor, 0.34 * gain))
-    grad.addColorStop(1, rgba(p.hotColor, 0))
+    // The glow takes the color of the ring about to be born, so the light foreshadows the next wave.
+    const glow = rings.colorAt(nextRingIndex(phase))
+    grad.addColorStop(0, rgba(glow, 0.34 * gain))
+    grad.addColorStop(1, rgba(glow, 0))
     ctx.fillStyle = grad
     ctx.fillRect(cx - glowR, cy - glowR, glowR * 2, glowR * 2)
     ctx.globalCompositeOperation = "source-over"

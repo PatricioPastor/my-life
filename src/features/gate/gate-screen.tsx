@@ -1,7 +1,6 @@
 "use client"
 
 import type { FormEvent } from "react"
-import type { SkyPresetName } from "@/features/sky"
 import { cn } from "@/shared/lib/utils"
 import { OWNER_HANDLE, buildAccessRequest, copyToClipboard } from "./access/access-request"
 import { AsciiTunnel } from "./ascii-tunnel"
@@ -9,7 +8,6 @@ import type { GateState, GateStatus } from "./gate-machine"
 
 interface GateScreenProps {
   state: GateState
-  preset?: SkyPresetName
   onTyped: (raw: string) => void
   onSubmit: () => void
   onRequestInvite: (copied: boolean) => void
@@ -36,7 +34,7 @@ function statusText(status: GateStatus, handle: string, copied?: boolean): strin
   }
 }
 
-export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }: GateScreenProps) {
+export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateScreenProps) {
   const { status, handle, copied } = state
   const refused = status === "invalid" || status === "denied"
   const request = buildAccessRequest(handle)
@@ -53,7 +51,7 @@ export function GateScreen({ state, preset, onTyped, onSubmit, onRequestInvite }
 
   return (
     <div className="absolute inset-0">
-      <AsciiTunnel gate={status} preset={preset} />
+      <AsciiTunnel gate={status} />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute top-[70%] left-1/2 h-[460px] w-[min(760px,100%)] -translate-x-1/2 -translate-y-1/2"

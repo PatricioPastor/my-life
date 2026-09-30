@@ -1,23 +1,22 @@
 "use client"
 
-import { useEffect, useMemo, useRef } from "react"
-import { resolveSkyParams, type SkyPresetName } from "@/features/sky"
+import { useEffect, useRef } from "react"
 import { createTunnelRenderer } from "./create-tunnel-renderer"
 import type { GateStatus } from "./gate-machine"
 
 interface AsciiTunnelProps {
   gate: GateStatus
-  preset?: SkyPresetName
+  /** Fixes the ring color sequence; left out, each mount (each visit) draws its own. */
+  seed?: number
 }
 
-export function AsciiTunnel({ gate, preset = "periwinkle" }: AsciiTunnelProps) {
+export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const params = useMemo(() => resolveSkyParams(preset), [preset])
 
-  // The loop reads these through getters, so props never restart the canvas.
-  const live = useRef({ gate, params })
+  // The loop reads the gate through a getter, so a state change never restarts the canvas.
+  const live = useRef({ gate })
   useEffect(() => {
-    live.current = { gate, params }
+    live.current = { gate }
   })
 
   useEffect(() => {
@@ -26,10 +25,10 @@ export function AsciiTunnel({ gate, preset = "periwinkle" }: AsciiTunnelProps) {
     if (!canvas || !stage) return
     const renderer = createTunnelRenderer(canvas, stage, {
       getGate: () => live.current.gate,
-      getParams: () => live.current.params,
+      seed,
     })
     return () => renderer?.stop()
-  }, [])
+  }, [seed])
 
   return <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 block h-full w-full" />
 }

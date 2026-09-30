@@ -164,7 +164,6 @@ export function Journey({ preset = "periwinkle" }: JourneyProps) {
         >
           <GateScreen
             state={gate}
-            preset={preset}
             onTyped={(raw) => dispatchGate({ type: "typed", raw })}
             onSubmit={() => dispatchGate({ type: "submit" })}
             onRequestInvite={(copied) => dispatchGate({ type: "requestInvite", copied })}

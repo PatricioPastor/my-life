@@ -54,7 +54,7 @@ Move the landing from the crimson preset to the user's palette. Every star is dr
 ## Tasks
 
 - [x] **T1 — Palette sky and theme.** Palette module, new default preset, 3-color exact sparkle tint, facet colors on stars and place titles, theme vars. Route: delegated direct (writer trigger).
-- [ ] **T2 — Recursive portal.** Ring color sequence (pure, memoized, tested), tunnel renderer colored per ring with exact palette colors (full and dim levels only), glow from the next ring, seed per visit. Route: delegated direct.
+- [x] **T2 — Recursive portal.** Ring color sequence (pure, memoized, tested), tunnel renderer colored per ring with exact palette colors (full and dim levels only), glow from the next ring, seed per visit. Route: delegated direct.
 
 ## Acceptance criteria
 
@@ -67,6 +67,7 @@ Move the landing from the crimson preset to the user's palette. Every star is dr
 
 - 2026-09-30: Document created; the user chose Shadow Grey as the background.
 - 2026-09-30: T1 done. RED (12 failing tests) then GREEN (132 tests), typecheck clean. Palette module, periwinkle default preset, exact index-picked star tints, facet colors, theme vars.
+- 2026-09-30: T2 done. ring-colors and tunnel-math pure modules tested RED then GREEN; renderer draws per-ring palette colors at two levels, glow from the next ring, seed per mount. The tunnel no longer reads sky params (fixed ring palette).
 
 ## Next step
 
