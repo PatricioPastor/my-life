@@ -90,6 +90,11 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - Store each photo's metadata for later features: kind (`media_kind`, `image` only for now), format, bytes, taken date, dominant color, palette and a whitelisted EXIF subset.
   - GPS only behind an opt-in checkbox ("Guardar desde dónde fue", unchecked by default); only an approximate location (2 decimals, about 1 km) is stored. The exact coordinates are never stored, logged or sent to the client.
   - New offline-generated migration with column-level `INSERT` grants; RLS untouched. DTO gains `kind`, `takenAt`, `dominantColor` only.
+- [ ] **T5c — Suggested place with a Google Maps override (user request, 2026-10-01).**
+  - User: "Creo que en función al GPS te recomiende la ubicación, pero si ves que está mal, setear una que consideres."
+  - When a photo is picked, read its GPS in the browser, round it, and suggest the place by name with a link to verify it on the map.
+  - If the place is wrong, or the photo has no GPS, the visitor pastes a Google Maps link instead.
+  - The copy reads "where the photo was taken", never the visitor's own location. The location is still approximate and only stored with consent.
 - [ ] **T6 — Remote setup (needs authorization).**
   - Create `app_user` with SQL and run the migrations on Neon.
   - The user swaps `DATABASE_URL` to `app_user` and adds the variables to Vercel.
@@ -187,7 +192,8 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - **RED evidence.** First run of the leak-fix tests: 37 failed (signed URL builder, `verifyAsset`, Admin paths, `type=authenticated`). First run of the metadata tests: `photo-details.test.ts` could not import its module, plus 33 failing tests (migration missing, new params, `createPending` fields, DTO fields, the checkbox). GREEN after implementation.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (1167 tests) and `pnpm build` pass; `/` stays static.
   - Open notes: the exact string Cloudinary uses for GPS values in `image_metadata` is not shown in the docs, so the parser accepts the common forms; T6's smoke test must upload a geotagged photo and check the stored coordinates. Assets uploaded before this change (none exist yet) would be of type `upload` and be refused. `app_user` can read the new columns through its table-wide `SELECT`; the server never maps them to the client.
-  - Commits `ab76523` (leak fix) and `db8b54e` (metadata).
+  - Commits `ab76523` (leak fix) and `db8b54e` (metadata). RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-e2c45abe22876e38` acknowledged. Reviewed boundary: `0be05e6`.
+  - User clarification after T5b: the location means where the photo was taken. It already comes from the photo's EXIF GPS, never from the browser (`geolocation=()` is denied in `Permissions-Policy`), but the copy "Guardar desde dónde fue" reads like the visitor's own location. The user asked for a suggested place from the photo's GPS that can be corrected with a Google Maps link, which opened T5c.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
