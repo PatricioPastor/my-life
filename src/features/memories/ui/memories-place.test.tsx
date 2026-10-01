@@ -262,3 +262,21 @@ describe("MemoriesPlace viewer", () => {
     )
   })
 })
+
+describe("MemoriesPlace action slot", () => {
+  it("hands a function action the stage, so a dialog can mount inside it", () => {
+    const seen: Array<HTMLElement | null> = []
+    render(
+      <MemoriesPlace
+        state={ready()}
+        action={(container) => {
+          seen.push(container)
+          return <button type="button">Agregar recuerdo</button>
+        }}
+      />,
+    )
+    const stage = screen.getByRole("heading", { name: "Recuerdos" }).parentElement
+    expect(seen.at(-1)).toBe(stage)
+    expect(stage?.contains(screen.getByRole("button", { name: "Agregar recuerdo" }))).toBe(true)
+  })
+})

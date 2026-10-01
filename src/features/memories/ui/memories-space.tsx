@@ -1,19 +1,47 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { listMemories } from "../actions"
-import { MemoriesPlace } from "./memories-place"
+import { useState } from "react"
+import { createMemory, listMemories, prepareUpload } from "../actions"
+import type { MemoryView } from "../memory-view"
+import { AddMemory } from "./add-memory"
+import { uploadToCloudinary } from "./cloudinary-upload"
+import { MemoriesPlace, type MemoriesState } from "./memories-place"
 import { useMemories } from "./use-memories"
 
 interface MemoriesSpaceProps {
   accent?: string
   palette?: readonly string[]
-  /** T5's "Agregar recuerdo" control. */
-  action?: ReactNode
 }
 
-/** Container: loads the visitor's memories from the server when the space mounts and hands them to the place. */
-export function MemoriesSpace({ accent, palette, action }: MemoriesSpaceProps) {
-  const state = useMemories(listMemories)
-  return <MemoriesPlace state={state} accent={accent} palette={palette} action={action} />
+/**
+ * Container: loads the visitor memories from the server when the space mounts, hands them to the place and
+ * offers "Agregar recuerdo". A memory saved here is appended to the end of the list, so the orbs already on
+ * the stage stay exactly where they are.
+ */
+export function MemoriesSpace({ accent, palette }: MemoriesSpaceProps) {
+  const loaded = useMemories(listMemories)
+  const [added, setAdded] = useState<readonly MemoryView[]>([])
+  const state: MemoriesState =
+    loaded.status === "ready" && added.length > 0 ? { status: "ready", memories: [...loaded.memories, ...added] } : loaded
+
+  return (
+    <MemoriesPlace
+      state={state}
+      accent={accent}
+      palette={palette}
+      action={
+        state.status === "ready"
+          ? (container) => (
+              <AddMemory
+                container={container}
+                prepare={prepareUpload}
+                create={createMemory}
+                upload={uploadToCloudinary}
+                onCreated={(memory) => setAdded((list) => [...list, memory])}
+              />
+            )
+          : undefined
+      }
+    />
+  )
 }

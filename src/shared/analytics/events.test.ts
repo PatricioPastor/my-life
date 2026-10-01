@@ -11,7 +11,7 @@ describe("sanitizeProps", () => {
   })
 
   it("drops every prop from events that carry none", () => {
-    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed", "story_completed", "memory_orb_opened"] as const) {
+    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed", "story_completed", "memory_orb_opened", "memory_submitted"] as const) {
       expect(sanitizeProps(name, { handle: "ana", facet: "now" })).toEqual({})
     }
   })
@@ -19,6 +19,11 @@ describe("sanitizeProps", () => {
   it("records the orb being opened with no props at all", () => {
     expect(sanitizeProps("memory_orb_opened", {})).toEqual({})
     expect(sanitizeProps("memory_orb_opened", { handle: "ana", x: 0.4, facet: "now" })).toEqual({})
+  })
+
+  it("records a submitted memory with no props: never the caption, the date or the handle", () => {
+    expect(sanitizeProps("memory_submitted", {})).toEqual({})
+    expect(sanitizeProps("memory_submitted", { caption: "Una tarde", handle: "ana", date: "2024-03-12" })).toEqual({})
   })
 
   it("never lets a handle or free text through the facet slot", () => {

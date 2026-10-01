@@ -19,8 +19,11 @@ interface MemoriesPlaceProps {
   accent?: string
   /** Orb colors; defaults to the accent. */
   palette?: readonly string[]
-  /** Slot for the "Agregar recuerdo" control (T5). It sits in the bottom-right corner the layout keeps clear. */
-  action?: ReactNode
+  /**
+   * The "Agregar recuerdo" control, in the bottom-right corner the layout keeps clear. A function receives the
+   * stage element, so a dialog it opens can mount inside it (and keep the magnetic cursor).
+   */
+  action?: ReactNode | ((container: HTMLElement | null) => ReactNode)
 }
 
 const PORCELAIN = "#f3f0ea"
@@ -94,7 +97,7 @@ export function MemoriesPlace({ state, accent, palette, action }: MemoriesPlaceP
           onOpen={(id, origin) => setViewing({ id, origin })}
         />
       )}
-      {action && <div className="absolute right-6 bottom-[72px]">{action}</div>}
+      {action && <div className="absolute right-6 bottom-[72px] max-md:bottom-[128px]">{typeof action === "function" ? action(root) : action}</div>}
       <MemoryViewer
         memories={memories}
         openId={viewing.id}

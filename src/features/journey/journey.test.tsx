@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const checkHandle = vi.fn()
 vi.mock("@/features/gate/actions", () => ({ checkHandle: (h: string) => checkHandle(h) }))
 const listMemories = vi.fn()
-vi.mock("@/features/memories/actions", () => ({ listMemories: () => listMemories() }))
+vi.mock("@/features/memories/actions", () => ({
+  listMemories: () => listMemories(),
+  prepareUpload: vi.fn(),
+  createMemory: vi.fn(),
+}))
 const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 
