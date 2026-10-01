@@ -121,6 +121,18 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - **Checks.** `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` 146 files, 2238 tests passed; `pnpm build` ok, `/` static. RED observed first for `smoothedReader` (3 failing: not a function). Playwright on :3001 at 1440x900 against a temporary harness (deleted): overview with 14 voice orbs, 9 of them audio-only; fly-to and glass for photo, audio-only and both; play works (audio plays, `crossOrigin` anonymous, real Web Audio ripples); the add dialog opens. Shots `v-i-*`.
   - **Open.** Real-service checks (T5) and phones (T4) remain.
 
+- 2026-10-01: RDD summary for T1–T3 (all approved and acknowledged). Ranges over the lens budget were split per commit, and intermediate commits were reviewed in temporary worktrees.
+  - **Audio:**
+    - `a627a1e..9eae6e8`: high risk, because `Permissions-Policy` changed. All 4 lenses approved with no findings; lineage `review-23af5c5201ac61f6`.
+    - `9eae6e8..50b19e6`: lineage `review-071fd06620ad8123`.
+    - `50b19e6..73f7883`: lineage `review-539bc5dd0a0c6c8b`.
+  - **Canvas:**
+    - `a627a1e..838a252`: lineage `review-087f82b0aec6298d`.
+    - `838a252..13e7e8b`: lineage `review-3cf3a7983be41490`. One CRITICAL finding: `dispose()` called `loseContext()` on a still-mounted canvas, so any effect re-run (a resize, reduced motion, StrictMode) dropped WebGL for good. Fixed in `798bbc6` (cherry-picked as `0680895`) by removing `loseContext`, with the regression test `glass-renderer.test.ts` (RED observed). The targeted validation approved it.
+    - `13e7e8b..002ba7d`: lineage `review-ffb8a209dc20453a`.
+  - **Integration** (`a86d0cc..5558147`): lineage `review-f3bd90be4b105ea7`.
+  - Reviewed boundary: `5558147`.
+
 ## Next step
 
 T1, T2 and T3 are done. T4 (mobile pass) and T5 (deliver) are open.
