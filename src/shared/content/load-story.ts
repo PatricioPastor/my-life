@@ -4,11 +4,13 @@ import { parseStory } from "./parse-story"
 import type { Story } from "./types"
 
 /**
- * Read and parse a story file, relative to the project root. Server-only (it uses `fs`): call it from a Server Component,
- * so the file is read at build time for static routes. A parse failure propagates and fails the build with the parser's message.
+ * Read and parse a story file, relative to the project root. Server-only (it uses `fs`): call it from a Server Component.
+ * Static routes read it at build time, but a Server Action that sets cookies re-renders the route at request time, so
+ * the file must also ship with the function (`outputFileTracingIncludes` in `next.config.ts`). A parse failure
+ * propagates and fails the build with the parser's message.
  */
 export function loadStory(relativePath: string): Story {
-  // Runs at build time only (the route is static), so there is nothing for the bundler to trace.
+  // The bundler cannot trace this dynamic path; next.config.ts includes the content folder explicitly.
   const file = join(/*turbopackIgnore: true*/ process.cwd(), relativePath)
   try {
     return parseStory(readFileSync(file, "utf8"))
