@@ -308,6 +308,19 @@
   .mem-point[data-reduced="true"] .mem-drift {
     animation: none;
   }
+  /* While an orb is held (hover, focus, magnet), its linked neighbours brighten and the rest dim a little. */
+  .mem-drift {
+    transition:
+      opacity 320ms var(--ease),
+      filter 320ms var(--ease);
+  }
+  .mem-point[data-link="far"] .mem-drift {
+    opacity: 0.5;
+  }
+  .mem-point[data-link="near"] .mem-drift,
+  .mem-point[data-link="self"] .mem-drift {
+    filter: brightness(1.35) saturate(1.1);
+  }
   .mem-point:hover .mem-drift,
   .mem-point:focus-visible .mem-drift {
     animation-play-state: paused;

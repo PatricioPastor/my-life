@@ -36,7 +36,7 @@ export interface Drift {
 const ATTEMPTS = 48
 
 /** FNV-1a: a stable 32-bit hash of a string. */
-function hash(text: string): number {
+export function hash(text: string): number {
   let h = 0x811c9dc5
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i)
@@ -46,7 +46,7 @@ function hash(text: string): number {
 }
 
 /** mulberry32: a small seeded generator, so a given id always draws the same numbers. */
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
   let a = seed
   return () => {
     a = (a + 0x6d2b79f5) | 0
