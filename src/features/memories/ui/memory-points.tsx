@@ -27,6 +27,11 @@ const VIEW_MARGIN = { top: 100, right: 48, bottom: 150, left: 48 }
 export interface PointsHandle {
   /** Where the orb of a memory is in the world right now, or null. */
   worldOf: (id: string) => Point | null
+  /**
+   * Gives focus back to an orb after the glass closed. It is a quiet focus: the keyboard is back where it was, but the
+   * orb is not held, lit or opened up (no photo, no dimmed neighbours) until the visitor moves focus themselves.
+   */
+  restoreFocus: (id: string) => void
 }
 
 interface MemoryPointsProps {
@@ -86,6 +91,14 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
       worldOf: (id) => {
         const index = indexById.current.get(id)
         return index === undefined ? null : (loopRef.current?.positionOf(index) ?? null)
+      },
+      restoreFocus: (id) => {
+        const orb = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? []).find(
+          (el) => el.dataset.memoryId === id,
+        )
+        if (!orb) return
+        orb.dataset.quiet = "true"
+        orb.focus({ preventScroll: true })
       },
     }),
     [],
@@ -183,6 +196,8 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
     }
     // Tabbing to an orb that is off screen brings it into view.
     const onFocusIn = (event: FocusEvent) => {
+      // Focus given back after the glass closed is not the visitor exploring: the overview stays as it was.
+      if ((event.target as HTMLElement | null)?.dataset?.quiet === "true") return
       const at = orbAt(event.target)
       loop.hold("focus", at)
       if (at === null || !controller.enabled()) return
@@ -195,7 +210,10 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
         controller.flyTo(focusCamera(loop.positionOf(at), size.current, cam.zoom, { x: 0.5, y: 0.45 }), { curve: "quick" })
       }
     }
-    const onFocusOut = () => loop.hold("focus", null)
+    const onFocusOut = (event: FocusEvent) => {
+      ;(event.target as HTMLElement | null)?.removeAttribute?.("data-quiet")
+      loop.hold("focus", null)
+    }
     const onMove = (event: PointerEvent) => {
       if (event.pointerType === "touch") return
       const rect = list.getBoundingClientRect()

@@ -113,13 +113,8 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
     })
   }, [root, controller])
 
-  const restoreFocus = useCallback(
-    (id: string) => {
-      const orbs = root?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? []
-      for (const orb of orbs) if (orb.dataset.memoryId === id) orb.focus()
-    },
-    [root],
-  )
+  // The keyboard goes back to the orb that was opened, quietly: the overview must look exactly as it did before.
+  const restoreFocus = useCallback((id: string) => points.current?.restoreFocus(id), [])
 
   // Escape on the stage (focus on an orb, or the glass not open yet) turns the camera back, as it does from the glass.
   const onKeyDown = (event: KeyboardEvent) => {

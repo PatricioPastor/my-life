@@ -421,6 +421,18 @@
       opacity: 0.35;
       transform: scale(0.6);
     }
+    /* Focus given back after the glass closes is quiet: only the focus ring says where the keyboard is. */
+    .mem-point[data-quiet="true"]:focus-visible:not(:hover) .mem-thumb {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    .mem-point[data-quiet="true"]:focus-visible:not(:hover) .mem-dot {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .mem-point[data-quiet="true"]:focus-visible:not(:hover) .mem-drift {
+    animation-play-state: running;
   }
   .mem-scrim[data-state="open"] {
     animation: fade 200ms ease-out both;

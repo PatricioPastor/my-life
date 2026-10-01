@@ -396,6 +396,100 @@ describe("MemoriesPlace approach", () => {
   })
 })
 
+describe("MemoriesPlace leaving a memory", () => {
+  beforeEach(stubFrames)
+
+  const glass = () => screen.getByRole("dialog")
+  const orbs = () => Array.from(document.querySelectorAll<HTMLElement>("[data-memory-id]"))
+  const scaleOf = (orb: HTMLElement) => /scale\(([\d.]+)\)/.exec(orb.parentElement?.style.transform ?? "")?.[1]
+  const ways: Record<string, () => void> = {
+    Escape: () => fireEvent.keyDown(glass(), { key: "Escape" }),
+    "the close button": () => fireEvent.click(within(glass()).getByRole("button", { name: "Cerrar" })),
+    "a wheel out": () => fireEvent.wheel(glass().querySelector("[data-glass-sphere]")!, { deltaY: 120 }),
+  }
+
+  for (const [way, close] of Object.entries(ways)) {
+    it(`puts every orb back to its normal look after closing with ${way}`, async () => {
+      render(<MemoriesPlace state={three} />)
+      advance(2)
+      const before = orbs().map(scaleOf)
+      fireEvent.click(orbAt(/Una tarde de lluvia/))
+      advanceUntil(dialogOpen)
+      close()
+      advanceUntil(() => phase() === "idle")
+      // Focus goes back to the orb (for the keyboard), but it must not hold it: no orb lit, none dimmed.
+      await waitFor(() => expect(document.activeElement).toBe(orbAt(/Una tarde de lluvia/)))
+      advance(2)
+      expect(orbs().map((o) => o.getAttribute("data-link"))).toEqual(["idle", "idle", "idle"])
+      expect(orbs().some((o) => o.hasAttribute("data-focus"))).toBe(false)
+      // The camera is back at its zoom, so every orb is drawn at the scale it had.
+      expect(orbs().map(scaleOf)).toEqual(before)
+      // The restored focus is a quiet one: no photo, no hold, until the visitor moves on.
+      expect(orbAt(/Una tarde de lluvia/).getAttribute("data-quiet")).toBe("true")
+    })
+  }
+
+  it("puts every orb back after a click on the empty stage closes it", async () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    // Radix listens for outside presses from the next tick on.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    const scrim = document.querySelector(".mem-scrim")!
+    fireEvent.pointerDown(scrim, { pointerType: "mouse", button: 0 })
+    fireEvent.pointerUp(scrim, { pointerType: "mouse", button: 0 })
+    fireEvent.click(scrim)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(phase()).toBe("leaving")
+    advanceUntil(() => phase() === "idle")
+    await waitFor(() => expect(document.activeElement).toBe(orbAt(/Una tarde de lluvia/)))
+    expect(orbs().map((o) => o.getAttribute("data-link"))).toEqual(["idle", "idle", "idle"])
+  })
+
+  it("keeps the constellation loop running after the glass closes", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    // While the glass is open the constellation idles under it: the orbs behind stay put.
+    advance(1)
+    const still = transformOf(/El primer viaje/)
+    advance(4)
+    expect(transformOf(/El primer viaje/)).toBe(still)
+    fireEvent.keyDown(glass(), { key: "Escape" })
+    advanceUntil(() => phase() === "idle")
+    const at = transformOf(/El primer viaje/)
+    advance(6)
+    expect(frames.length).toBeGreaterThan(0)
+    expect(transformOf(/El primer viaje/)).not.toBe(at)
+  })
+
+  it("holds an orb again once the visitor really moves focus to it", async () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    fireEvent.keyDown(glass(), { key: "Escape" })
+    advanceUntil(() => phase() === "idle")
+    await waitFor(() => expect(document.activeElement).toBe(orbAt(/Una tarde de lluvia/)))
+    act(() => orbAt(/El primer viaje/).focus())
+    expect(orbAt(/El primer viaje/).getAttribute("data-link")).toBe("self")
+    expect(orbAt(/Una tarde de lluvia/).hasAttribute("data-quiet")).toBe(false)
+  })
+
+  it("restores the camera exactly under reduced motion, whatever closed it", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+    render(<MemoriesPlace state={three} />)
+    const before = CAPTIONS.map((c) => transformOf(new RegExp(c)))
+    for (const close of Object.values(ways)) {
+      fireEvent.click(orbAt(/La casa nueva/))
+      await waitFor(() => expect(dialogOpen()).toBe(true))
+      close()
+      await waitFor(() => expect(phase()).toBe("idle"))
+      expect(CAPTIONS.map((c) => transformOf(new RegExp(c)))).toEqual(before)
+      expect(orbs().every((o) => o.getAttribute("data-link") === "idle")).toBe(true)
+    }
+  })
+})
+
 const CAPTIONS = ["El primer viaje", "Una tarde de lluvia", "La casa nueva"]
 
 describe("MemoriesPlace previous and next", () => {
