@@ -117,6 +117,8 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - `src/features/gate/session` (`server-only`; moved from `src/shared/session` so shared code never imports a feature, the gate owns visitor identity): `signSession` and `verifySession` (HMAC-SHA256, constant-time compare, strict payload `{ h, exp }`, handle checked with the gate's `isValidHandle`), `getSessionSecret` (at least 32 decoded bytes, else not configured), cookie constants and options, and `currentVisitor()`, which also re-checks the handle against `AccessPolicy` so removing it from the whitelist revokes the session.
   - Cookie `ml_visitor`: `httpOnly`, `secure` in production, `sameSite: "lax"`, `path: "/"`, 30 days.
   - The gate action now goes through `admitVisitor` (`src/features/gate/access/admit-visitor.ts`). A denied or invalid handle gets no cookie. With no valid `SESSION_SECRET` it still admits, skips the cookie and logs one handle-free warning.
+  - Commits `5c452a5` (writer) and `fb99d8b` (inline refactor: the session moved under the gate). The full suite passed with 726 tests.
+  - RDD (medium, slice budget reached) was granted and approved with no findings. Lineage `review-d616214a38b5a470` acknowledged. Reviewed boundary: `fb99d8b`.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
