@@ -346,7 +346,7 @@ function MemoryForm({
                 onDrop={onDrop}
                 className={cn(
                   RIM,
-                  "flex h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-sm border-dashed bg-white/[0.03] p-3 text-center transition-colors duration-200 md:h-36",
+                  "flex h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-sm border-dashed bg-white/[0.03] p-3 text-center transition-colors duration-200 md:h-36 [@media(max-height:520px)]:h-20",
                   "peer-focus-visible:border-[#a8c8ff]/70 peer-aria-[invalid=true]:border-signal/70",
                   dragging && "border-[#a8c8ff]/70 bg-[#a8c8ff]/[0.07]",
                 )}
@@ -490,7 +490,7 @@ function MemoryForm({
       {/* Outside the scroll region, so the submit and what it reports are always in reach. On desktop it sits under the right column. */}
       <div
         data-testid="memory-actions"
-        className="grid shrink-0 gap-2 border-t border-[#a8c8ff]/15 bg-[rgba(8,7,20,0.96)] px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-center md:gap-x-8 md:px-8 md:pb-4"
+        className="grid shrink-0 gap-2 border-t border-[#a8c8ff]/15 bg-[rgba(8,7,20,0.96)] px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-center md:gap-x-8 md:px-8 md:pb-4 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <div className="flex min-w-0 flex-col justify-center gap-1">
           {errors.form && (
@@ -580,11 +580,11 @@ export function AddMemory(props: AddMemoryProps) {
               "md:h-[min(100%,690px)] md:max-w-[900px] md:rounded-md md:border-b",
             )}
           >
-            <div className="relative shrink-0 px-5 pt-2.5 pb-3 md:px-8 md:pt-5 md:pb-3">
+            <div className="relative shrink-0 px-5 pt-2.5 pb-3 md:px-8 md:pt-5 md:pb-3 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-1.5">
               <div data-testid="sheet-handle" aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 md:hidden" />
               <div className="flex flex-col gap-1 pr-16">
-                <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea]">Agregar recuerdo</Dialog.Title>
-                <Dialog.Description className="t-body m-0 text-[length:var(--type-1)] text-ink-muted">
+                <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea] [@media(max-height:520px)]:text-[length:var(--type-3)]">Agregar recuerdo</Dialog.Title>
+                <Dialog.Description className="t-body m-0 text-[length:var(--type-1)] text-ink-muted [@media(max-height:520px)]:sr-only">
                   Una foto, un audio o ambos. Tu recuerdo aparecerá en el espacio cuando sea aprobado.
                 </Dialog.Description>
               </div>

@@ -1,5 +1,6 @@
 import { orbScale, worldToScreen, type Camera } from "./camera"
 import { SIM_DT, type ConstellationSim } from "./constellation-sim"
+import { loopShouldRun } from "./loop-gate"
 import { hash } from "./point-layout"
 import type { Edge } from "./similarity"
 
@@ -64,6 +65,8 @@ export interface ConstellationLoop {
   resize: (width: number, height: number) => void
   /** Draws the current frame again without stepping the simulation (the camera moved while nothing else did). */
   redraw: () => void
+  /** Stops asking for frames while something opaque covers the canvas (the glass view), and resumes after. */
+  pause: (paused: boolean) => void
   dispose: () => void
 }
 
@@ -267,8 +270,9 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     schedule()
   }
 
+  let paused = false
   const schedule = () => {
-    if (alive && !raf && !reduced && !document.hidden) raf = requestAnimationFrame(frame)
+    if (!raf && loopShouldRun({ alive, reduced, hidden: document.hidden, paused })) raf = requestAnimationFrame(frame)
   }
   const stop = () => {
     cancelAnimationFrame(raf)
@@ -306,6 +310,15 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
       render(reduced ? 0 : acc, 1)
     },
     redraw: () => render(reduced ? 0 : acc, 1),
+    pause: (next) => {
+      if (next === paused) return
+      paused = next
+      if (paused) stop()
+      else {
+        last = performance.now()
+        schedule()
+      }
+    },
     hold: (source, index) => {
       held[source] = index
       applyPin()

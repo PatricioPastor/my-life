@@ -43,7 +43,9 @@ interface Props {
   onRestoreFocus: (id: string) => void
 }
 
-function mount(over: Partial<Props> = {}) {
+const DESKTOP = { width: 1440, height: 900 }
+
+function mount(over: Partial<Props> = {}, viewport = DESKTOP) {
   const props: Props = {
     memory: photo,
     prev: null,
@@ -54,9 +56,9 @@ function mount(over: Partial<Props> = {}) {
     onRestoreFocus: vi.fn(),
     ...over,
   }
-  const utils = render(<GlassView {...props} container={document.body} viewport={{ width: 1440, height: 900 }} />)
+  const utils = render(<GlassView {...props} container={document.body} viewport={viewport} />)
   const again = (next: Partial<Props>) =>
-    utils.rerender(<GlassView {...props} {...next} container={document.body} viewport={{ width: 1440, height: 900 }} />)
+    utils.rerender(<GlassView {...props} {...next} container={document.body} viewport={viewport} />)
   return { props, again, ...utils }
 }
 
@@ -294,6 +296,34 @@ describe("GlassView next and previous", () => {
     fireEvent.pointerDown(sphere, { pointerType: "touch", clientX: 100, clientY: 400 })
     fireEvent.pointerUp(sphere, { pointerType: "touch", clientX: 240, clientY: 405 })
     expect(props.onStep).toHaveBeenLastCalledWith("x")
+  })
+
+  it("also turns the page on a swipe that starts on the caption or the empty stage", () => {
+    const { props } = mount({ prev, next })
+    const scrim = document.querySelector(".mem-scrim")!
+    fireEvent.pointerDown(scrim, { pointerType: "touch", clientX: 300, clientY: 700 })
+    fireEvent.pointerUp(scrim, { pointerType: "touch", clientX: 160, clientY: 705 })
+    expect(props.onStep).toHaveBeenLastCalledWith("y")
+    const caption = dialog().querySelector("[data-glass-caption]")!
+    fireEvent.pointerDown(caption, { pointerType: "touch", clientX: 100, clientY: 700 })
+    fireEvent.pointerUp(caption, { pointerType: "touch", clientX: 260, clientY: 704 })
+    expect(props.onStep).toHaveBeenLastCalledWith("x")
+  })
+
+  it("puts the caption beside the sphere on a short landscape screen", () => {
+    mount({}, { width: 844, height: 390 })
+    expect(dialog().querySelector("[data-glass-caption]")!.getAttribute("data-caption")).toBe("side")
+  })
+
+  it("centers the sphere on the layout anchor, so the side caption never overlaps it", () => {
+    mount({}, { width: 844, height: 390 })
+    const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
+    expect(parseFloat(sphere.style.left)).toBeCloseTo(32, 0)
+  })
+
+  it("keeps the caption under the sphere on a portrait phone", () => {
+    mount({}, { width: 390, height: 844 })
+    expect(dialog().querySelector("[data-glass-caption]")!.getAttribute("data-caption")).toBe("below")
   })
 
   it("does nothing on a tap", () => {

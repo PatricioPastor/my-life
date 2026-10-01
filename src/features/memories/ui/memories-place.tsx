@@ -161,7 +161,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         ))}
       </div>
       <div data-world className="mem-world pointer-events-none absolute inset-0">
-        <DustCanvas reduced={reduced} camera={controller} />
+        <DustCanvas reduced={reduced} camera={controller} paused={current.phase === "open"} />
         {memories.length > 0 && (
           <MemoryPoints
             ref={points}
@@ -170,12 +170,13 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
             controller={controller}
             reduced={reduced}
             approachId={approach.state.phase === "idle" ? null : approach.state.id}
+            paused={current.phase === "open"}
             onOpen={approach.open}
           />
         )}
       </div>
       <h1
-        className="t-title rise-late pointer-events-none absolute bottom-[calc(72px+env(safe-area-inset-bottom))] left-6 m-0 text-[length:var(--type-display)] leading-[0.9] md:left-20"
+        className="t-title rise-late pointer-events-none absolute bottom-[calc(72px+env(safe-area-inset-bottom))] left-[max(1.5rem,calc(env(safe-area-inset-left)+0.5rem))] m-0 text-[length:var(--type-display)] leading-[0.9] md:left-[max(5rem,calc(env(safe-area-inset-left)+0.5rem))]"
         style={{
           color: PORCELAIN,
           textShadow: `0 0 36px color-mix(in oklab, ${accent ?? "#a8c8ff"} 22%, transparent)`,
@@ -201,7 +202,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
       {action && (
         <div
           data-hud
-          className="absolute right-6 bottom-[calc(72px+env(safe-area-inset-bottom))] max-md:bottom-[calc(128px+env(safe-area-inset-bottom))]"
+          className="absolute right-[max(1.5rem,calc(env(safe-area-inset-right)+0.5rem))] bottom-[calc(72px+env(safe-area-inset-bottom))] max-md:bottom-[calc(128px+env(safe-area-inset-bottom))]"
         >
           {typeof action === "function" ? action(root) : action}
         </div>

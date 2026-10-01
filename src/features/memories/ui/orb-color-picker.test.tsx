@@ -199,3 +199,10 @@ describe("OrbColorPicker with no photo (a voice-only memory)", () => {
     expect(ORB_COLOR_COPY.idle).toMatch(/foto o un audio/)
   })
 })
+
+describe("OrbColorPicker on a phone", () => {
+  it("gives every swatch a 44 px touch target", () => {
+    setup({ fromPhoto: true })
+    for (const radio of radios()) expect(radio.className).toMatch(/(^|\s)size-11(\s|$)/)
+  })
+})

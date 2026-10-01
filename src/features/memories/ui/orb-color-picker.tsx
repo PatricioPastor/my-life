@@ -126,7 +126,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
                   onKeyDown={(event) => onKeyDown(event, index)}
                   data-magnetic="light"
                   data-cursor-label={names[index]}
-                  className="press grid size-10 shrink-0 place-items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#a8c8ff] disabled:opacity-60"
+                  className="press grid size-11 shrink-0 place-items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#a8c8ff] disabled:opacity-60"
                 >
                   <span
                     data-swatch
@@ -143,7 +143,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
             // Keeps the row's height (and shows where the colors will be) until there is a photo to take them from.
             <div aria-hidden="true" className="flex gap-0.5">
               {Array.from({ length: SLOTS }, (_, index) => (
-                <span key={index} className="grid size-10 place-items-center">
+                <span key={index} className="grid size-11 place-items-center">
                   <span className="size-6 rounded-full border border-dashed border-[#a8c8ff]/20" />
                 </span>
               ))}

@@ -12,6 +12,7 @@ import { glassLayout, OPEN_ZOOM } from "./glass-layout"
 import { orbDepth, orbMetrics } from "./orb-depth"
 import { driftFor, layoutPoints } from "./point-layout"
 import { buildEdges } from "./similarity"
+import { nearestOrb } from "./tap-target"
 import { useViewport } from "./use-viewport"
 
 const LABEL_MAX = 28
@@ -36,6 +37,8 @@ interface MemoryPointsProps {
   reduced: boolean
   /** The memory the camera is approaching or the glass is open on: it is held still and grows as the camera arrives. */
   approachId: string | null
+  /** The glass view is open over the constellation: the loop idles. */
+  paused?: boolean
   onOpen: (id: string, world: Point) => void
   ref?: Ref<PointsHandle>
 }
@@ -51,7 +54,7 @@ type PointStyle = CSSProperties & Record<`--${string}`, string>
  * real buttons named by caption and date, in list order. An orb under the pointer or focus is held still and lights
  * its links; reduced motion gets one settled, still layout.
  */
-export function MemoryPoints({ memories, bounds, controller, reduced, approachId, onOpen, ref }: MemoryPointsProps) {
+export function MemoryPoints({ memories, bounds, controller, reduced, approachId, paused = false, onOpen, ref }: MemoryPointsProps) {
   const { width, height } = useViewport()
   const [ready, setReady] = useState<ReadonlySet<string>>(() => new Set())
   const markReady = (id: string) => setReady((prev) => (prev.has(id) ? prev : new Set(prev).add(id)))
@@ -221,6 +224,11 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
     // The approach is applied by its own effect below; it must not rebuild the simulation.
   }, [memories, points, edges, bounds, controller, reduced])
 
+  // While the glass is open the loop idles. The same deps as the loop's own effect, so a rebuilt loop gets it too.
+  useEffect(() => {
+    loopRef.current?.pause(paused)
+  }, [paused, memories, points, edges, bounds, controller, reduced])
+
   // The approach (the camera flying to an orb, the glass open on it, the way back) holds that orb and grows it.
   useEffect(() => {
     approachRef.current = approachId
@@ -232,6 +240,7 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
     loop.emphasize(at, at === null ? 0 : focusAmount(controller.camera().zoom, OPEN_ZOOM), glassLayout(size.current).diameter)
   }, [approachId, controller])
 
+
   return (
     <>
       <canvas
@@ -241,7 +250,30 @@ export function MemoryPoints({ memories, bounds, controller, reduced, approachId
         className="pointer-events-none absolute top-0 left-0"
         style={{ width, height }}
       />
-      <ul ref={listRef} aria-label="Recuerdos" className="pointer-events-none absolute inset-0 m-0 list-none p-0">
+      <ul
+        ref={listRef}
+        aria-label="Recuerdos"
+        className="pointer-events-none absolute inset-0 m-0 list-none p-0"
+        // On a phone the overview packs orbs closer than a fingertip, so their hit areas overlap and the browser
+        // hands the tap to the one drawn on top. A touch (or pen) tap goes to the orb whose center is nearest.
+        onClickCapture={(event) => {
+          const type = (event.nativeEvent as PointerEvent).pointerType
+          if (type !== "touch" && type !== "pen") return
+          const hit = (event.target as Element).closest?.("[data-memory-id]")
+          if (!hit) return
+          const centers = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? [], (el) => {
+            const box = el.getBoundingClientRect()
+            return { id: el.dataset.memoryId ?? "", x: box.x + box.width / 2, y: box.y + box.height / 2 }
+          })
+          const id = nearestOrb({ x: event.clientX, y: event.clientY }, centers)
+          if (id === null || id === (hit as HTMLElement).dataset.memoryId) return
+          const index = indexById.current.get(id)
+          if (index === undefined) return
+          event.stopPropagation()
+          event.preventDefault()
+          onOpen(id, loopRef.current?.positionOf(index) ?? points[index])
+        }}
+      >
         {memories.map((memory, index) => {
           const orb = orbMetrics(orbDepth(memory.id))
           const drift = driftFor(memory.id)

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { parallaxOffset } from "./camera"
 import type { CameraSource } from "./camera-controller"
+import { loopShouldRun } from "./loop-gate"
 import {
   DUST_DEPTH,
   DUST_LAYERS,
@@ -23,6 +24,8 @@ interface DustCanvasProps {
   tints?: readonly string[]
   /** The canvas camera: each depth layer follows it a different amount (far dust barely moves), and the field wraps. */
   camera?: CameraSource
+  /** Something opaque covers the canvas (the glass view): the loop idles instead of drawing under it. */
+  paused?: boolean
 }
 
 const SEED = 20261001
@@ -53,8 +56,15 @@ function makeSprite(color: string, softness: number): HTMLCanvasElement {
  * (nearer motes more), pauses when the tab is hidden or the canvas is off screen, and holds still under
  * reduced motion.
  */
-export function DustCanvas({ reduced, tints = DEFAULT_TINTS, camera }: DustCanvasProps) {
+export function DustCanvas({ reduced, tints = DEFAULT_TINTS, camera, paused = false }: DustCanvasProps) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const pausedRef = useRef(paused)
+  // The running loop's own way to stop and resume, so pausing never rebuilds the canvas.
+  const control = useRef<((paused: boolean) => void) | null>(null)
+  useEffect(() => {
+    pausedRef.current = paused
+    control.current?.(paused)
+  }, [paused])
 
   useEffect(() => {
     const canvas = ref.current
@@ -126,11 +136,19 @@ export function DustCanvas({ reduced, tints = DEFAULT_TINTS, camera }: DustCanva
       schedule()
     }
     const schedule = () => {
-      if (!raf && !reduced && visible && !document.hidden) raf = requestAnimationFrame(frame)
+      if (!raf && visible && loopShouldRun({ alive: true, reduced, hidden: document.hidden, paused: pausedRef.current })) raf = requestAnimationFrame(frame)
     }
     const stop = () => {
       cancelAnimationFrame(raf)
       raf = 0
+    }
+
+    control.current = (next) => {
+      if (next) stop()
+      else {
+        last = performance.now()
+        schedule()
+      }
     }
 
     const onResize = () => {
@@ -175,6 +193,7 @@ export function DustCanvas({ reduced, tints = DEFAULT_TINTS, camera }: DustCanva
     const unsubscribe = reduced ? camera?.subscribe(() => draw(0)) : undefined
 
     return () => {
+      control.current = null
       stop()
       unsubscribe?.()
       observer?.disconnect()

@@ -261,6 +261,44 @@ describe("MemoryPoints in motion", () => {
     expect(world.y).toBeCloseTo(now.y, 6)
   })
 
+  describe("a tap on overlapping orbs", () => {
+    /** A click as a finger makes it: at a point, with a pointer type. */
+    const tapAt = (target: Element, x: number, y: number, pointerType: string) => {
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y })
+      Object.defineProperty(event, "pointerType", { value: pointerType })
+      act(() => {
+        target.dispatchEvent(event)
+      })
+    }
+    /** Two orbs 12 px apart, so their 44 px hit areas overlap and "Dos" is the one on top. */
+    const crowd = (onOpen: (id: string, world: { x: number; y: number }) => void) => {
+      mount(trip, false, onOpen)
+      play(5)
+      const centers: Record<string, [number, number]> = { Uno: [100, 100], Dos: [112, 104], Tres: [400, 400], Lejos: [600, 600] }
+      for (const [name, [x, y]] of Object.entries(centers)) {
+        vi.spyOn(orb(new RegExp(name)), "getBoundingClientRect").mockReturnValue(
+          new DOMRect(x - 22, y - 22, 44, 44),
+        )
+      }
+    }
+
+    it("opens the orb nearest the finger, not the one drawn on top", () => {
+      const onOpen = vi.fn()
+      crowd(onOpen)
+      tapAt(orb(/Dos/), 99, 100, "touch")
+      expect(onOpen).toHaveBeenCalledTimes(1)
+      expect(onOpen.mock.calls[0][0]).toBe("a")
+    })
+
+    it("leaves a mouse click and a keyboard activation on the orb they hit", () => {
+      const onOpen = vi.fn()
+      crowd(onOpen)
+      tapAt(orb(/Dos/), 99, 100, "mouse")
+      tapAt(orb(/Dos/), 0, 0, "")
+      expect(onOpen.mock.calls.map((c) => c[0])).toEqual(["b", "b"])
+    })
+  })
+
   it("keeps the others where they are when a memory is added", () => {
     const { again } = mount(trip)
     play(120)

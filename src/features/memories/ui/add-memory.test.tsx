@@ -1131,6 +1131,18 @@ describe("AddMemory with a virtual keyboard", () => {
     expect(content.style.paddingBottom).toBe("")
   })
 
+  it("compacts the header and the footer on a short screen (a phone in landscape), so the fields keep most of the card", () => {
+    setup()
+    open()
+    const short = "[@media(max-height:520px)]"
+    const header = screen.getByRole("heading", { name: "Agregar recuerdo" })
+    expect(header.className).toContain(`${short}:text-`)
+    expect(screen.getByText(/Una foto, un audio o ambos/).className).toContain(`${short}:sr-only`)
+    expect(screen.getByTestId("memory-actions").className).toContain(`${short}:pt-2`)
+    // A shorter photo box lifts the audio section into view without scrolling.
+    expect(screen.getByTestId("photo-drop").className).toContain(`${short}:h-20`)
+  })
+
   it("makes the control to open it at least 44 px tall on a phone", () => {
     setup()
     expect(screen.getByRole("button", { name: "Agregar recuerdo" }).className).toMatch(/(^|\s)h-11(\s|$)/)

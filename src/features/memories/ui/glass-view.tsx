@@ -90,26 +90,43 @@ function GlassBody({
     else audio.play().catch(() => setStatus("error"))
   }
 
-  const swipeFrom = useRef<{ x: number; y: number } | null>(null)
-  const onSwipeEnd = (event: PointerEvent) => {
-    const start = swipeFrom.current
-    swipeFrom.current = null
-    if (!start) return
-    const step = swipeStep(event.clientX - start.x, event.clientY - start.y)
-    const target = step === 1 ? next : step === -1 ? prev : null
-    if (target) onStep(target.id)
-  }
-
-  const { diameter, anchor } = glassLayout(viewport)
+  const { diameter, anchor, caption: captionAt } = glassLayout(viewport)
+  const side = captionAt === "side"
   const sphere: SphereStyle = {
     "--pc": memory.orbColor,
     width: diameter,
     height: diameter,
-    left: "50%",
+    left: `${(anchor.x * 100).toFixed(2)}%`,
     top: `${(anchor.y * 100).toFixed(2)}%`,
     marginLeft: -diameter / 2,
     marginTop: -diameter / 2,
   }
+  const prevButton = (
+    <button
+      type="button"
+      aria-label="Anterior"
+      disabled={!prev}
+      data-magnetic="light"
+      data-cursor-label="Anterior"
+      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
+      onClick={() => prev && onStep(prev.id)}
+    >
+      <Chevron />
+    </button>
+  )
+  const nextButton = (
+    <button
+      type="button"
+      aria-label="Siguiente"
+      disabled={!next}
+      data-magnetic="light"
+      data-cursor-label="Siguiente"
+      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
+      onClick={() => next && onStep(next.id)}
+    >
+      <Chevron flip />
+    </button>
+  )
   const pending = memory.status === "pending"
 
   return (
@@ -121,13 +138,6 @@ function GlassBody({
         data-voice={memory.audio !== null}
         className="mem-glass-sphere pointer-events-auto absolute touch-none"
         style={sphere}
-        onPointerDown={(event) => {
-          swipeFrom.current = { x: event.clientX, y: event.clientY }
-        }}
-        onPointerUp={onSwipeEnd}
-        onPointerCancel={() => {
-          swipeFrom.current = null
-        }}
       >
         <GlassOrb memory={memory} mode={mode} reduced={reduced} level={level} diameter={diameter} onFail={onFail} />
         {memory.audio && (
@@ -163,21 +173,25 @@ function GlassBody({
         />
       )}
       <div
-        className="pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 items-center justify-between gap-3 px-3"
-        style={{ top: `calc(${(anchor.y * 100).toFixed(2)}% + ${Math.round(diameter / 2 + (memory.audio ? 64 : 40))}px)` }}
+        data-glass-caption
+        data-caption={captionAt}
+        className={
+          side
+            ? "pointer-events-none absolute flex -translate-y-1/2 flex-col items-start gap-3"
+            : "pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 items-center justify-between gap-3 px-3"
+        }
+        style={
+          side
+            ? {
+                top: `${(anchor.y * 100).toFixed(2)}%`,
+                left: `calc(${(anchor.x * 100).toFixed(2)}% + ${Math.round(diameter / 2 + 24)}px)`,
+                right: "max(1.5rem, calc(env(safe-area-inset-right) + 0.5rem))",
+              }
+            : { top: `calc(${(anchor.y * 100).toFixed(2)}% + ${Math.round(diameter / 2 + (memory.audio ? 64 : 40))}px)` }
+        }
       >
-        <button
-          type="button"
-          aria-label="Anterior"
-          disabled={!prev}
-          data-magnetic="light"
-          data-cursor-label="Anterior"
-          className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
-          onClick={() => prev && onStep(prev.id)}
-        >
-          <Chevron />
-        </button>
-        <div className="min-w-0 text-center">
+        {!side && prevButton}
+        <div className={side ? "min-w-0 text-left" : "min-w-0 text-center"}>
           <Dialog.Title className="t-title m-0 text-[length:var(--type-3)] text-ink">{memory.caption}</Dialog.Title>
           <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted">
             {formatMemoryDate(memory.happenedOn)}
@@ -185,17 +199,13 @@ function GlassBody({
           {memory.place?.name && <p className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint">{memory.place.name}</p>}
           {pending && <p className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">Pendiente de aprobación</p>}
         </div>
-        <button
-          type="button"
-          aria-label="Siguiente"
-          disabled={!next}
-          data-magnetic="light"
-          data-cursor-label="Siguiente"
-          className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
-          onClick={() => next && onStep(next.id)}
-        >
-          <Chevron flip />
-        </button>
+        {!side && nextButton}
+        {side && (
+          <div className="flex items-center gap-2">
+            {prevButton}
+            {nextButton}
+          </div>
+        )}
       </div>
     </>
   )
@@ -212,6 +222,26 @@ export function GlassView({ memory, prev, next, container, reduced, viewport, on
   const [held, setHeld] = useState<MemoryView | null>(memory)
   if (memory && memory !== held) setHeld(memory)
   const shown = memory ?? held
+
+  // A swipe anywhere on the glass turns the page (the sphere, the caption or the empty stage); the camera cannot pan
+  // while it is open, so the two never compete.
+  const swipeFrom = useRef<{ x: number; y: number } | null>(null)
+  const swipe = {
+    onPointerDown: (event: PointerEvent) => {
+      swipeFrom.current = { x: event.clientX, y: event.clientY }
+    },
+    onPointerUp: (event: PointerEvent) => {
+      const start = swipeFrom.current
+      swipeFrom.current = null
+      if (!start || !memory) return
+      const step = swipeStep(event.clientX - start.x, event.clientY - start.y)
+      const target = step === 1 ? next : step === -1 ? prev : null
+      if (target) onStep(target.id)
+    },
+    onPointerCancel: () => {
+      swipeFrom.current = null
+    },
+  }
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowLeft" && prev) {
@@ -230,7 +260,7 @@ export function GlassView({ memory, prev, next, container, reduced, viewport, on
   return (
     <Dialog.Root open={memory !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal container={container}>
-        <Dialog.Overlay className="mem-scrim absolute inset-0 bg-[#020207]/70" onWheel={onWheel} />
+        <Dialog.Overlay className="mem-scrim absolute inset-0 bg-[#020207]/70" onWheel={onWheel} {...swipe} />
         <Dialog.Content
           aria-describedby="memory-glass-date"
           className="mem-glass absolute inset-0 outline-none"
@@ -238,6 +268,7 @@ export function GlassView({ memory, prev, next, container, reduced, viewport, on
           style={{ pointerEvents: "none" }}
           onKeyDown={onKeyDown}
           onWheel={onWheel}
+          {...swipe}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             // By now the dialog has closed and `memory` is null, so use the last memory that was on screen.

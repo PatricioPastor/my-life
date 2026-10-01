@@ -9,7 +9,7 @@ import { ReplayIntroButton } from "./replay-intro-button"
 // The page draws under the notch and the home indicator (viewport-fit=cover), so anything pinned to an edge has to
 // keep clear of the device insets. jsdom has no insets; what can be asserted is that each pinned control is placed
 // with env(safe-area-inset-*) on the edge it sits against.
-const hasInset = (el: Element | null, edge: "top" | "bottom" | "left") =>
+const hasInset = (el: Element | null, edge: "top" | "bottom" | "left" | "right") =>
   !!el && el.className.includes(`env(safe-area-inset-${edge})`)
 
 beforeEach(() => {
@@ -62,6 +62,14 @@ describe("safe areas", () => {
     )
     expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "bottom")).toBe(true)
     expect(hasInset(screen.getByRole("button", { name: "Agregar recuerdo" }).parentElement, "bottom")).toBe(true)
+  })
+
+  it("keeps the memories title and the add control clear of a side notch (a phone in landscape)", () => {
+    render(
+      <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Agregar recuerdo</button>} />,
+    )
+    expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "left")).toBe(true)
+    expect(hasInset(screen.getByRole("button", { name: "Agregar recuerdo" }).parentElement, "right")).toBe(true)
   })
 })
 
