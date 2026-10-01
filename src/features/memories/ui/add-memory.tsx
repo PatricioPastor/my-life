@@ -13,6 +13,7 @@ import { COPY, localToday, messageForFailure, validateForm, type FormErrors } fr
 import type { GpsParser } from "./photo-gps"
 import { PLACE_COPY } from "./place-model"
 import { PlaceSection } from "./place-section"
+import { useMapsLink, type ResolveLink } from "./use-maps-link"
 import { usePhotoPlace, type SuggestPlace } from "./use-photo-place"
 
 export interface AddMemoryProps {
@@ -23,12 +24,16 @@ export interface AddMemoryProps {
   upload: UploadToCloudinary
   /** Names the place of the photo's rounded GPS position (a server action). */
   suggest: SuggestPlace
+  /** Reads a pasted Google Maps link on the server (a server action). */
+  resolveLink: ResolveLink
   /** Reads the GPS of the picked photo in the browser. Defaults to exifr, loaded on demand (a seam for tests). */
   parseGps?: GpsParser
   /** Called with the new, still pending memory as soon as it is saved. */
   onCreated: (memory: MemoryView) => void
   /** The visitor's local `YYYY-MM-DD` (a seam for tests). */
   today?: string
+  /** How long the typing of a link must pause before it is resolved. */
+  linkDebounceMs?: number
   /** How long the confirmation stays before the dialog closes. */
   doneDelayMs?: number
 }
@@ -70,6 +75,10 @@ function MemoryForm({
   const [shareLocation, setShareLocation] = useState(false)
   const [placeNotSaved, setPlaceNotSaved] = useState(false)
   const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)
+  // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
+  const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => setShareLocation(true))
+  const linkPlace = link.state.status === "ok"
+  const hasPlace = place.status === "found" || linkPlace
   const [errors, setErrors] = useState<FormErrors>({})
   const [phase, setPhase] = useState<Phase>({ kind: "idle" })
   const controller = useRef<AbortController | null>(null)
@@ -93,8 +102,9 @@ function MemoryForm({
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
     previewUrl.current = null
     setPreviewFailed(false)
-    // A new photo starts over: its own place, and no consent carried over from the previous one.
+    // A new photo starts over: its own place and link, and no consent carried over from the previous one.
     setShareLocation(false)
+    link.reset()
     const check = checkPhoto(file)
     if (check !== "ok") {
       resetPlace()
@@ -106,6 +116,12 @@ function MemoryForm({
     setPicked({ file, url: previewUrl.current })
     setErrors((e) => ({ ...e, photo: undefined }))
     void readPlace(file)
+  }
+
+  // Clearing the link of a photo with no GPS leaves nothing to keep, so the consent goes with it.
+  const onLinkChange = (text: string) => {
+    link.change(text)
+    if (!text.trim() && place.status !== "found") setShareLocation(false)
   }
 
   const onPick = (event: ChangeEvent<HTMLInputElement>) => choose(event.target.files?.[0])
@@ -129,7 +145,14 @@ function MemoryForm({
       setErrors(found)
       return
     }
+    // A link that is still being read, or that failed, must not be silently replaced by the photo's own place.
+    if (link.text.trim() && !linkPlace) {
+      setErrors({ form: PLACE_COPY.linkBlocked })
+      return
+    }
     setErrors({})
+    // Consent only counts while there is a place to keep (the photo's, or the link's).
+    const share = shareLocation && hasPlace
     const abort = new AbortController()
     controller.current = abort
     setPhase({ kind: "uploading", percent: 0 })
@@ -153,12 +176,14 @@ function MemoryForm({
         ticket: prepared.upload.ticket,
         caption: caption.trim(),
         happenedOn: date,
-        shareLocation,
+        shareLocation: share,
+        // Only the link goes up: the server resolves it again and ignores anything else the browser saw.
+        ...(linkPlace ? { mapsUrl: link.text.trim() } : {}),
       })
       if (abort.signal.aborted) return
       if (!created.ok) return fail(messageForFailure(created))
 
-      setPlaceNotSaved(shareLocation && !created.locationSaved)
+      setPlaceNotSaved(share && !created.locationSaved)
       track("memory_submitted")
       props.onCreated(created.memory)
       setPhase({ kind: "done" })
@@ -290,6 +315,8 @@ function MemoryForm({
 
       <PlaceSection
         place={place}
+        link={{ text: link.text, state: link.state }}
+        onLinkChange={onLinkChange}
         consent={shareLocation}
         onConsentChange={setShareLocation}
         disabled={busy || phase.kind === "done"}

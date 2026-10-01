@@ -7,12 +7,14 @@ const listMemories = vi.fn()
 const prepareUpload = vi.fn()
 const createMemory = vi.fn()
 const suggestPlace = vi.fn()
+const resolveMapsLink = vi.fn()
 const uploadToCloudinary = vi.fn()
 vi.mock("../actions", () => ({
   listMemories: () => listMemories(),
   prepareUpload: () => prepareUpload(),
   createMemory: (input: unknown) => createMemory(input),
   suggestPlace: (input: unknown) => suggestPlace(input),
+  resolveMapsLink: (input: unknown) => resolveMapsLink(input),
 }))
 vi.mock("./cloudinary-upload", () => ({ uploadToCloudinary: (o: unknown) => uploadToCloudinary(o) }))
 vi.mock("@/shared/analytics", () => ({ track: vi.fn() }))

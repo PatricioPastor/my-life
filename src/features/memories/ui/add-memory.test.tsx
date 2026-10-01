@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { MAX_UPLOAD_BYTES } from "../upload-limits"
 import type { CreateMemoryResult, PrepareUploadResult } from "../upload-view"
+import type { ResolveMapsLinkResult } from "../place/resolve-maps-link"
 import type { SuggestPlaceResult } from "../place/suggest-place"
 import { AddMemory, type AddMemoryProps } from "./add-memory"
 import type { UploadResult } from "./cloudinary-upload"
@@ -43,10 +44,13 @@ const MEMORY: MemoryView = {
 function setup(over: Partial<AddMemoryProps> = {}) {
   const prepare = vi.fn(async (): Promise<PrepareUploadResult> => GRANT)
   const upload = vi.fn(async (): Promise<UploadResult> => ({ ok: true }))
-  const create = vi.fn(async (): Promise<CreateMemoryResult> => ({ ok: true, memory: MEMORY, locationSaved: false }))
+  const create = vi.fn<AddMemoryProps["create"]>(async () => ({ ok: true, memory: MEMORY, locationSaved: false }))
   // The photo has no GPS unless a test says so; the answer is what exifr reports, with its exact decimals.
   const parseGps = vi.fn(async (): Promise<{ latitude: number; longitude: number } | undefined> => undefined)
   const suggest = vi.fn(async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo, Buenos Aires" }))
+  const resolveLink = vi.fn(
+    async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }),
+  )
   const onCreated = vi.fn()
   function Stage() {
     const [el, setEl] = useState<HTMLDivElement | null>(null)
@@ -60,6 +64,8 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           upload={upload}
           parseGps={parseGps}
           suggest={suggest}
+          resolveLink={resolveLink}
+          linkDebounceMs={0}
           onCreated={onCreated}
           today="2026-10-01"
           doneDelayMs={20}
@@ -69,7 +75,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
     )
   }
   render(<Stage />)
-  return { prepare, upload, create, onCreated, parseGps, suggest }
+  return { prepare, upload, create, onCreated, parseGps, suggest, resolveLink }
 }
 
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
@@ -615,5 +621,217 @@ describe("AddMemory place section", () => {
     pickWithGps()
     await screen.findByText("Parece que fue en Palermo, Buenos Aires")
     expect(document.body.textContent).not.toMatch(/desde dónde fue/i)
+  })
+})
+
+describe("AddMemory Google Maps link", () => {
+  const EXACT = { latitude: -34.593701, longitude: -58.425123 }
+  const LINK = "https://maps.app.goo.gl/AbCd"
+  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar dónde se sacó la foto" }) as HTMLInputElement
+  const input = () => screen.getByRole("textbox", { name: /link de Google Maps/ }) as HTMLInputElement
+  const paste = (value: string) => fireEvent.change(input(), { target: { value } })
+
+  async function openWithGps(over: Partial<AddMemoryProps> = {}) {
+    const ctx = setup(over)
+    ctx.parseGps.mockResolvedValue(EXACT)
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    return ctx
+  }
+  async function openWithoutGps(over: Partial<AddMemoryProps> = {}) {
+    const ctx = setup(over)
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText(PLACE_COPY.noGps)
+    return ctx
+  }
+
+  it("offers the link input under the suggestion", async () => {
+    await openWithGps()
+    expect(screen.getByLabelText("¿No fue ahí? Pega un link de Google Maps")).toBe(input())
+  })
+
+  it("offers it when the photo has no location, with the invitation to paste one", async () => {
+    await openWithoutGps()
+    expect(screen.getByText(PLACE_COPY.noGps)).toBeTruthy()
+    expect(screen.getByLabelText("Si quieres, pega un link de Google Maps")).toBe(input())
+  })
+
+  it("does not show the input before a photo is picked", () => {
+    setup()
+    open()
+    expect(screen.queryByRole("textbox", { name: /link de Google Maps/ })).toBeNull()
+  })
+
+  it("links the input to the helper text through aria-describedby", async () => {
+    await openWithGps()
+    const ids = input().getAttribute("aria-describedby")!.split(" ")
+    expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(
+      "Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.",
+    )
+  })
+
+  it("resolves a pasted link, shows its label instead of the suggestion, and ticks the consent", async () => {
+    const { resolveLink } = await openWithGps()
+    expect(checkbox().checked).toBe(false)
+    paste(LINK)
+    expect(await screen.findByText("Según el link: Plaza Italia")).toBeTruthy()
+    expect(resolveLink).toHaveBeenCalledWith({ url: LINK })
+    expect(screen.queryByText("Parece que fue en Palermo, Buenos Aires")).toBeNull()
+    expect(checkbox().checked).toBe(true)
+    const map = screen.getByRole("link", { name: "Ver en el mapa" }) as HTMLAnchorElement
+    expect(map.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.58,-58.42")
+  })
+
+  it("lets the visitor untick the consent that the link ticked", async () => {
+    const { create } = await openWithGps()
+    paste(LINK)
+    await screen.findByText("Según el link: Plaza Italia")
+    fireEvent.click(checkbox())
+    expect(checkbox().checked).toBe(false)
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
+  })
+
+  it("sends the link to createMemory, which re-resolves it, with the consent", async () => {
+    const { create } = await openWithGps()
+    paste(`  ${LINK}  `)
+    await screen.findByText("Según el link: Plaza Italia")
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith({
+      ticket: "ticket-1",
+      caption: "Una tarde de lluvia",
+      happenedOn: "2024-03-12",
+      shareLocation: true,
+      mapsUrl: LINK,
+    })
+    // Only the link goes up, never the coordinates or the label the browser saw.
+    expect(JSON.stringify(create.mock.calls)).not.toMatch(/Plaza Italia|-34\.58/)
+  })
+
+  it("shows the rounded coordinates when the link has no name", async () => {
+    const { resolveLink } = await openWithoutGps()
+    resolveLink.mockResolvedValue({ ok: true, lat: 40.71, lng: -74.01, label: null })
+    paste(LINK)
+    expect(await screen.findByText("Cerca de 40.71, -74.01")).toBeTruthy()
+  })
+
+  it("shows a loading state while the link is read", async () => {
+    const { resolveLink } = await openWithGps()
+    let finish!: (r: { ok: true; lat: number; lng: number; label: string }) => void
+    resolveLink.mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+    paste(LINK)
+    expect(await screen.findByText(PLACE_COPY.linkReading)).toBeTruthy()
+    await act(async () => finish({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }))
+    expect(await screen.findByText("Según el link: Plaza Italia")).toBeTruthy()
+    expect(screen.queryByText(PLACE_COPY.linkReading)).toBeNull()
+  })
+
+  it.each([
+    ["not_maps_link", "Ese link no parece de Google Maps."],
+    ["unreadable", "No pudimos leer la ubicación de ese link."],
+  ] as const)("shows the %s error, tied to the input", async (reason, message) => {
+    const { resolveLink } = await openWithGps()
+    resolveLink.mockResolvedValue({ ok: false, reason })
+    paste("https://example.com")
+    const error = await screen.findByText(message)
+    expect(input().getAttribute("aria-invalid")).toBe("true")
+    expect(input().getAttribute("aria-describedby")!.split(" ")).toContain(error.id)
+    // The suggestion from the photo stays, and the consent is not ticked.
+    expect(screen.getByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(checkbox().checked).toBe(false)
+  })
+
+  it("treats a failing or no-session answer as unreadable", async () => {
+    const { resolveLink } = await openWithGps()
+    resolveLink.mockRejectedValueOnce(new Error("down"))
+    paste("https://example.com/a")
+    expect(await screen.findByText("No pudimos leer la ubicación de ese link.")).toBeTruthy()
+    resolveLink.mockResolvedValueOnce({ ok: false, reason: "no_session" })
+    paste("https://example.com/b")
+    await waitFor(() => expect(resolveLink).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText("No pudimos leer la ubicación de ese link.")).toBeTruthy()
+  })
+
+  it("goes back to the photo suggestion when the link is cleared", async () => {
+    await openWithGps()
+    paste(LINK)
+    await screen.findByText("Según el link: Plaza Italia")
+    paste("")
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(screen.queryByText("Según el link: Plaza Italia")).toBeNull()
+  })
+
+  it("removes the consent again when a link on a photo with no GPS is cleared", async () => {
+    const { create } = await openWithoutGps()
+    paste(LINK)
+    await screen.findByText("Según el link: Plaza Italia")
+    expect(checkbox().checked).toBe(true)
+    paste("")
+    await waitFor(() => expect(screen.queryByRole("checkbox")).toBeNull())
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
+    expect(create.mock.calls[0][0]).not.toHaveProperty("mapsUrl")
+  })
+
+  it("keeps only the answer for the latest link", async () => {
+    const { resolveLink } = await openWithGps()
+    let finishFirst!: (r: { ok: true; lat: number; lng: number; label: string }) => void
+    resolveLink.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+    paste("https://maps.app.goo.gl/First")
+    await waitFor(() => expect(resolveLink).toHaveBeenCalledTimes(1))
+    resolveLink.mockResolvedValueOnce({ ok: true, lat: 40.71, lng: -74.01, label: "Nueva York" })
+    paste("https://maps.app.goo.gl/Second")
+    expect(await screen.findByText("Según el link: Nueva York")).toBeTruthy()
+    await act(async () => finishFirst({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }))
+    expect(screen.queryByText("Según el link: Plaza Italia")).toBeNull()
+    expect(screen.getByText("Según el link: Nueva York")).toBeTruthy()
+  })
+
+  it("waits for the typing to pause before asking the server", async () => {
+    const { resolveLink } = await openWithGps({ linkDebounceMs: 40 })
+    paste("https://maps.app.goo.gl/A")
+    paste("https://maps.app.goo.gl/AB")
+    paste("https://maps.app.goo.gl/ABC")
+    expect(resolveLink).not.toHaveBeenCalled()
+    await waitFor(() => expect(resolveLink).toHaveBeenCalledTimes(1))
+    expect(resolveLink).toHaveBeenCalledWith({ url: "https://maps.app.goo.gl/ABC" })
+  })
+
+  it("does not save while the link is unresolved or invalid, and says why", async () => {
+    const { resolveLink, create } = await openWithGps()
+    resolveLink.mockResolvedValue({ ok: false, reason: "not_maps_link" })
+    paste("https://example.com")
+    await screen.findByText("Ese link no parece de Google Maps.")
+    submit()
+    expect((await screen.findByRole("alert")).textContent).toBe(PLACE_COPY.linkBlocked)
+    expect(create).not.toHaveBeenCalled()
+    paste("")
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+  })
+
+  it("starts over when another photo is picked", async () => {
+    const { parseGps } = await openWithGps()
+    paste(LINK)
+    await screen.findByText("Según el link: Plaza Italia")
+    parseGps.mockResolvedValue(EXACT)
+    pick(photo({ name: "otra.jpg" }))
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(input().value).toBe("")
+    expect(checkbox().checked).toBe(false)
+  })
+
+  it("locks the input while saving", async () => {
+    await openWithGps({ upload: (() => new Promise<UploadResult>(() => undefined)) as never })
+    submit()
+    await screen.findByRole("button", { name: /Subiendo/ })
+    expect(input().disabled).toBe(true)
   })
 })

@@ -23,6 +23,11 @@ export interface CreateMemoryInput {
    * is stored (an approximate location, and only when the photo has valid GPS).
    */
   shareLocation: boolean
+  /**
+   * A Google Maps link that corrects the place of the photo. Optional: the server re-resolves it and ignores any
+   * coordinates or labels the browser may have seen.
+   */
+  mapsUrl?: string
 }
 
 export type CreateMemoryFailure =

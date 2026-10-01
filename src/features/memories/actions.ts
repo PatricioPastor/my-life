@@ -5,7 +5,9 @@ import { currentVisitor, getSessionSecret } from "@/features/gate/session"
 import { CloudinaryAdminAssets, readCloudinaryConfig } from "./cloudinary-admin-assets"
 import { createMemoryWith } from "./create-memory"
 import { listMemoriesWith } from "./list-memories"
+import { followShortLink } from "./place/follow-short-link"
 import { getReverseGeocoder } from "./place/geocoder"
+import { resolveMapsLinkWith, type ResolveMapsLinkResult } from "./place/resolve-maps-link"
 import { suggestPlaceWith, type SuggestPlaceResult } from "./place/suggest-place"
 import type { ListMemoriesResult } from "./memory-view"
 import { prepareUploadWith } from "./prepare-upload"
@@ -52,6 +54,7 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
       ticketSecret: getSessionSecret(),
       now: Date.now,
       geocoder: getReverseGeocoder,
+      follow: (url) => followShortLink(url),
       log,
     },
     input,
@@ -64,4 +67,12 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
  */
 export async function suggestPlace(input: { lat: number; lng: number }): Promise<SuggestPlaceResult> {
   return suggestPlaceWith({ currentVisitor, geocoder: getReverseGeocoder, log }, input)
+}
+
+/**
+ * Reads a pasted Google Maps link (full or short) on the server and answers with the rounded position and a short
+ * label. Short links are followed only through the SSRF-guarded follower. `createMemory` resolves the link again.
+ */
+export async function resolveMapsLink(input: { url: string }): Promise<ResolveMapsLinkResult> {
+  return resolveMapsLinkWith({ currentVisitor, follow: (url) => followShortLink(url), geocoder: getReverseGeocoder, log }, input)
 }

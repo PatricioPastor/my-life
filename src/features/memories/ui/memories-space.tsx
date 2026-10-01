@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { createMemory, listMemories, prepareUpload, suggestPlace } from "../actions"
+import { createMemory, listMemories, prepareUpload, resolveMapsLink, suggestPlace } from "../actions"
 import type { MemoryView } from "../memory-view"
 import { AddMemory } from "./add-memory"
 import { uploadToCloudinary } from "./cloudinary-upload"
@@ -38,6 +38,7 @@ export function MemoriesSpace({ accent, palette }: MemoriesSpaceProps) {
                 create={createMemory}
                 upload={uploadToCloudinary}
                 suggest={suggestPlace}
+                resolveLink={resolveMapsLink}
                 onCreated={(memory) => setAdded((list) => [...list, memory])}
               />
             )

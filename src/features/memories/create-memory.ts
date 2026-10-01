@@ -4,6 +4,7 @@ import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import { extractPhotoDetails } from "./photo-details"
 import { decidePlace } from "./place/decide-place"
+import type { FollowResult } from "./place/follow-short-link"
 import type { ReverseGeocoder } from "./place/reverse-geocoder"
 import { validateNewMemory } from "./validate-new-memory"
 import { RATE_LIMIT } from "./upload-limits"
@@ -20,6 +21,8 @@ export interface CreateMemoryDeps {
   ticketSecret: string | null
   /** Lazy: only built when a visitor opted in and the photo has a location to name. */
   geocoder: () => ReverseGeocoder
+  /** Follows a Google short link on the server (SSRF-guarded). Only called for a pasted short link. */
+  follow: (url: string) => Promise<FollowResult>
   /** Milliseconds, like `Date.now`. */
   now: () => number
   /** One short line, never with personal data. */
@@ -110,6 +113,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     const place = await decidePlace(
       {
         shareLocation,
+        mapsUrl: input.mapsUrl,
         photo:
           details.approxLatitude !== null && details.approxLongitude !== null
             ? { latitude: details.approxLatitude, longitude: details.approxLongitude }
