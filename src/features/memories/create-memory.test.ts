@@ -709,8 +709,8 @@ describe("createMemoryWith: audio", () => {
     ["is an image", voice({ resourceType: "image" }), "audio_type"],
     ["has a format we do not allow", voice({ format: "flac" }), "audio_type"],
     ["has no duration", voice({ durationSeconds: null }), "audio_type"],
-    ["is over 15 MB", voice({ bytes: MAX_AUDIO_BYTES + 1 }), "audio_too_large"],
-    ["is longer than 2 minutes", voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 5 }), "audio_too_long"],
+    ["is over the size cap", voice({ bytes: MAX_AUDIO_BYTES + 1 }), "audio_too_large"],
+    ["is longer than 60 minutes", voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 10 }), "audio_too_long"],
   ])("destroys the audio and refuses when it %s", async (_name, info, reason) => {
     const { full, repository, assets } = setup({}, { audio: info })
     expect(await createMemoryWith(full, audioIn())).toEqual({ ok: false, reason })

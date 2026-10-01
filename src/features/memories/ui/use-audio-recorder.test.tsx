@@ -145,7 +145,7 @@ describe("useAudioRecorder: recording", () => {
     expect(result.current.clip!.name).toBe("recuerdo.m4a")
   })
 
-  it("stops by itself at 2 minutes, and never keeps more", async () => {
+  it("stops by itself at 60 minutes, and never keeps more", async () => {
     const { result } = renderHook(() => useAudioRecorder(env()))
     await start(result)
     act(() => {

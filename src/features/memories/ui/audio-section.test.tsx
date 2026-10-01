@@ -54,8 +54,9 @@ describe("AudioSection: idle", () => {
     expect(screen.getByRole("button", { name: "Grabar" })).toBeTruthy()
     expect(screen.getByLabelText("Subir audio")).toBeTruthy()
     expect(screen.getByText(AUDIO_COPY.hint)).toBeTruthy()
-    expect(AUDIO_COPY.hint).toMatch(/2 minutos/)
-    expect(AUDIO_COPY.hint).toMatch(/15 MB/)
+    expect(AUDIO_COPY.hint).toBe(
+      "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
+    )
   })
 
   it("starts recording on Grabar", () => {
@@ -127,8 +128,8 @@ describe("AudioSection: asking for the microphone and recording", () => {
     const { recorder } = setup({ phase: "recording", elapsedMs: 7_400 })
     const timer = screen.getByRole("timer")
     expect(timer.textContent).toContain("0:07")
-    expect(timer.textContent).toContain("2:00")
-    expect(MAX_AUDIO_MS).toBe(120_000)
+    expect(timer.textContent).toContain("60:00")
+    expect(MAX_AUDIO_MS).toBe(3_600_000)
     expect(screen.queryByRole("button", { name: "Grabar" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Detener" }))
     expect(recorder.stop).toHaveBeenCalledTimes(1)

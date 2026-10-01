@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { currentVisitor, getSessionSecret } from "@/features/gate/session"
 import { CloudinaryAdminAssets, readCloudinaryConfig } from "./cloudinary-admin-assets"
 import { createMemoryWith } from "./create-memory"
+import { readMaxAudioBytes } from "./max-audio-bytes"
 import { listMemoriesWith } from "./list-memories"
 import { followShortLink } from "./place/follow-short-link"
 import { getReverseGeocoder } from "./place/geocoder"
@@ -58,6 +59,7 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
       },
       cloudinary: config,
       ticketSecret: getSessionSecret(),
+      maxAudioBytes: readMaxAudioBytes(),
       now: Date.now,
       geocoder: getReverseGeocoder,
       follow: (url) => followShortLink(url),

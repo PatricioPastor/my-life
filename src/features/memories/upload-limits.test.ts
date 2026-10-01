@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+  ABSOLUTE_MAX_AUDIO_BYTES,
+  AUDIO_DURATION_TOLERANCE_MS,
   ALLOWED_FORMATS,
   ALLOWED_FORMATS_PARAM,
   AUDIO_FORMATS,
@@ -7,6 +9,7 @@ import {
   MAX_AUDIO_BYTES,
   MAX_AUDIO_MS,
   MAX_UPLOAD_BYTES,
+  TICKET_TTL_SECONDS,
   checkAudio,
   checkPhoto,
 } from "./upload-limits"
@@ -72,9 +75,23 @@ describe("audio limits", () => {
     expect(AUDIO_FORMATS_PARAM).toBe("webm,ogg,opus,mp3,m4a,mp4,aac,wav")
   })
 
-  it("caps an audio at 2 minutes and 15 MB", () => {
-    expect(MAX_AUDIO_MS).toBe(120_000)
-    expect(MAX_AUDIO_BYTES).toBe(15 * 1024 * 1024)
+  it("caps an audio at 60 minutes and, by default, the 100 MB of the Cloudinary plan", () => {
+    expect(MAX_AUDIO_MS).toBe(3_600_000)
+    expect(MAX_AUDIO_BYTES).toBe(100_000_000)
+  })
+
+  it("forgives 5 seconds of recorder drift, which keeps the stored duration under 3,605,000 ms", () => {
+    expect(AUDIO_DURATION_TOLERANCE_MS).toBe(5000)
+    expect(MAX_AUDIO_MS + AUDIO_DURATION_TOLERANCE_MS).toBe(3_605_000)
+  })
+
+  it("keeps a ceiling for the env override that the database backstop accepts", () => {
+    expect(ABSOLUTE_MAX_AUDIO_BYTES).toBe(2_000_000_000)
+    expect(MAX_AUDIO_BYTES).toBeLessThanOrEqual(ABSOLUTE_MAX_AUDIO_BYTES)
+  })
+
+  it("lets an upload ticket live as long as Cloudinary honours the signature (one hour)", () => {
+    expect(TICKET_TTL_SECONDS).toBe(60 * 60)
   })
 })
 
@@ -99,7 +116,7 @@ describe("checkAudio", () => {
     expect(checkAudio(audio({ type: "audio/webm;codecs=opus" }))).toBe("ok")
   })
 
-  it("accepts an audio of exactly 15 MB and refuses one byte more", () => {
+  it("accepts an audio of exactly the cap and refuses one byte more", () => {
     expect(checkAudio(audio({ size: MAX_AUDIO_BYTES }))).toBe("ok")
     expect(checkAudio(audio({ size: MAX_AUDIO_BYTES + 1 }))).toBe("too_large")
   })

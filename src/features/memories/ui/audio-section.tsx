@@ -11,7 +11,7 @@ import type { useAudioRecorder } from "./use-audio-recorder"
 /** The audio section's Spanish copy (neutral, `tú`). */
 export const AUDIO_COPY = {
   label: "Audio",
-  hint: "Hasta 2 minutos y 15 MB.",
+  hint: "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
   requesting: "Esperando el micrófono…",
   recording: "Grabando…",
 } as const

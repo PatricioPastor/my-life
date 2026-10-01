@@ -78,11 +78,13 @@ export type AudioProblem = "audio_missing" | "audio_type" | "audio_too_large" | 
 
 /**
  * Whether a stored asset is the audio the ticket promised: audio of ours, in our folder, `authenticated`, in an
- * allowed format, within 15 MB and 2 minutes. Pure; the duration, size and format it returns come from Cloudinary.
+ * allowed format, within the size cap (`maxBytes`, the server's) and 60 minutes. Pure; the duration, size and format it
+ * returns come from Cloudinary.
  */
 export function verifyAudio(
   info: AudioInfo | null,
   publicId: string,
+  maxBytes: number = MAX_AUDIO_BYTES,
 ): { ok: true; durationMs: number; bytes: number; format: string } | { ok: false; problem: AudioProblem } {
   if (!info || info.publicId !== publicId || !publicId.startsWith(`${MEMORY_FOLDER}/`)) {
     return { ok: false, problem: "audio_missing" }
@@ -94,7 +96,7 @@ export function verifyAudio(
   if (!(AUDIO_FORMATS as readonly string[]).includes(format)) return { ok: false, problem: "audio_type" }
   const seconds = info.durationSeconds
   if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return { ok: false, problem: "audio_type" }
-  if (info.bytes > MAX_AUDIO_BYTES) return { ok: false, problem: "audio_too_large" }
+  if (info.bytes > maxBytes) return { ok: false, problem: "audio_too_large" }
   const durationMs = Math.round(seconds * 1000)
   if (durationMs > MAX_AUDIO_MS + AUDIO_DURATION_TOLERANCE_MS) return { ok: false, problem: "audio_too_long" }
   return { ok: true, durationMs, bytes: info.bytes, format }

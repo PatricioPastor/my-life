@@ -366,3 +366,43 @@ describe("the voice memories migration", () => {
     expect(code).not.toMatch(/TO\s+PUBLIC/i)
   })
 })
+
+describe("the long audio migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_long_audio"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the voice memories migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261003000000_memory_audio").toBe(true)
+  })
+
+  it("passes the migration lint and touches no other table", () => {
+    expect(lintMigration(sql)).toEqual([])
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("only drops and re-adds the two audio range checks: no column, table, index or data is touched", () => {
+    const dropped = [...code.matchAll(/DROP\s+CONSTRAINT\s+"?(\w+)"?/gi)].map((m) => m[1]).sort()
+    expect(dropped).toEqual(["memories_audio_bytes_range", "memories_audio_duration_range"])
+    const added = [...code.matchAll(/ADD\s+CONSTRAINT\s+"?(\w+)"?/gi)].map((m) => m[1]).sort()
+    expect(added).toEqual(dropped)
+    expect(code).not.toMatch(/DROP\s+(COLUMN|TABLE|INDEX|TYPE)|RENAME|ADD\s+COLUMN|ALTER\s+COLUMN|DELETE\s+FROM|TRUNCATE|ALTER\s+TYPE|CREATE\s+/i)
+  })
+
+  it("allows up to 3,605,000 ms (60 minutes plus the recorder drift) and the 2,000,000,000 byte backstop", () => {
+    expect(code).toMatch(/ADD\s+CONSTRAINT\s+"memories_audio_duration_range"\s+CHECK[^;,]*"audio_duration_ms"[^;]*BETWEEN\s+1\s+AND\s+3605000/i)
+    expect(code).toMatch(/ADD\s+CONSTRAINT\s+"memories_audio_bytes_range"\s+CHECK[^;,]*"audio_bytes"[^;]*BETWEEN\s+1\s+AND\s+2000000000/i)
+  })
+
+  it("keeps every old row valid: the new bounds contain the old ones (125,000 ms and 15 MB)", () => {
+    const duration = /"audio_duration_ms"[^;]*BETWEEN\s+1\s+AND\s+(\d+)/i.exec(code)?.[1]
+    const bytes = /"audio_bytes"[^;]*BETWEEN\s+1\s+AND\s+(\d+)/i.exec(code)?.[1]
+    expect(Number(duration)).toBeGreaterThanOrEqual(125000)
+    expect(Number(bytes)).toBeGreaterThanOrEqual(15728640)
+  })
+
+  it("leaves row-level security and the grants alone", () => {
+    expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY|CREATE\s+POLICY|DROP\s+POLICY|GRANT|REVOKE/i)
+  })
+})

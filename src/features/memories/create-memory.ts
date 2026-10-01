@@ -27,6 +27,8 @@ export interface CreateMemoryDeps {
   /** Null when a Cloudinary variable is missing. */
   cloudinary: DeliveryConfig | null
   ticketSecret: string | null
+  /** The most an audio may weigh on this server (the plan maximum unless an env variable says otherwise). */
+  maxAudioBytes?: number
   /** Lazy: only built when a visitor opted in and the photo has a location to name. */
   geocoder: () => ReverseGeocoder
   /** Follows a Google short link on the server (SSRF-guarded). Only called for a pasted short link. */
@@ -50,7 +52,7 @@ function parseDay(value: unknown): Date {
 /**
  * Finishes an upload: checks the ticket, then trusts nothing the browser says about the assets. Each one the ticket
  * covers is read back from Cloudinary: the photo (an image of ours, an allowed format, within the size limit, with its
- * width and height) and the audio (audio of ours, an allowed format, within 15 MB and 2 minutes, with its duration,
+ * width and height) and the audio (audio of ours, an allowed format, within the size cap and 60 minutes, with its duration,
  * size and format). Any failure before the insert destroys every uploaded asset, so rejected uploads leave nothing
  * behind. The row is inserted as the visitor, under row-level security, and starts `pending`.
  */
@@ -107,7 +109,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
         deps.log(`Reading the uploaded audio failed (${error instanceof Error ? error.name : "unknown"}).`)
         return refuse("unavailable")
       }
-      const verified = verifyAudio(audioInfo, audioId)
+      const verified = verifyAudio(audioInfo, audioId, deps.maxAudioBytes)
       if (!verified.ok) return refuse(verified.problem, verified.problem === "audio_missing" ? "audio" : undefined)
       audio = { publicId: audioId, format: verified.format, bytes: verified.bytes, durationMs: verified.durationMs }
     }

@@ -8,13 +8,21 @@ export const ALLOWED_FORMATS = ["jpg", "png", "webp", "heic", "heif"] as const
 /** The signed `allowed_formats` upload parameter. */
 export const ALLOWED_FORMATS_PARAM = ALLOWED_FORMATS.join(",")
 
-/** The most an audio may weigh. */
-export const MAX_AUDIO_BYTES = 15 * 1024 * 1024
+/**
+ * The most an audio may weigh by default: Cloudinary's plan maximum for a video/audio file is 100 MB (Cloudinary
+ * "Upload images and videos": files above it must be sent in chunks, and the total allowed depends on the plan).
+ * Decimal megabytes, the safe reading of the docs' "100 MB". An hour of compressed audio fits (MP3 at 192 kbit/s is
+ * about 86 MB); an hour of WAV does not. The server can raise or lower it with `MEMORY_MAX_AUDIO_BYTES`
+ * (see `max-audio-bytes`); the browser mirrors this default for early feedback.
+ */
+export const MAX_AUDIO_BYTES = 100_000_000
+/** What the database accepts at most (a backstop above any plan the server could be raised to). */
+export const ABSOLUTE_MAX_AUDIO_BYTES = 2_000_000_000
 
-/** The longest an audio may be (the recorder stops here too). */
-export const MAX_AUDIO_MS = 2 * 60 * 1000
+/** The longest an audio may be (the recorder stops here too): one hour. */
+export const MAX_AUDIO_MS = 60 * 60 * 1000
 /** A recorder's clock drifts a little past its cap; the server forgives up to this much before it refuses. */
-export const AUDIO_DURATION_TOLERANCE_MS = 1000
+export const AUDIO_DURATION_TOLERANCE_MS = 5000
 
 /** Cloudinary format names for audio, which it stores as `video` resources (webm and mp4 included: MediaRecorder's). */
 export const AUDIO_FORMATS = ["webm", "ogg", "opus", "mp3", "m4a", "mp4", "aac", "wav"] as const
@@ -27,8 +35,11 @@ export const MEMORY_FOLDER = "my-life/memories"
 /** How many memories one visitor may add in a rolling window. */
 export const RATE_LIMIT = { max: 5, windowMs: 24 * 60 * 60 * 1000 } as const
 
-/** How long an upload ticket stays valid. */
-export const TICKET_TTL_SECONDS = 15 * 60
+/**
+ * How long an upload ticket stays valid: as long as Cloudinary honours the signature that rides with it (one hour), so
+ * a long audio on a slow connection can finish uploading and still be saved.
+ */
+export const TICKET_TTL_SECONDS = 60 * 60
 
 const AUDIO_MIME_TYPES = [
   "audio/webm",

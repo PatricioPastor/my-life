@@ -226,7 +226,7 @@ describe("AddMemory: a picked audio file", () => {
     expect(screen.queryByRole("button", { name: "Escuchar" })).toBeNull()
   })
 
-  it("refuses an audio over 15 MB right away", () => {
+  it("refuses an audio over the size cap right away", () => {
     setup()
     open()
     pickAudio(audioFile({ size: MAX_AUDIO_BYTES + 1 }))
@@ -234,7 +234,7 @@ describe("AddMemory: a picked audio file", () => {
     expect(screen.queryByRole("button", { name: "Escuchar" })).toBeNull()
   })
 
-  it("refuses an audio longer than 2 minutes, once its length is read", async () => {
+  it("refuses an audio longer than 60 minutes, once its length is read", async () => {
     const { readAudioDuration } = setup()
     readAudioDuration.mockResolvedValue(MAX_AUDIO_MS + 1000)
     open()

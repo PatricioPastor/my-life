@@ -132,9 +132,9 @@ describe("prepareUploadWith", () => {
     expect(verifyUploadTicket(result.upload.ticket, SECRET, nowSec)).toEqual({
       h: "ana",
       pid: `my-life/memories/${ID}`,
-      exp: nowSec + 900,
+      exp: nowSec + 3600,
     })
-    expect(verifyUploadTicket(result.upload.ticket, SECRET, nowSec + 900)).toBeNull()
+    expect(verifyUploadTicket(result.upload.ticket, SECRET, nowSec + 3600)).toBeNull()
   })
 
   it("never leaks the API secret or the session secret", async () => {
@@ -198,7 +198,7 @@ describe("prepareUploadWith: audio", () => {
       h: "ana",
       pid: `my-life/memories/${ID}`,
       aid: AUDIO_PUBLIC_ID,
-      exp: nowSec + 900,
+      exp: nowSec + 3600,
     })
   })
 
@@ -207,7 +207,7 @@ describe("prepareUploadWith: audio", () => {
     const result = await prepareUploadWith(full, VOICE)
     if (!result.ok) throw new Error("expected ok")
     const ticket = verifyUploadTicket(result.upload.ticket, SECRET, NOW_MS / 1000)
-    expect(ticket).toEqual({ h: "ana", aid: `my-life/memories/audio-${ID}`, exp: NOW_MS / 1000 + 900 })
+    expect(ticket).toEqual({ h: "ana", aid: `my-life/memories/audio-${ID}`, exp: NOW_MS / 1000 + 3600 })
   })
 
   it("keeps a photo-only grant free of audio fields", async () => {

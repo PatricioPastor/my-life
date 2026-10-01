@@ -33,7 +33,7 @@ describe("recorderReducer", () => {
     expect(later.elapsedMs).toBe(3000)
   })
 
-  it("caps the time at 2 minutes", () => {
+  it("caps the time at 60 minutes", () => {
     expect(run([{ type: "tick", elapsedMs: MAX_AUDIO_MS + 5000 }], recording).elapsedMs).toBe(MAX_AUDIO_MS)
     expect(run([{ type: "tick", elapsedMs: MAX_AUDIO_MS }], recording).elapsedMs).toBe(MAX_AUDIO_MS)
   })
@@ -47,7 +47,7 @@ describe("recorderReducer", () => {
     expect(recorded).toEqual({ phase: "recorded", elapsedMs: 0, durationMs: 4200, source: "recording", error: null })
   })
 
-  it("never keeps more than 2 minutes of a recording", () => {
+  it("never keeps more than 60 minutes of a recording", () => {
     expect(run([{ type: "stopped", durationMs: MAX_AUDIO_MS + 700 }], recording).durationMs).toBe(MAX_AUDIO_MS)
   })
 
@@ -169,7 +169,7 @@ describe("formatClock", () => {
     expect(formatClock(0)).toBe("0:00")
     expect(formatClock(7_400)).toBe("0:07")
     expect(formatClock(65_000)).toBe("1:05")
-    expect(formatClock(MAX_AUDIO_MS)).toBe("2:00")
+    expect(formatClock(MAX_AUDIO_MS)).toBe("60:00")
   })
 
   it("rounds down and tolerates nonsense", () => {
