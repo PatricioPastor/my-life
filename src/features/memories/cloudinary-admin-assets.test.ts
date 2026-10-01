@@ -13,12 +13,12 @@ afterEach(() => vi.restoreAllMocks())
 describe("CloudinaryAdminAssets.describe", () => {
   it("reads the resource over the Admin API with basic auth and maps its fields", async () => {
     const fetchMock = vi.fn(async () =>
-      json(200, { public_id: ID, resource_type: "image", type: "upload", format: "jpg", bytes: 1234, width: 800, height: 600, secret: "x" }),
+      json(200, { public_id: ID, resource_type: "image", type: "authenticated", format: "jpg", bytes: 1234, width: 800, height: 600, secret: "x" }),
     )
     const info = await new CloudinaryAdminAssets(config, fetchMock as never).describe(ID)
-    expect(info).toEqual({ publicId: ID, resourceType: "image", type: "upload", format: "jpg", bytes: 1234, width: 800, height: 600 })
+    expect(info).toEqual({ publicId: ID, resourceType: "image", type: "authenticated", format: "jpg", bytes: 1234, width: 800, height: 600 })
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`https://api.cloudinary.com/v1_1/demo/resources/image/upload/my-life/memories/3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f`)
+    expect(url).toBe(`https://api.cloudinary.com/v1_1/demo/resources/image/authenticated/my-life/memories/3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f`)
     expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from("key:secret").toString("base64")}`)
     expect(init.method ?? "GET").toBe("GET")
   })
@@ -51,7 +51,7 @@ describe("CloudinaryAdminAssets.destroy", () => {
     const fetchMock = vi.fn(async () => json(200, { deleted: { [ID]: "deleted" } }))
     await new CloudinaryAdminAssets(config, fetchMock as never).destroy(ID)
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe("https://api.cloudinary.com/v1_1/demo/resources/image/upload")
+    expect(url).toBe("https://api.cloudinary.com/v1_1/demo/resources/image/authenticated")
     expect(init.method).toBe("DELETE")
     const body = new URLSearchParams(String(init.body))
     expect(body.getAll("public_ids[]")).toEqual([ID])

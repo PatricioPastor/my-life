@@ -1,6 +1,6 @@
 import "server-only"
 import { type CloudinaryAssets, verifyAsset } from "./cloudinary-assets"
-import { toMemoryView } from "./list-memories"
+import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import { validateNewMemory } from "./validate-new-memory"
 import { RATE_LIMIT } from "./upload-limits"
@@ -12,7 +12,8 @@ export interface CreateMemoryDeps {
   /** Lazy, so building it (which runs the runtime-role guard) happens inside the failure handling. */
   repository: () => MemoryRepository
   assets: () => CloudinaryAssets
-  cloudName: string | undefined
+  /** Null when a Cloudinary variable is missing. */
+  cloudinary: DeliveryConfig | null
   ticketSecret: string | null
   /** Milliseconds, like `Date.now`. */
   now: () => number
@@ -40,7 +41,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
   try {
     const visitor = await deps.currentVisitor()
     if (!visitor) return { ok: false, reason: "no_session" }
-    if (!deps.cloudName || !deps.ticketSecret) {
+    if (!deps.cloudinary || !deps.ticketSecret) {
       deps.log("Cloudinary or the session secret is not configured.")
       return { ok: false, reason: "unavailable" }
     }
@@ -94,7 +95,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
 
     try {
       const memory = await repository.createPending(visitor.handle, validation.value)
-      const view = toMemoryView(memory, deps.cloudName)
+      const view = toMemoryView(memory, deps.cloudinary)
       if (!view) throw new Error("The new memory has no view.")
       return { ok: true, memory: view }
     } catch (error) {

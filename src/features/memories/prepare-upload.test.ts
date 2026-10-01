@@ -88,6 +88,8 @@ describe("prepareUploadWith", () => {
       public_id: publicId,
       allowed_formats: "jpg,png,webp,heic,heif",
       overwrite: "false",
+      // Authenticated, so the untransformed original (with its EXIF and GPS) is never publicly fetchable.
+      type: "authenticated",
     })
     // The signature covers every field but the API key and itself, with the API secret.
     const { api_key: apiKey, signature, ...signed } = upload.fields

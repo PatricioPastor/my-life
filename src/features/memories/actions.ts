@@ -17,7 +17,7 @@ export async function listMemories(): Promise<ListMemoriesResult> {
   return listMemoriesWith({
     currentVisitor,
     repository: () => new PrismaMemoryRepository(),
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    cloudinary: readCloudinaryConfig(),
     log,
   })
 }
@@ -46,7 +46,7 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
         if (!config) throw new Error("Cloudinary is not configured.")
         return new CloudinaryAdminAssets(config)
       },
-      cloudName: config?.cloudName,
+      cloudinary: config,
       ticketSecret: getSessionSecret(),
       now: Date.now,
       log,

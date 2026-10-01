@@ -48,6 +48,8 @@ export async function prepareUploadWith(deps: PrepareUploadDeps): Promise<Prepar
       overwrite: "false",
       public_id: publicId,
       timestamp: String(timestamp),
+      // `authenticated`: the untransformed original, which keeps its EXIF and GPS, is not publicly fetchable.
+      type: "authenticated",
     }
     const { cloudName, apiKey, apiSecret } = deps.cloudinary
     const signature = signCloudinaryParams(signed, apiSecret)

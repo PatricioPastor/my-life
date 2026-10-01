@@ -8,6 +8,8 @@ export interface CloudinaryConfig {
 }
 
 const API = "https://api.cloudinary.com/v1_1"
+/** The delivery type photos are uploaded as: it is part of every Admin API resource path. */
+const DELIVERY_TYPE = "authenticated"
 
 /** The three variables, or null when any is missing: the feature is then unavailable. */
 export function readCloudinaryConfig(env: Record<string, string | undefined> = process.env): CloudinaryConfig | null {
@@ -64,7 +66,7 @@ export class CloudinaryAdminAssets implements CloudinaryAssets {
     if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error("Invalid Cloudinary public id.")
     const path = segments.map(encodeURIComponent).join("/")
     const response = await this.fetchFn(
-      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/upload/${path}`,
+      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}/${path}`,
       { headers: this.headers() },
     )
     if (response.status === 404) return null
@@ -76,7 +78,7 @@ export class CloudinaryAdminAssets implements CloudinaryAssets {
     const body = new URLSearchParams()
     body.append("public_ids[]", publicId)
     body.append("invalidate", "true")
-    const response = await this.fetchFn(`${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/upload`, {
+    const response = await this.fetchFn(`${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}`, {
       method: "DELETE",
       headers: { ...this.headers(), "Content-Type": "application/x-www-form-urlencoded" },
       body,

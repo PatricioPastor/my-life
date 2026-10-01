@@ -1,29 +1,68 @@
-import { describe, expect, it } from "vitest"
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("server-only", () => ({}))
+
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, signDeliveryPath } from "./cloudinary-url"
+
+// Test vector from Cloudinary's "Delivery URL signatures" page: secret `abcd`, the `sample-authenticated.png`
+// image with `c_fill,w_300,h_250/e_grayscale`. The signature is the first 8 characters of the URL-safe base64
+// SHA-1 of `<transformation>/<public id><secret>`, wrapped as `s--SIGNATURE--`.
+describe("signDeliveryPath", () => {
+  it("matches the documented vector", () => {
+    expect(signDeliveryPath("c_fill,w_300,h_250/e_grayscale", "sample-authenticated.png", "abcd")).toBe("s--iDy_JeBq--")
+  })
+
+  it("changes with the secret, the transformation and the public id", () => {
+    const base = signDeliveryPath("w_100", "a/b", "s1")
+    expect(signDeliveryPath("w_100", "a/b", "s2")).not.toBe(base)
+    expect(signDeliveryPath("w_200", "a/b", "s1")).not.toBe(base)
+    expect(signDeliveryPath("w_100", "a/c", "s1")).not.toBe(base)
+  })
+})
 
 describe("cloudinaryUrl", () => {
-  it("builds a delivery URL from cloud, transform and public id", () => {
-    expect(cloudinaryUrl("demo", "memories/abc", "w_100")).toBe(
-      "https://res.cloudinary.com/demo/image/upload/w_100/memories/abc",
+  it("builds a signed delivery URL of the authenticated type, so the untransformed original is never public", () => {
+    expect(cloudinaryUrl("demo", "sample-authenticated.png", "c_fill,w_300,h_250/e_grayscale", "abcd")).toBe(
+      "https://res.cloudinary.com/demo/image/authenticated/s--iDy_JeBq--/c_fill,w_300,h_250/e_grayscale/sample-authenticated.png",
     )
   })
 
+  it("never builds a URL of the public upload type", () => {
+    const url = cloudinaryUrl("demo", "memories/abc", "w_100", "abcd")
+    expect(url).not.toContain("/image/upload/")
+    expect(url).toContain("/image/authenticated/s--")
+  })
+
+  it("keeps the transformation inside the signature: a URL with it removed is not signed for the original", () => {
+    const withTransform = cloudinaryUrl("demo", "memories/abc", "w_100", "abcd")
+    const signature = /\/s--([^-]{8})--\//.exec(withTransform)?.[1]
+    expect(signature).toBeTruthy()
+    // The signature of the bare original is a different one, so the same signature cannot fetch it.
+    expect(signDeliveryPath("", "memories/abc", "abcd")).not.toBe(`s--${signature}--`)
+  })
+
+  it("never puts the API secret in the URL", () => {
+    expect(cloudinaryUrl("demo", "memories/abc", "w_100", "very-secret")).not.toContain("very-secret")
+  })
+
   it("encodes each public id segment but keeps the folder slashes", () => {
-    expect(cloudinaryUrl("demo", "memories/ana maría/é?#.jpg", "w_100")).toBe(
-      "https://res.cloudinary.com/demo/image/upload/w_100/memories/ana%20mar%C3%ADa/%C3%A9%3F%23.jpg",
+    const url = cloudinaryUrl("demo", "memories/ana maría/é?#.jpg", "w_100", "abcd")
+    expect(url).toMatch(
+      /^https:\/\/res\.cloudinary\.com\/demo\/image\/authenticated\/s--[A-Za-z0-9_-]{8}--\/w_100\/memories\/ana%20mar%C3%ADa\/%C3%A9%3F%23\.jpg$/,
     )
   })
 
   it("encodes the cloud name", () => {
-    expect(cloudinaryUrl("de/mo", "a", "w_1")).toContain("/de%2Fmo/image/upload/")
+    expect(cloudinaryUrl("de/mo", "a", "w_1", "abcd")).toContain("/de%2Fmo/image/authenticated/")
   })
 
-  it("refuses path traversal and empty segments", () => {
-    expect(() => cloudinaryUrl("demo", "a/../b", "w_1")).toThrow()
-    expect(() => cloudinaryUrl("demo", "./a", "w_1")).toThrow()
-    expect(() => cloudinaryUrl("demo", "a//b", "w_1")).toThrow()
-    expect(() => cloudinaryUrl("demo", "", "w_1")).toThrow()
-    expect(() => cloudinaryUrl("", "a", "w_1")).toThrow()
+  it("refuses path traversal, empty segments and a missing cloud name or secret", () => {
+    expect(() => cloudinaryUrl("demo", "a/../b", "w_1", "abcd")).toThrow()
+    expect(() => cloudinaryUrl("demo", "./a", "w_1", "abcd")).toThrow()
+    expect(() => cloudinaryUrl("demo", "a//b", "w_1", "abcd")).toThrow()
+    expect(() => cloudinaryUrl("demo", "", "w_1", "abcd")).toThrow()
+    expect(() => cloudinaryUrl("", "a", "w_1", "abcd")).toThrow()
+    expect(() => cloudinaryUrl("demo", "a", "w_1", "")).toThrow()
   })
 
   it("uses a square auto-cropped thumbnail and a width-limited full image", () => {

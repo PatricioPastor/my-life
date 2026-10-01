@@ -4,7 +4,7 @@ import { ALLOWED_FORMATS, MAX_UPLOAD_BYTES, MEMORY_FOLDER } from "./upload-limit
 export interface AssetInfo {
   publicId: string
   resourceType: string
-  /** Delivery type; `upload` is the public one. */
+  /** Delivery type. Photos are `authenticated`: `upload` is public, so its original (EXIF and GPS) would be too. */
   type: string
   format: string
   bytes: number
@@ -33,7 +33,7 @@ export function verifyAsset(
   if (!info || info.publicId !== publicId || !publicId.startsWith(`${MEMORY_FOLDER}/`)) {
     return { ok: false, problem: "asset_missing" }
   }
-  if (info.resourceType !== "image" || info.type !== "upload") return { ok: false, problem: "asset_type" }
+  if (info.resourceType !== "image" || info.type !== "authenticated") return { ok: false, problem: "asset_type" }
   if (!(ALLOWED_FORMATS as readonly string[]).includes(info.format.toLowerCase())) {
     return { ok: false, problem: "asset_type" }
   }

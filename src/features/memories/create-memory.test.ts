@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { AssetInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
@@ -19,7 +20,7 @@ const ticketFor = (over: Partial<{ h: string; pid: string; exp: number }> = {}, 
 const asset = (over: Partial<AssetInfo> = {}): AssetInfo => ({
   publicId: PID,
   resourceType: "image",
-  type: "upload",
+  type: "authenticated",
   format: "jpg",
   bytes: 1_000_000,
   width: 4032,
@@ -54,7 +55,7 @@ function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; in
     currentVisitor: async () => ({ handle: "ana" }),
     repository: () => repository,
     assets: () => assets,
-    cloudName: "demo",
+    cloudinary: { cloudName: "demo", apiSecret: "abcd" },
     ticketSecret: SECRET,
     now: () => NOW_MS,
     log: vi.fn(),
@@ -98,7 +99,7 @@ describe("createMemoryWith: who and what", () => {
   })
 
   it.each([
-    ["no cloud name", { cloudName: undefined }],
+    ["no Cloudinary config", { cloudinary: null }],
     ["no ticket secret", { ticketSecret: null }],
   ])("answers unavailable with %s", async (_name, over) => {
     const { full } = setup(over)
@@ -132,7 +133,7 @@ describe("createMemoryWith: validation", () => {
 describe("createMemoryWith: asset verification", () => {
   it.each<[string, AssetInfo, string]>([
     ["is not an image", asset({ resourceType: "video" }), "asset_type"],
-    ["is not a public upload", asset({ type: "authenticated" }), "asset_type"],
+    ["is a public upload, whose original would carry its EXIF", asset({ type: "upload" }), "asset_type"],
     ["has a format we do not allow", asset({ format: "gif" }), "asset_type"],
     ["is over 10 MB", asset({ bytes: MAX_UPLOAD_BYTES + 1 }), "asset_too_large"],
     ["has no dimensions", asset({ width: 0 }), "asset_type"],
@@ -199,8 +200,8 @@ describe("createMemoryWith: rate limit and insert", () => {
         status: "pending",
         width: 4032,
         height: 3024,
-        thumbUrl: `https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_fill,g_auto,w_160,h_160/${PID}`,
-        fullUrl: `https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_limit,w_1600/${PID}`,
+        thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
+        fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
       },
     })
     const json = JSON.stringify(result)

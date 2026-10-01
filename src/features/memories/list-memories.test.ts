@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
+vi.mock("server-only", () => ({}))
+
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { listMemoriesWith, type ListMemoriesDeps } from "./list-memories"
@@ -25,7 +28,7 @@ function deps(over: Partial<ListMemoriesDeps> = {}, rows: Memory[] = [memory()])
   const full: ListMemoriesDeps = {
     currentVisitor: async () => ({ handle: "ana" }),
     repository: () => repository,
-    cloudName: "demo",
+    cloudinary: { cloudName: "demo", apiSecret: "abcd" },
     log: vi.fn(),
     ...over,
   }
@@ -53,8 +56,8 @@ describe("listMemoriesWith", () => {
           status: "approved",
           width: 800,
           height: 600,
-          thumbUrl: "https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_fill,g_auto,w_160,h_160/memories/a%20b",
-          fullUrl: "https://res.cloudinary.com/demo/image/upload/f_auto,q_auto,c_limit,w_1600/memories/a%20b",
+          thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
+          fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
         },
       ],
     })
@@ -121,8 +124,12 @@ describe("listMemoriesWith", () => {
     expect(await listMemoriesWith(full)).toEqual({ ok: false, reason: "unavailable" })
   })
 
-  it.each([undefined, ""])("answers unavailable without a cloud name (%j)", async (cloudName) => {
-    const { full, repository } = deps({ cloudName })
+  it.each([
+    ["no Cloudinary config", null],
+    ["an empty cloud name", { cloudName: "", apiSecret: "abcd" }],
+    ["an empty API secret", { cloudName: "demo", apiSecret: "" }],
+  ])("answers unavailable with %s", async (_name, cloudinary) => {
+    const { full, repository } = deps({ cloudinary })
     expect(await listMemoriesWith(full)).toEqual({ ok: false, reason: "unavailable" })
     expect(repository.listForVisitor).not.toHaveBeenCalled()
   })
