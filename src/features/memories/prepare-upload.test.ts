@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
 import { createHash } from "node:crypto"
+import { AUDIO_TRANSFORM } from "./cloudinary-url"
 import { serializeParams, signCloudinaryParams } from "./cloudinary-signature"
 import { prepareUploadWith, type PrepareUploadDeps } from "./prepare-upload"
 import type { MemoryRepository } from "./memory-repository"
@@ -177,12 +178,39 @@ describe("prepareUploadWith: audio", () => {
     expect(serializeParams(signed)).toBe(
       [
         "allowed_formats=webm,ogg,opus,mp3,m4a,mp4,aac,wav",
+        "eager=f_mp3",
+        "eager_async=true",
         "overwrite=false",
         `public_id=my-life/memories/audio-${ID}`,
         `timestamp=${NOW_MS / 1000}`,
         "type=authenticated",
       ].join("&"),
     )
+  })
+
+  it("asks Cloudinary to make the playable mp3 once, at upload, in the background (eager + eager_async)", async () => {
+    const { full } = deps(withIds())
+    const result = await prepareUploadWith(full, VOICE)
+    if (!result.ok || !result.upload.audio) throw new Error("expected audio fields")
+    // The same transformation the delivery URL is signed with, so the eager derivative is the one that is served.
+    expect(result.upload.audio.eager).toBe(AUDIO_TRANSFORM)
+    expect(result.upload.audio.eager_async).toBe("true")
+  })
+
+  it("signs the eager params as Cloudinary does: raw, unencoded, sorted with the rest, SHA-256 of the string plus the secret", async () => {
+    const { full } = deps(withIds())
+    const result = await prepareUploadWith(full, VOICE)
+    if (!result.ok || !result.upload.audio) throw new Error("expected audio fields")
+    const toSign = `allowed_formats=webm,ogg,opus,mp3,m4a,mp4,aac,wav&eager=f_mp3&eager_async=true&overwrite=false&public_id=my-life/memories/audio-${ID}&timestamp=${NOW_MS / 1000}&type=authenticated${API_SECRET}`
+    expect(result.upload.audio.signature).toBe(createHash("sha256").update(toSign).digest("hex"))
+  })
+
+  it("does not ask for eager derivatives of a photo", async () => {
+    const { full } = deps(withIds())
+    const result = await prepareUploadWith(full, BOTH)
+    if (!result.ok || !result.upload.photo) throw new Error("expected photo fields")
+    expect(result.upload.photo).not.toHaveProperty("eager")
+    expect(result.upload.photo).not.toHaveProperty("eager_async")
   })
 
   it("signs both a photo and an audio, under two different ids, with one ticket covering both", async () => {

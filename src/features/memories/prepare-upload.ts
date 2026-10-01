@@ -1,6 +1,7 @@
 import "server-only"
 import type { CloudinaryConfig } from "./cloudinary-admin-assets"
 import { signCloudinaryParams } from "./cloudinary-signature"
+import { AUDIO_TRANSFORM } from "./cloudinary-url"
 import type { MemoryRepository } from "./memory-repository"
 import type { PrepareUploadInput, PrepareUploadResult } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
@@ -81,8 +82,14 @@ export async function prepareUploadWith(deps: PrepareUploadDeps, input: PrepareU
     if (wantsAudio) {
       audioId = `${MEMORY_FOLDER}/audio-${deps.newId()}`
       // Posted to `video/upload`: Cloudinary stores audio as a `video` resource. The resource type is not signed.
+      // `eager` + `eager_async`: the mp3 every browser plays is made once, in the background, at upload, instead of on
+      // the first play: a long audio is too big to transcode on the fly (40 MB on the free plan, 300 MB on paid ones;
+      // Cloudinary answers 423 until it is ready). Both are signed like any other field, with their raw values. No
+      // `eager_notification_url`: nothing here listens; the audio route reports "still processing" until it is ready.
       audio = sign({
         allowed_formats: AUDIO_FORMATS_PARAM,
+        eager: AUDIO_TRANSFORM,
+        eager_async: "true",
         overwrite: "false",
         public_id: audioId,
         timestamp: String(timestamp),
