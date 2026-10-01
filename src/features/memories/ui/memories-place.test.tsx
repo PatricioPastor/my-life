@@ -210,6 +210,20 @@ describe("MemoriesPlace viewer", () => {
     await waitFor(() => expect(document.activeElement).toBe(point))
   })
 
+  it("takes the points out of the magnetic cursor's reach while the viewer is open, and gives them back on close", async () => {
+    render(<MemoriesPlace state={three} />)
+    const points = () => Array.from(document.querySelectorAll<HTMLElement>("[data-memory-id]"))
+    // The cursor skips targets under an aria-hidden or inert ancestor, so the orbs behind the viewer cannot
+    // capture it or show their label over the dialog.
+    const covered = (el: HTMLElement) => el.closest("[aria-hidden='true'],[inert]") !== null
+    expect(points().some(covered)).toBe(false)
+    open(/Una tarde de lluvia/)
+    expect(points()).toHaveLength(3)
+    expect(points().every(covered)).toBe(true)
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    await waitFor(() => expect(points().some(covered)).toBe(false))
+  })
+
   it("closes with the close button", () => {
     render(<MemoriesPlace state={three} />)
     open(/primer viaje/)

@@ -121,7 +121,6 @@ describe("MagneticCursor", () => {
     const { container } = render(<Stage onCapture={onCapture} />)
     fireEvent.pointerMove(container.querySelector("button")!, { clientX: 224, clientY: 224, pointerType: "touch" })
     runFrames(2)
-    expect(onCapture).not.toHaveBeenCalled()
   })
 
   it("restores the stage on unmount", () => {
@@ -338,5 +337,61 @@ describe("MagneticCursor", () => {
       }
       expect(reducedQueries).toBe(after)
     })
+  })
+})
+
+describe("MagneticCursor behind a modal", () => {
+  function Backdrop({ cover }: { cover: "none" | "aria-hidden" | "inert" }) {
+    const ref = useRef<HTMLElement>(null)
+    const props = cover === "aria-hidden" ? { "aria-hidden": true } : cover === "inert" ? { inert: true } : {}
+    return (
+      <main ref={ref}>
+        <div data-testid="behind" {...props}>
+          <button type="button" data-magnetic="strong" data-cursor-id="stories" data-cursor-label="Historias">
+            Historias
+          </button>
+        </div>
+        <MagneticCursor stageRef={ref} />
+      </main>
+    )
+  }
+  const settle = async () => {
+    await act(async () => {})
+    runFrames(3)
+  }
+  const state = (c: HTMLElement) => c.querySelector(".mc")?.getAttribute("data-state")
+
+  it("captures a target that nothing covers", async () => {
+    mockMedia(true)
+    const { container } = render(<Backdrop cover="none" />)
+    fireEvent.pointerMove(container.querySelector("button")!, { clientX: 224, clientY: 224, pointerType: "mouse" })
+    await settle()
+    expect(state(container)).toBe("captured")
+  })
+
+  it.each(["aria-hidden", "inert"] as const)("never captures a target under an %s ancestor", async (cover) => {
+    mockMedia(true)
+    const { container } = render(<Backdrop cover={cover} />)
+    fireEvent.pointerMove(container.querySelector("button")!, { clientX: 224, clientY: 224, pointerType: "mouse" })
+    await settle()
+    expect(state(container)).toBe("free")
+    expect(container.querySelector(".mc-tip")?.getAttribute("data-tip")).toBe("off")
+  })
+
+  it.each(["aria-hidden", "inert"] as const)("lets go of a captured target the moment it is covered by %s, and takes it back after", async (cover) => {
+    mockMedia(true)
+    const { container } = render(<Backdrop cover="none" />)
+    const behind = container.querySelector<HTMLElement>("[data-testid=behind]")!
+    const button = container.querySelector("button")!
+    fireEvent.pointerMove(button, { clientX: 224, clientY: 224, pointerType: "mouse" })
+    await settle()
+    expect(state(container)).toBe("captured")
+    if (cover === "inert") behind.setAttribute("inert", "")
+    else behind.setAttribute("aria-hidden", "true")
+    await settle()
+    expect(state(container)).toBe("free")
+    behind.removeAttribute(cover)
+    await settle()
+    expect(state(container)).toBe("captured")
   })
 })

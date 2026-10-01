@@ -39,6 +39,9 @@ const MIN_FRAME = 28
 // The loop idles after this many frames with settled springs and unmoving targets.
 const STABLE_FRAMES = 30
 const FIELD = "input,textarea,select,[contenteditable='true']"
+// What a modal leaves behind it: a dialog hides (aria-hidden) or disables (inert) everything outside itself,
+// and a target there must not catch the cursor or name itself over the dialog.
+const COVERED = "[inert],[aria-hidden='true']"
 
 function subscribeFine(notify: () => void) {
   const mq = typeof window.matchMedia === "function" ? window.matchMedia(FINE_POINTER) : null
@@ -112,7 +115,7 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
       items = []
       let sig = ""
       for (const el of stage.querySelectorAll<HTMLElement>("[data-magnetic]")) {
-        if ((el as HTMLButtonElement).disabled) continue
+        if ((el as HTMLButtonElement).disabled || el.closest(COVERED)) continue
         const r = el.getBoundingClientRect()
         if (r.width === 0 || r.height === 0) continue
         let id = ids.get(el)
@@ -296,7 +299,7 @@ function Reticle({ stageRef, onCapture }: MagneticCursorProps) {
     const mo = new MutationObserver((records) => {
       if (records.some((r) => !root.contains(r.target))) wake()
     })
-    mo.observe(stage, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-magnetic", "disabled"] })
+    mo.observe(stage, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-magnetic", "disabled", "aria-hidden", "inert"] })
 
     return () => {
       alive = false
