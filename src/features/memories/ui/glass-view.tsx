@@ -1,16 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react"
 import { Dialog } from "radix-ui"
 import { probeRenderer } from "@/features/onboarding/gpu-probe"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
 import type { Viewport } from "./camera"
+import { smoothedReader } from "./audio-level"
 import { glassLayout } from "./glass-layout"
 import { formatClock, pickGlassMode } from "./glass-mode"
 import { GlassOrb } from "./glass-orb"
 import { swipeStep } from "./swipe"
-import { useVoiceLevel } from "./voice-level"
+import { useAudioLevel } from "./use-audio-level"
 
 interface GlassViewProps {
   /** The memory the glass is open on, or null when closed. */
@@ -71,7 +72,9 @@ function GlassBody({
 
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [status, setStatus] = useState<VoiceStatus>("idle")
-  const level = useVoiceLevel(audio)
+  // The same listener and the same smoothing as the form's talking orb, so the voice looks alike in both places.
+  const rawLevel = useAudioLevel(audio, status === "playing")
+  const level = useMemo(() => smoothedReader(rawLevel), [rawLevel])
   // The voice stops when the memory does: on another memory, on close, on leaving.
   useEffect(() => {
     if (!open) audio?.pause()

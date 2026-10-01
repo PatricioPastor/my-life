@@ -65,3 +65,19 @@ export function laggedLevels(history: readonly number[], frameMs: number, lagsMs
     return index >= 0 && index < history.length ? history[index] : 0
   })
 }
+
+/**
+ * A reader that eases another reader with the same follower as the talking orb (`smoothLevel`: quick to rise, slow to
+ * fall), so every orb that shows a voice moves like the same voice. It is stateful and time-based: it must be read
+ * once per animation frame, and reading it twice in the same instant gives the same value.
+ */
+export function smoothedReader(read: () => number, now: () => number = () => performance.now()): () => number {
+  let level = 0
+  let last: number | null = null
+  return () => {
+    const at = now()
+    if (last !== null) level = smoothLevel(level, read(), at - last)
+    last = at
+    return level
+  }
+}

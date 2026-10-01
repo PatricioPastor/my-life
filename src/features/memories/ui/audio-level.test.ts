@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { byteRms, laggedLevels, levelFromRms, pushLevel, smoothLevel } from "./audio-level"
+import { byteRms, laggedLevels, levelFromRms, pushLevel, smoothLevel, smoothedReader } from "./audio-level"
 
 /** A time-domain buffer like the AnalyserNode gives: unsigned bytes centered on 128. */
 const sine = (amplitude: number, length = 2048, cycles = 16) =>
@@ -98,5 +98,103 @@ describe("pushLevel and laggedLevels", () => {
   it("answers 0 for a ripple that reaches back before the voice began", () => {
     expect(laggedLevels([0.5], 100, [0, 100, 300])).toEqual([0.5, 0, 0])
     expect(laggedLevels([], 100, [0, 100])).toEqual([0, 0])
+  })
+})
+
+describe("smoothedReader", () => {
+  const clock = (start = 0) => {
+    let now = start
+    return { now: () => now, tick: (ms: number) => (now += ms) }
+  }
+
+  it("follows a raw reader with the same attack and release as the form's orb", () => {
+    const time = clock()
+    let raw = 0
+    const read = smoothedReader(() => raw, time.now)
+    expect(read()).toBe(0)
+    raw = 1
+    time.tick(70)
+    // One attack time constant: about 63% of the way up, exactly what `smoothLevel` gives.
+    expect(read()).toBeCloseTo(smoothLevel(0, 1, 70), 6)
+    time.tick(1000)
+    const peak = read()
+    expect(peak).toBeGreaterThan(0.99)
+    raw = 0
+    time.tick(240)
+    expect(read()).toBeCloseTo(smoothLevel(peak, 0, 240), 6)
+  })
+
+  it("does not move when no time has passed, and gets there when a lot has", () => {
+    expect(smoothLevel(0.3, 1, 0)).toBe(0.3)
+    expect(smoothLevel(0.3, 1, 10_000)).toBeCloseTo(1, 5)
+  })
+
+  it("is not thrown off by a bad target or a negative step", () => {
+    expect(smoothLevel(0.5, Number.NaN, 16)).toBeLessThan(0.5)
+    expect(smoothLevel(0.5, 0.9, -16)).toBe(0.5)
+  })
+})
+
+describe("pushLevel and laggedLevels", () => {
+  it("keeps only the most recent levels", () => {
+    expect(pushLevel([0.1, 0.2, 0.3], 0.4, 3)).toEqual([0.2, 0.3, 0.4])
+    expect(pushLevel([], 0.4, 3)).toEqual([0.4])
+  })
+
+  it("does not change the history it was given", () => {
+    const history = [0.1]
+    pushLevel(history, 0.2, 5)
+    expect(history).toEqual([0.1])
+  })
+
+  it("reads the level as it was a while ago, for each ripple", () => {
+    // Frames of 100 ms, the newest last: a ripple lagging 200 ms shows the level from two frames before the newest.
+    expect(laggedLevels([0.1, 0.2, 0.3, 0.4, 0.5], 100, [0, 200, 400])).toEqual([0.5, 0.3, 0.1])
+  })
+
+  it("answers 0 for a ripple that reaches back before the voice began", () => {
+    expect(laggedLevels([0.5], 100, [0, 100, 300])).toEqual([0.5, 0, 0])
+    expect(laggedLevels([], 100, [0, 100])).toEqual([0, 0])
+  })
+})
+
+describe("smoothedReader", () => {
+  const clock = (start = 0) => {
+    let now = start
+    return { now: () => now, tick: (ms: number) => (now += ms) }
+  }
+
+  it("follows a raw reader with the same attack and release as the form's orb", () => {
+    const time = clock()
+    let raw = 0
+    const read = smoothedReader(() => raw, time.now)
+    expect(read()).toBe(0)
+    raw = 1
+    time.tick(70)
+    // One attack time constant: about 63% of the way up, exactly what `smoothLevel` gives.
+    expect(read()).toBeCloseTo(smoothLevel(0, 1, 70), 6)
+    time.tick(1000)
+    expect(read()).toBeGreaterThan(0.99)
+    raw = 0
+    time.tick(240)
+    const falling = read()
+    expect(falling).toBeCloseTo(smoothLevel(read() === falling ? smoothLevel(0, 1, 1070) : 0, 0, 240), 1)
+    expect(falling).toBeLessThan(0.5)
+    expect(falling).toBeGreaterThan(0)
+  })
+
+  it("does not move when it is read twice in the same instant", () => {
+    const time = clock()
+    const read = smoothedReader(() => 1, time.now)
+    time.tick(50)
+    const first = read()
+    expect(read()).toBe(first)
+  })
+
+  it("never goes past 0..1, whatever the raw reader says", () => {
+    const time = clock()
+    const read = smoothedReader(() => 7, time.now)
+    time.tick(10_000)
+    expect(read()).toBeLessThanOrEqual(1)
   })
 })

@@ -7,6 +7,8 @@ const probe = vi.hoisted(() => vi.fn(() => ({ webgl2: false })))
 const makeRenderer = vi.hoisted(() => vi.fn())
 vi.mock("@/features/onboarding/gpu-probe", () => ({ probeRenderer: probe }))
 vi.mock("./glass-renderer", () => ({ createGlassRenderer: makeRenderer }))
+// jsdom has no Web Audio: a voice that is loud while it plays stands in for the analyser.
+vi.mock("./use-audio-level", () => ({ useAudioLevel: (_source: unknown, active: boolean) => () => (active ? 0.6 : 0) }))
 
 const view = (id: string, caption: string, over: Partial<MemoryView> = {}): MemoryView => ({
   id,
@@ -89,6 +91,8 @@ function runFrames(count: number, ms = 16) {
   for (let i = 1; i <= count; i++) {
     const batch = frames
     frames = []
+    // The voice smoothing reads the same clock the frames report.
+    vi.spyOn(performance, "now").mockReturnValue(1000 + i * ms)
     act(() => batch.forEach((cb) => cb(1000 + i * ms)))
   }
 }
