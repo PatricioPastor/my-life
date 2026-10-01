@@ -3,6 +3,7 @@
 import { useEffect, useRef, type RefObject } from "react"
 import { createOrbMotion, type OrbFrame, type OrbMotion } from "./orb-motion"
 import type { Point, Rect } from "./orb-path"
+import { orbTagSide } from "./orb-tag"
 import { isSummonKeyEvent, summonBlocked } from "./orb-summon"
 
 /** The cursor id the journey reads to know the orb is captured. */
@@ -149,7 +150,10 @@ export function Orb({
         pointer: pointerRef.current,
       })
       frameRef.current = frame
-      if (moverRef.current) place(moverRef.current, frame)
+      if (moverRef.current) {
+        place(moverRef.current, frame)
+        moverRef.current.dataset.side = orbTagSide(frame.x, sizeRef.current.width)
+      }
       if (frame.energy > 0) {
         shown = true
         sky.current?.orb({
@@ -250,7 +254,8 @@ export function Orb({
             moverRef.current = el
             if (el && frameRef.current) place(el, frameRef.current)
           }}
-          className="absolute top-0 left-0"
+          className="group absolute top-0 left-0"
+          data-side="right"
         >
           <button
             type="button"
@@ -285,6 +290,14 @@ export function Orb({
               touchRef.current.focus = false
             }}
           />
+          {/* Touch has no hover, so no cursor label: the orb is named on screen, on the side with room. */}
+          <span
+            data-orb-tag
+            aria-hidden="true"
+            className="t-label pointer-events-none absolute top-0 left-10 -translate-y-1/2 whitespace-nowrap text-ink group-data-[side=left]:right-10 group-data-[side=left]:left-auto [@media(hover:hover)_and_(pointer:fine)]:hidden [text-shadow:0_0_2px_#0A0600,0_0_5px_rgba(10,6,0,0.95),0_1px_14px_rgba(10,6,0,0.95)]"
+          >
+            {LABEL}
+          </span>
           {/* Outside the button, so it describes it without becoming part of its name. */}
           <span id={DESCRIPTION_ID} className="sr-only">
             {CONTEXT}

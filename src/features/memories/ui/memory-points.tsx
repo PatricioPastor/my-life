@@ -91,9 +91,9 @@ export function MemoryPoints({ memories, reduced, onOpen }: MemoryPointsProps) {
       const id = (target as Element | null)?.closest?.("[data-memory-id]")?.getAttribute("data-memory-id")
       return id === null || id === undefined ? null : (index.get(id) ?? null)
     }
-    const onOver = (event: PointerEvent) => {
-      if (event.pointerType !== "touch") loop.hold("hover", orbAt(event.target))
-    }
+    // A finger holds the orb it is on too: it stops under the finger, so the tap lands where the visitor aimed
+    // (it lets go on pointerout, which a touch fires when it lifts).
+    const onOver = (event: PointerEvent) => loop.hold("hover", orbAt(event.target))
     const onOut = (event: PointerEvent) => {
       if (orbAt(event.relatedTarget) === null) loop.hold("hover", null)
     }

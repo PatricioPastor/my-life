@@ -338,6 +338,32 @@ describe("MemoriesPlace viewer", () => {
   })
 })
 
+describe("MemoriesPlace viewer swipe", () => {
+  const swipe = (target: Element, from: number, to: number) => {
+    fireEvent.pointerDown(target, { pointerType: "touch", clientX: from, clientY: 400 })
+    fireEvent.pointerUp(target, { pointerType: "touch", clientX: to, clientY: 410 })
+  }
+
+  it("moves to the next memory on a swipe to the left and back on a swipe to the right", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(screen.getByRole("button", { name: /Una tarde de lluvia/ }))
+    const frame = () => screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
+    swipe(frame(), 300, 180)
+    expect(within(screen.getByRole("dialog")).getByText("La casa nueva")).toBeTruthy()
+    swipe(frame(), 100, 240)
+    expect(within(screen.getByRole("dialog")).getByText("Una tarde de lluvia")).toBeTruthy()
+  })
+
+  it("does nothing on a tap, and stays on the first memory when swiping right", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(screen.getByRole("button", { name: /El primer viaje/ }))
+    const frame = screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
+    swipe(frame, 200, 205)
+    swipe(frame, 100, 240)
+    expect(within(screen.getByRole("dialog")).getByText("El primer viaje")).toBeTruthy()
+  })
+})
+
 describe("MemoriesPlace action slot", () => {
   it("hands a function action the stage, so a dialog can mount inside it", () => {
     const seen: Array<HTMLElement | null> = []
@@ -353,5 +379,25 @@ describe("MemoriesPlace action slot", () => {
     const stage = screen.getByRole("heading", { name: "Recuerdos" }).parentElement
     expect(seen.at(-1)).toBe(stage)
     expect(stage?.contains(screen.getByRole("button", { name: "Agregar recuerdo" }))).toBe(true)
+  })
+})
+
+describe("MemoriesPlace on touch", () => {
+  const orbOf = (name: string) => screen.getByRole("button", { name: new RegExp(name) })
+
+  it("stops an orb under the finger, so the tap lands on it instead of where it was drifting", async () => {
+    render(<MemoriesPlace state={three} />)
+    const orb = orbOf("El primer viaje")
+    fireEvent.pointerOver(orb, { pointerType: "touch" })
+    await waitFor(() => expect(orb.getAttribute("data-link")).toBe("self"))
+  })
+
+  it("lets it go again when the finger lifts", async () => {
+    render(<MemoriesPlace state={three} />)
+    const orb = orbOf("El primer viaje")
+    fireEvent.pointerOver(orb, { pointerType: "touch" })
+    await waitFor(() => expect(orb.getAttribute("data-link")).toBe("self"))
+    fireEvent.pointerOut(orb, { pointerType: "touch", relatedTarget: document.body })
+    await waitFor(() => expect(orb.getAttribute("data-link")).not.toBe("self"))
   })
 })

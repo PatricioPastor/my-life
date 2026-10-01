@@ -364,3 +364,27 @@ describe("Orb", () => {
     })
   })
 })
+
+describe("Orb on touch", () => {
+  it("is named on screen for visitors who cannot hover, and hidden for those who can", () => {
+    const { view } = setup()
+    const tag = view.container.querySelector("[data-orb-tag]") as HTMLElement
+    expect(tag.textContent).toBe("Agregar recuerdo")
+    // The button already carries the name for assistive tech; the visible copy is not read twice.
+    expect(tag.getAttribute("aria-hidden")).toBe("true")
+    expect(tag.className).toContain("[@media(hover:hover)_and_(pointer:fine)]:hidden")
+    expect(tag.className).toContain("pointer-events-none")
+  })
+
+  it("moves the tag to the side with room as the orb wanders", async () => {
+    const { view } = setup()
+    await act(() => vi.advanceTimersByTimeAsync(100))
+    const mover = view.container.querySelector("[data-orb-tag]")?.parentElement as HTMLElement
+    expect(["left", "right"]).toContain(mover.dataset.side)
+  })
+
+  it("has no tag while the orb is not on the sky", () => {
+    const { view } = setup({ interactive: false })
+    expect(view.container.querySelector("[data-orb-tag]")).toBeNull()
+  })
+})

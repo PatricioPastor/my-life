@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import { Dialog } from "radix-ui"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
+import { swipeStep } from "./swipe"
 
 interface MemoryViewerProps {
   memories: readonly MemoryView[]
@@ -68,6 +69,17 @@ export function MemoryViewer({ memories, openId, origin, container, onOpenChange
   const prev = index > 0 ? memories[index - 1] : null
   const next = index >= 0 && index < memories.length - 1 ? memories[index + 1] : null
 
+  // A swipe turns the page, the way a photo viewer does on a phone (the arrows stay for everyone else).
+  const swipeFrom = useRef<{ x: number; y: number } | null>(null)
+  const onSwipeEnd = (event: PointerEvent) => {
+    const start = swipeFrom.current
+    swipeFrom.current = null
+    if (!start) return
+    const step = swipeStep(event.clientX - start.x, event.clientY - start.y)
+    const target = step === 1 ? next : step === -1 ? prev : null
+    if (target) onOpenChange(target.id)
+  }
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowLeft" && prev) {
       event.preventDefault()
@@ -99,11 +111,20 @@ export function MemoryViewer({ memories, openId, origin, container, onOpenChange
               <Dialog.Close
                 data-magnetic="light"
                 data-cursor-label="Cerrar"
-                className="press pointer-events-auto absolute top-5 right-5 flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted"
+                className="press pointer-events-auto absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted"
               >
                 Cerrar
               </Dialog.Close>
-              <div className="pointer-events-auto flex max-h-full w-full max-w-[1100px] flex-col items-center gap-4">
+              <div
+                className="pointer-events-auto flex max-h-full w-full max-w-[1100px] touch-none flex-col items-center gap-4"
+                onPointerDown={(event) => {
+                  swipeFrom.current = { x: event.clientX, y: event.clientY }
+                }}
+                onPointerUp={onSwipeEnd}
+                onPointerCancel={() => {
+                  swipeFrom.current = null
+                }}
+              >
                 <Photo key={memory.id} memory={memory} />
                 <div className="flex w-full max-w-[640px] items-center justify-between gap-3">
                   <button
