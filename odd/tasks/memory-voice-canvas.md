@@ -74,7 +74,7 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - Camera and gestures; world-space constellation; parallax.
   - The fly-to approach; the WebGL glass view (replacing the rectangular viewer); the talking orb, driven by `audio` from the DTO.
   - Built against the DTO contract with fixtures.
-- [ ] **T3 — Integrate.** Merge `feat/memory-canvas`, run the full checks and RDD.
+- [x] **T3 — Integrate.** Merge `feat/memory-canvas`, run the full checks and RDD.
 - [ ] **T4 — Mobile pass** for the canvas gestures, the glass view and recording.
 - [ ] **T5 — Deliver.** Apply the migration after authorization, run a live check (photo, audio-only, both), then fast-forward main.
 
@@ -114,7 +114,13 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - **Visual check.** Playwright (Chromium) on :3001 through a temporary `/harness-voice` page (deleted before the commit; no remote call: actions mocked, a synthesized microphone through the real MediaRecorder) at 1440x900 and 390x844. Shots in the session scratchpad `shots/v-a-*`: the empty form, recording with the timer, the recorded preview with the talking orb mid-pulse (`--lvl` above 0.6, ring visible), audio only with the portal swatches and a chosen one, photo plus audio, the validation errors, a wrong audio file, and the two-file upload. At 1440x900 the card fits with no scrolling in every state; on the phone the one scroll region scrolls as before; the audio box keeps its height in every state.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (2054 tests, 1767 before) and `pnpm build` pass; `/` stays static (`○`).
   - **Open notes.** (1) Nothing ran against the real services: `is_audio`, the `f_mp3` transcode on an authenticated asset and the Admin `duration` are for the live check (T5). (2) If the audio upload fails after the photo went up, the photo asset is an orphan (same chore as before: a periodic cleanup of unreferenced `my-life/memories/*`). (3) Recording and playback on a real iPhone (Safari records `audio/mp4`) are for T4. (4) A memory with a photo and an audio counts as one for the rate limit. (5) The Engram mirror `odd/memory-voice-canvas/tasks` is not updated by this writer.
+- 2026-10-01: T3 done (route: delegated integration writer; trigger: a 5-file conflict merge plus follow-up edits; strict TDD for the new smoothing, runner `pnpm test`). Merge commit `feat/memory-canvas` into `feat/memory-voice-canvas`, then one refactor commit.
+  - **Conflicts resolved.** `memory-view.ts`: one `MemoryView` (nullable photo fields, `audio: MemoryAudio | null`, A's comments). `list-memories.ts`: A's real mapping (signed mp3 URL, `null` photo URLs when there is no photo), not `audio: null`. `memories-place.test.tsx` and `memory-points.tsx`: B's side (the glass view and the `data-voice` orbs; A's old-viewer audio tests are gone with the viewer). `memory-viewer.tsx`: deleted (B), A's temporary `<audio controls>` dropped. `memories-place.tsx`, `memories-space.tsx`, `globals.css` and this file merged without conflict; A's add-memory action slot and form wiring are intact.
+  - **Hook decision.** One implementation: the glass view uses A's `useAudioLevel(audio, status === "playing")` and B's `voice-level.ts` (and its test) is deleted. Reason: A's hook already does the Web Audio wiring, and the one thing B's added (smoothing) now lives in `audio-level.ts` as `smoothedReader(read)`, built on the same `smoothLevel` as the talking orb, so the form preview and the glass ease the voice identically. B's synthetic-level fallback was dropped (no Web Audio means level 0; every current browser has it); the glass tests stand in for the analyser by mocking `use-audio-level`. The glass `<audio>` keeps `crossOrigin="anonymous"` (covered by a test).
+  - **Audio-only orbs.** Already handled by B's `memory-points` (no thumbnail, `data-voice`, the faint voice ring in the orb color), so no new canvas code was needed; confirmed in the overview and the glass.
+  - **Checks.** `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` 146 files, 2238 tests passed; `pnpm build` ok, `/` static. RED observed first for `smoothedReader` (3 failing: not a function). Playwright on :3001 at 1440x900 against a temporary harness (deleted): overview with 14 voice orbs, 9 of them audio-only; fly-to and glass for photo, audio-only and both; play works (audio plays, `crossOrigin` anonymous, real Web Audio ripples); the add dialog opens. Shots `v-i-*`.
+  - **Open.** Real-service checks (T5) and phones (T4) remain.
 
 ## Next step
 
-T1 is done. T2 (writer B) continues; then T3 integrates `feat/memory-canvas` and checks the DTO against the real form.
+T1, T2 and T3 are done. T4 (mobile pass) and T5 (deliver) are open.
