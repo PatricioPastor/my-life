@@ -266,6 +266,10 @@
       opacity 1000ms cubic-bezier(0.23, 1, 0.32, 1),
       transform 1400ms cubic-bezier(0.23, 1, 0.32, 1);
   }
+  /* The orb's portal opens out of the orb itself: it grows from the point (transform-origin) the orb was at. */
+  .portal-in {
+    animation: portal-in 760ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
   .gate input::placeholder {
     color: inherit;
     opacity: 0.55;
@@ -295,6 +299,9 @@
     }
     .gate {
       transition: opacity 600ms ease;
+    }
+    .portal-in {
+      animation-name: fade;
     }
     .field .bar {
       transition: none;
@@ -921,6 +928,16 @@
   to {
     opacity: 1;
     filter: none;
+  }
+}
+@keyframes portal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes fade {

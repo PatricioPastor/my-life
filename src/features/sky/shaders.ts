@@ -49,6 +49,9 @@ uniform float uFocusTime;
 uniform float uFocusMotion;
 uniform vec4 uFocusFx;
 uniform vec4 uFocusArms;
+uniform vec4 uOrb;
+uniform vec3 uOrbColor;
+uniform float uOrbFringe;
 ${decl}
 out vec4 frag;
 
@@ -275,6 +278,28 @@ void main(){
     if (mot > 0.0) {
       float motes = focusParticles(css, c, uFocusTime, px);
       col = mix(col, mix(tint, uStarColor, 0.3), motes * mot * smoothstep(0.0, 0.2, uFocusTime));
+    }
+  }
+
+  // The memory orb: a soft halftone glow. Each color channel falls off at its own radius, and a thin ring
+  // splits the same way, which fringes the rim like a lens. Nothing here is a hard edge.
+  if (uOrb.w > 0.001) {
+    float od = length(css - uOrb.xy);
+    float R = uOrb.z;
+    if (od < R * 2.6) {
+      vec3 x = vec3(od) / (R * vec3(1.0 - uOrbFringe, 1.0, 1.0 + uOrbFringe));
+      vec3 halo = exp(-x * x * 2.4);
+      // The same ordered dither and dot growth as the gas, so the glow shares the sky's texture.
+      float oq = clamp(floor(halo.g * L + dith) / L, 0.0, 1.0);
+      float oDot = step(length(f), mix(uDotMin, uDotMax, sqrt(oq))) * step(0.01, oq);
+      float kc = od / (R * 0.38);
+      float core = exp(-kc * kc);
+      vec3 hot = mix(uOrbColor, uStarColor, 0.32);
+      col += halo * uOrbColor * (0.42 * uOrb.w);
+      col = mix(col, mix(uOrbColor, hot, core), oDot * clamp(halo.g * 1.5, 0.0, 1.0) * 0.5 * uOrb.w);
+      col += hot * core * (0.22 * uOrb.w);
+      vec3 q = (vec3(od) - R * vec3(0.82, 0.875, 0.93)) / (R * 0.08);
+      col += exp(-q * q) * mix(uOrbColor, vec3(1.0), 0.45) * (0.14 * uOrb.w);
     }
   }
 

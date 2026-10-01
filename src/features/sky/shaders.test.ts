@@ -110,6 +110,29 @@ describe("buildSkyFragment", () => {
     expect(main).toContain("focusParticles(")
   })
 
+  it("declares the orb uniforms the renderer feeds", () => {
+    expect(src).toMatch(/uniform vec4 uOrb;/)
+    expect(src).toMatch(/uniform vec3 uOrbColor;/)
+    expect(src).toMatch(/uniform float uOrbFringe;/)
+  })
+
+  it("paints the orb as a halftone glow: soft per-channel falloff, a chromatic rim, no hard disc", () => {
+    const main = src.slice(src.indexOf("void main()"))
+    const orb = main.slice(main.indexOf("uOrb.w"), main.indexOf("vec2 vu ="))
+    expect(orb).toContain("dith")
+    expect(orb).toContain("uDotMin")
+    expect(orb).toContain("uOrbFringe")
+    expect(orb).toContain("exp(")
+    expect(orb).not.toContain("step(dist")
+    // Drawn after the stars and sparkles, before the vignette, so it shares the sky's finish.
+    expect(main.indexOf("uOrb.w")).toBeGreaterThan(main.indexOf("focusParticles(css"))
+    expect(main.indexOf("uOrb.w")).toBeLessThan(main.indexOf("uVignette"))
+  })
+
+  it("costs nothing when the orb is hidden", () => {
+    expect(src).toMatch(/if \(uOrb\.w > 0\.001\)/)
+  })
+
   it("has no duplicate slot names", () => {
     const names = SKY_UNIFORM_SLOTS.map(([k]) => k)
     expect(new Set(names).size).toBe(names.length)

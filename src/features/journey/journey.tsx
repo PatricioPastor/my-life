@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, findFacet } from "@/features/facets"
 import { checkHandle } from "@/features/gate/actions"
 import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
-import { GateScreen, gateReducer, initialGateState } from "@/features/gate"
+import { AsciiTunnel, GateScreen, gateReducer, initialGateState } from "@/features/gate"
+import { MemoriesPlace } from "@/features/memories"
+import { ORB_CURSOR_ID, ORB_PORTAL, Orb } from "@/features/orb"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
 import { track } from "@/shared/analytics"
@@ -13,13 +15,14 @@ import { ReplayIntroButton } from "./replay-intro-button"
 import {
   focusIndexFor,
   initialJourneyState,
+  journeyOriginFor,
   journeyReducer,
   listSideFor,
-  originFor,
   veilFor,
   zoomFor,
 } from "./journey-machine"
 import { PARALLAX_REST, stepParallax, type ParallaxState } from "./parallax"
+import { skyKeepOut } from "./sky-keep-out"
 import { themeVars } from "./theme"
 
 // "Checking" is felt, not flashed: it lasts at least this long even if the server answers sooner.
@@ -27,6 +30,9 @@ const CHECK_MIN_MS = 1100
 // The warp before the tunnel's mouth opens onto the sky, and how long the gate layer lingers after.
 const WARP_MS = 1500
 const GATE_EXIT_MS = 1300
+// The orb's portal runs the same tunnel: the trip, then how long the tunnel lingers over the memories space.
+const ORB_WARP_MS = 1700
+const ORB_EXIT_MS = 1300
 
 const FACET_IDS = FACETS.map((f) => f.id)
 
@@ -42,12 +48,24 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
   const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
   const [gateMounted, setGateMounted] = useState(true)
+  const [portalLinger, setPortalLinger] = useState(false)
+  const [skyFailed, setSkyFailed] = useState(false)
+  const portalExit = useRef<ReturnType<typeof setTimeout>>(undefined)
   const skyRef = useRef<HalftoneSkyHandle>(null)
   const layerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLElement>(null)
   const [cursorTarget, setCursorTarget] = useState<CursorTarget | null>(null)
 
   const params = useMemo(() => resolveSkyParams(preset), [preset])
+  const keepOut = useCallback(
+    (width: number, height: number) =>
+      skyKeepOut(
+        width,
+        height,
+        params.planet ? { x: params.planetX, y: params.planetY, radius: params.planetRadius } : undefined,
+      ),
+    [params],
+  )
   const { screen } = journey
   const facet = findFacet(journey.facetId)
   const gateActive = screen === "gate"
@@ -109,13 +127,26 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
     }
   }, [gate.status])
 
+  // The orb opened: fly the tunnel (tinted with the orb's colors) to the memories space, then let it go.
+  useEffect(() => {
+    if (screen !== "orbWarp") return
+    const warp = setTimeout(() => {
+      dispatch({ type: "orbArrived" })
+      setPortalLinger(true)
+      portalExit.current = setTimeout(() => setPortalLinger(false), ORB_EXIT_MS)
+    }, ORB_WARP_MS)
+    return () => clearTimeout(warp)
+  }, [screen])
+  useEffect(() => () => clearTimeout(portalExit.current), [])
+
   // The captured star (cursor) or the hovered/keyboard-focused one lights up in the sky.
   const focusIndex = focusIndexFor(screen, cursorTarget?.id ?? null, journey.hoveredFacet, FACET_IDS)
   useEffect(() => {
     skyRef.current?.focus(focusIndex >= 0 ? focusIndex : null)
   }, [focusIndex])
 
-  const origin = originFor(facet)
+  const origin = journeyOriginFor(journey, facet)
+  const orbShown = screen === "sky" || screen === "orbWarp" || screen === "memories"
   const listSide = listSideFor((facet ?? FACETS[0]).x)
   const entry = (facet ?? FACETS[0]).entries[journey.entryIndex] ?? (facet ?? FACETS[0]).entries[0]
 
@@ -136,6 +167,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
           hidden={gateActive}
           allowSparkles={screen === "sky"}
           onLayerShift={onLayerShift}
+          onUnavailable={() => setSkyFailed(true)}
         >
           {screen === "sky" && (
             <FacetStars
@@ -147,6 +179,20 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
               onOpen={(f) => {
                 track("facet_opened", { facet: f.id })
                 dispatch({ type: "facetOpened", facetId: f.id })
+              }}
+            />
+          )}
+          {orbShown && (
+            <Orb
+              active={screen !== "memories"}
+              interactive={screen === "sky"}
+              held={cursorTarget?.id === ORB_CURSOR_ID || screen === "orbWarp"}
+              sky={skyRef}
+              keepOut={keepOut}
+              fallbackGlow={skyFailed}
+              onOpen={(at) => {
+                track("memory_orb_opened")
+                dispatch({ type: "orbOpened", ...at })
               }}
             />
           )}
@@ -191,6 +237,30 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
               onPrev={() => dispatch({ type: "prevPage" })}
               onNext={() => dispatch({ type: "nextPage", pageCount: READER_PAGES.length })}
             />
+          </div>
+        </div>
+      )}
+
+      {screen === "memories" && (
+        <div className="absolute inset-0">
+          <BackButton label="Cielo" hint="Volver al cielo" onClick={() => dispatch({ type: "back" })} />
+          <MemoriesPlace memories={[]} accent={ORB_PORTAL.rings[1]} />
+        </div>
+      )}
+
+      {(screen === "orbWarp" || portalLinger) && (
+        <div
+          data-portal
+          aria-hidden="true"
+          className="gate pointer-events-none absolute inset-0"
+          style={{
+            opacity: screen === "orbWarp" ? 1 : 0,
+            transform: `scale(${screen === "orbWarp" ? 1 : 1.5})`,
+            transformOrigin: `${origin.x}% ${origin.y}%`,
+          }}
+        >
+          <div className="portal-in absolute inset-0" style={{ transformOrigin: `${origin.x}% ${origin.y}%` }}>
+            <AsciiTunnel gate="granted" palette={ORB_PORTAL} />
           </div>
         </div>
       )}

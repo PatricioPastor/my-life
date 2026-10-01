@@ -18,7 +18,22 @@ export interface SkyRendererOptions {
   onLayerShift: (x: number, y: number) => void
 }
 
+/** The memory orb as the sky paints it: CSS px from the top-left, y down. */
+export interface SkyOrb {
+  x: number
+  y: number
+  radius: number
+  /** 0 hidden, 1 fully lit. */
+  energy: number
+  /** sRGB, 0..1. */
+  color: readonly [number, number, number]
+  /** How far apart the red and blue falloffs sit, as a share of the radius. */
+  fringe: number
+}
+
 export interface SkyRenderer {
+  /** Hang the orb in the sky, or take it down with null. Under reduced motion this repaints. */
+  orb: (glow: SkyOrb | null) => void
   /** Move the lamp and send a shock ring through the gas. */
   pulse: (x: number, y: number) => void
   /** Move the lamp only. */
@@ -97,6 +112,7 @@ export function createSkyRenderer(
     ripple: loc("uRipple"), planet: loc("uPlanet"), starTints: loc("uStarTints"),
     anchorCount: loc("uAnchorCount"), focusIndex: loc("uFocusIndex"), focusAmount: loc("uFocusAmount"),
     focusTime: loc("uFocusTime"), focusMotion: loc("uFocusMotion"), focusFx: loc("uFocusFx"), focusArms: loc("uFocusArms"),
+    orb: loc("uOrb"), orbColor: loc("uOrbColor"), orbFringe: loc("uOrbFringe"),
   }
   const vao = ctx.createVertexArray()
 
@@ -129,6 +145,7 @@ export function createSkyRenderer(
   let focusIndex = -1
   let focusAmount = 0
   let focusStart = 0
+  let orbGlow: SkyOrb | null = null
   let raf = 0
   let visible = true
   let alive = true
@@ -260,6 +277,13 @@ export function createSkyRenderer(
     ctx.uniform1f(U.focusMotion, reduced ? 0 : 1)
     ctx.uniform4f(U.focusFx, fx.flicker, fx.swell, 0, 0)
     ctx.uniform4f(U.focusArms, fx.arms[0], fx.arms[1], fx.arms[2], fx.arms[3])
+    if (orbGlow) {
+      ctx.uniform4f(U.orb, orbGlow.x, cssH - orbGlow.y, orbGlow.radius, orbGlow.energy)
+      ctx.uniform3f(U.orbColor, orbGlow.color[0], orbGlow.color[1], orbGlow.color[2])
+      ctx.uniform1f(U.orbFringe, orbGlow.fringe)
+    } else {
+      ctx.uniform4f(U.orb, 0, 0, 0, 0)
+    }
     ctx.uniform4fv(U.spark, sparkA)
     ctx.uniform4fv(U.sparkB, sparkB)
     ctx.uniform4fv(U.ripple, ripples)
@@ -313,6 +337,11 @@ export function createSkyRenderer(
   wake()
 
   return {
+    orb: (glow) => {
+      orbGlow = glow
+      // Reduced motion has no loop, so the orb's slow drift repaints on demand.
+      if (reduced) paint()
+    },
     aim: (x, y) => touch(x, y),
     focus: (index) => {
       const next = index !== null && index >= 0 && index < opts.getAnchors().length ? index : null

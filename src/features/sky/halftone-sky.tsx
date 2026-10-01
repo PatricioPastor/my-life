@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react"
-import { createSkyRenderer, type SkyRenderer } from "./create-sky-renderer"
+import { createSkyRenderer, type SkyOrb, type SkyRenderer } from "./create-sky-renderer"
 import { resolveSkyParams, skyFallbackGradient, type SkyPresetName } from "./sky-params"
 import type { SparkleAnchor } from "./sparkles"
 
@@ -12,6 +12,8 @@ export interface HalftoneSkyHandle {
   aim: (x: number, y: number) => void
   /** Focus an anchor by index (dims the gas, reveals the star), or null to release. */
   focus: (index: number | null) => void
+  /** Hang the memory orb in the sky (CSS px, y down), or take it down with null. */
+  orb: (glow: SkyOrb | null) => void
 }
 
 export interface HalftoneSkyProps {
@@ -26,6 +28,8 @@ export interface HalftoneSkyProps {
   allowSparkles?: boolean
   /** Parallax offset in CSS px, for a label layer that should ride with the sparkles. */
   onLayerShift?: (x: number, y: number) => void
+  /** Called once if WebGL2 or the shader is unavailable and the sky falls back to its gradient. */
+  onUnavailable?: () => void
   className?: string
   /** Overlays (labels, stars) rendered inside the stage so their pointer events reach the sky. */
   children?: ReactNode
@@ -41,6 +45,7 @@ export function HalftoneSky({
   hidden = false,
   allowSparkles = true,
   onLayerShift,
+  onUnavailable,
   className,
   children,
 }: HalftoneSkyProps) {
@@ -52,9 +57,9 @@ export function HalftoneSky({
   const params = useMemo(() => resolveSkyParams(preset, pixel === undefined ? {} : { pixel }), [preset, pixel])
 
   // The render loop reads the latest props through this ref, so a prop change never restarts WebGL.
-  const live = useRef({ params, anchors, hidden, allowSparkles, onLayerShift })
+  const live = useRef({ params, anchors, hidden, allowSparkles, onLayerShift, onUnavailable })
   useEffect(() => {
-    live.current = { params, anchors, hidden, allowSparkles, onLayerShift }
+    live.current = { params, anchors, hidden, allowSparkles, onLayerShift, onUnavailable }
   })
 
   useImperativeHandle(
@@ -63,6 +68,7 @@ export function HalftoneSky({
       pulse: (x, y) => rendererRef.current?.pulse(x, y),
       aim: (x, y) => rendererRef.current?.aim(x, y),
       focus: (index) => rendererRef.current?.focus(index),
+      orb: (glow) => rendererRef.current?.orb(glow),
     }),
     [],
   )
@@ -79,7 +85,10 @@ export function HalftoneSky({
       onLayerShift: (x, y) => live.current.onLayerShift?.(x, y),
     })
     rendererRef.current = renderer
-    if (!renderer) setFailed(true)
+    if (!renderer) {
+      setFailed(true)
+      live.current.onUnavailable?.()
+    }
     return () => {
       renderer?.stop()
       rendererRef.current = null

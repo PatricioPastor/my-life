@@ -7,6 +7,12 @@ import { TANGENT_GLYPHS, gridFor, tangentIndex, type Grid } from "./glyphs"
 import { createRingColorSequence } from "./ring-colors"
 import { DIM_SHARE, mixHex, ringDepth } from "./tunnel-math"
 
+/** What the tunnel is painted with: the ring colors it cycles through, and the near-black it fades into. */
+export interface TunnelPalette {
+  rings: readonly string[]
+  deep: string
+}
+
 export interface TunnelOptions {
   /** Read every frame, so a state change never restarts the loop. */
   getGate: () => GateStatus
@@ -14,6 +20,8 @@ export interface TunnelOptions {
   seed?: number
   /** A canvas layered above this one; it gets a half-resolution copy every frame, and its opacity follows the beat. */
   bloom?: HTMLCanvasElement | null
+  /** Defaults to the warm portal; a trip to another place can tint the same tunnel instead of forking it. */
+  palette?: TunnelPalette
 }
 
 export interface TunnelRenderer {
@@ -86,10 +94,11 @@ export function createTunnelRenderer(
   let visible = true
   let alive = true
 
+  const palette: TunnelPalette = options.palette ?? PORTAL
   const seed = options.seed ?? Math.floor(Math.random() * 0x100000000)
-  const rings = createRingColorSequence(seed, PORTAL.rings)
+  const rings = createRingColorSequence(seed, palette.rings)
   const beat = createHeartbeat(seed ^ 0x5bd1e995)
-  const cache = createBlendCache(PORTAL.rings, PORTAL.deep, BLEND_STEPS, DIM_SHARE)
+  const cache = createBlendCache(palette.rings, palette.deep, BLEND_STEPS, DIM_SHARE)
   // One draw list per (ring pair, blend step, level), so a frame changes fillStyle once per non-empty list.
   const groups: number[][] = Array.from({ length: cache.count }, () => [])
   const bands: Band[] = []
@@ -130,7 +139,7 @@ export function createTunnelRenderer(
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.globalCompositeOperation = "source-over"
-    ctx.fillStyle = PORTAL.deep
+    ctx.fillStyle = palette.deep
     ctx.fillRect(0, 0, W, H)
 
     const { cw, ch } = grid
@@ -190,8 +199,8 @@ export function createTunnelRenderer(
     // Vignette: the edges sink into the dark, which sells the depth.
     const reach = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy))
     const vig = ctx.createRadialGradient(cx, cy, reach * 0.35, cx, cy, reach)
-    vig.addColorStop(0, rgba(PORTAL.deep, 0))
-    vig.addColorStop(1, rgba(PORTAL.deep, 0.72))
+    vig.addColorStop(0, rgba(palette.deep, 0))
+    vig.addColorStop(1, rgba(palette.deep, 0.72))
     ctx.fillStyle = vig
     ctx.fillRect(0, 0, W, H)
 

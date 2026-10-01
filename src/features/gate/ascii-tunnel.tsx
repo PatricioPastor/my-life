@@ -1,16 +1,18 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { createTunnelRenderer, type TunnelRenderer } from "./create-tunnel-renderer"
+import { createTunnelRenderer, type TunnelPalette, type TunnelRenderer } from "./create-tunnel-renderer"
 import type { GateStatus } from "./gate-machine"
 
 interface AsciiTunnelProps {
   gate: GateStatus
   /** Fixes the ring color sequence; left out, each mount (each visit) draws its own. */
   seed?: number
+  /** Tints the tunnel; left out, it is the warm portal. Keep it referentially stable (a constant). */
+  palette?: TunnelPalette
 }
 
-export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
+export function AsciiTunnel({ gate, seed, palette }: AsciiTunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const bloomRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<TunnelRenderer | null>(null)
@@ -31,13 +33,14 @@ export function AsciiTunnel({ gate, seed }: AsciiTunnelProps) {
       getGate: () => live.current.gate,
       seed,
       bloom: bloomRef.current,
+      palette,
     })
     rendererRef.current = renderer
     return () => {
       renderer?.stop()
       rendererRef.current = null
     }
-  }, [seed])
+  }, [seed, palette])
 
   return (
     <>

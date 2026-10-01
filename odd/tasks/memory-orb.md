@@ -66,7 +66,7 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - The gate sets a signed `httpOnly` cookie on success.
   - A `currentVisitor()` server helper.
   - Expiry and tamper checks.
-- [ ] **T3 — Orb.**
+- [x] **T3 — Orb.**
   - Wandering, color-shifting orb in the sky; a magnetic-cursor target with the "Agregar recuerdo" label.
   - Click starts the portal journey to the memories space.
   - Reduced motion is respected.
@@ -120,6 +120,15 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - Commits `5c452a5` (writer) and `fb99d8b` (inline refactor: the session moved under the gate). The full suite passed with 726 tests.
   - RDD (medium, slice budget reached) was granted and approved with no findings. Lineage `review-d616214a38b5a470` acknowledged. Reviewed boundary: `fb99d8b`.
 
+- 2026-10-01: T3 done (route: delegated writer, 2+ non-trivial files; strict TDD, RED observed first).
+  - **Orb look: shader, not DOM.** The orb is painted by the sky shader (`uOrb`, `uOrbColor`, `uOrbFringe`) so it shares the halftone texture: a soft gaussian halo whose red, green and blue channels fall off at slightly different radii (the RGB fringe), a thin chromatic rim, dithered halftone dots that dissolve at the edge, and a small hot core. The film grain dithers the gradient, so there is no banding. A real `<button>` (`data-magnetic="strong"`, label "Agregar recuerdo", Ctrl context "Deja un recuerdo en este universo.") rides the same position, like the facet stars. When WebGL is unavailable the button draws a plain CSS glow instead.
+  - **Colors:** OKLCH, lightness 0.78, chroma 0.12, hue swinging 195 to 330 (cyan, periwinkle, violet, magenta, back) on a 12 s cosine cycle. Chroma 0.15 was tried first and rejected: the sRGB gamut edge made a channel jump between frames. Out-of-gamut values lose chroma only, never hue. The tunnel for this trip uses `ORB_PORTAL`, four cool rings from the same space over a near-black with a violet cast.
+  - **Motion:** a pure seeded path in CSS px: waypoints joined by a C1 cubic Hermite curve, each waypoint drawn so the curve keeps its clearance from every keep-out box (facet stars with their labels, the name mark, the bottom controls, the planet) and its margin from the edges, then an exact guard clamps any residual. Speed is about 22 px/s. Clearance and radius scale with the viewport (radius 30 to 46 px), because a 390 px phone has no room for a 64 px berth. Easing to a stop on hover, focus or cursor capture is an exponential rate (tau 0.6 s to stop, 0.7 s to resume); the path clock only advances by the rate, so position is continuous. Reduced motion: a tenth of the travel, a quarter of the color speed, and a slow repaint on a timer that rides a frame (the sky has no loop in that mode).
+  - **Journey:** the machine gains `orbWarp` and `memories` screens and `orbOpened` / `orbArrived`; `orbOrigin` makes the sky dive toward the orb. The tunnel is the gate's `AsciiTunnel` with a new `palette` option, not a fork; it opens out of the orb's position, runs 1.7 s, then lingers 1.3 s over the memories space while it fades. The sky stays mounted through the round trip. The memories place is `src/features/memories/ui/memories-place.tsx` (prop `memories`; title, empty state; the back control is the journey's `BackButton`). "Ver intro" is hidden there. `memory_orb_opened` is in the analytics allow-list with no props.
+  - **Files:** new `src/features/orb/*`, `src/features/memories/ui/*`, `src/features/facets/facet-keep-out.ts`, `src/features/journey/sky-keep-out.ts`; changed the sky shader, renderer and handle, the tunnel renderer and `AsciiTunnel`, the journey machine and screen, the analytics events, `globals.css`.
+  - **Visual check:** Playwright (Chromium, software WebGL) on :3001 with a test whitelist handle passed through the process environment: 1440x900 and 390x844 sky, orb color cycle, hover easing, magnetic label, portal frames, the memories place, back, and keyboard Tab + Enter. Reduced motion checked too. Software GL renders about 2 frames per second, so timing there is slower than on a real GPU.
+  - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (801 tests) and `pnpm build` pass; `/` stays static.
+
 ## T6 checklist (run only after the user authorizes remote operations)
 
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
@@ -130,4 +139,4 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
 
 ## Next step
 
-T3: orb.
+T4: memories space (floating points for approved memories, Cloudinary thumbnails, the open-a-point view). Fill `MemoriesPlace` through its `memories` prop; the journey passes an empty list for now.

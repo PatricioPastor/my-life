@@ -184,3 +184,72 @@ describe("Journey replay control", () => {
     expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
   })
 })
+
+async function toSky(props: Parameters<typeof Journey>[0] = {}) {
+  checkHandle.mockResolvedValue({ status: "granted" })
+  render(<Journey {...props} />)
+  fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
+  fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
+  await act(() => vi.advanceTimersByTimeAsync(1200))
+  await act(() => vi.advanceTimersByTimeAsync(1500))
+}
+
+describe("Journey memory orb", () => {
+  it("offers the orb on the sky only: not at the gate, not inside a facet", async () => {
+    render(<Journey />)
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+    cleanup()
+    await toSky()
+    expect(screen.getByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+  })
+
+  it("flies through the portal to the memories space and comes back to the sky", async () => {
+    await toSky({ onReplayIntro: vi.fn() })
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    expect(track).toHaveBeenLastCalledWith("memory_orb_opened")
+    // The portal is opening: the sky controls are gone, the memories are not here yet.
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Historias" })).toBeNull()
+    expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+
+    await act(() => vi.advanceTimersByTimeAsync(1800))
+    expect(screen.getByRole("heading", { name: "Recuerdos" })).toBeTruthy()
+    expect(screen.getByText("Todavía no hay recuerdos.")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+  })
+
+  it("tracks the orb once, with no props", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    const orbCalls = track.mock.calls.filter((c) => c[0] === "memory_orb_opened")
+    expect(orbCalls).toEqual([["memory_orb_opened"]])
+  })
+
+  it("keeps the facet journey working after a round trip to the memories", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    await act(() => vi.advanceTimersByTimeAsync(1800))
+    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
+  })
+
+  it("lets the portal layer go after it has opened, and clears its timers on unmount", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    await act(() => vi.advanceTimersByTimeAsync(1800))
+    expect(document.querySelector("[data-portal]")).not.toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(1400))
+    expect(document.querySelector("[data-portal]")).toBeNull()
+    cleanup()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+})

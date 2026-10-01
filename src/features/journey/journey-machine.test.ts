@@ -5,6 +5,7 @@ import {
   focusIndexFor,
   listSideFor,
   originFor,
+  journeyOriginFor,
   veilFor,
   zoomFor,
   type JourneyState,
@@ -79,6 +80,70 @@ describe("journeyReducer", () => {
   it("tracks the hovered facet", () => {
     expect(journeyReducer(s({ screen: "sky" }), { type: "hover", facetId: "now" }).hoveredFacet).toBe("now")
     expect(journeyReducer(s({ hoveredFacet: "now" }), { type: "hover", facetId: null }).hoveredFacet).toBeNull()
+  })
+})
+
+describe("memory orb journey", () => {
+  const at = { x: 0.62, y: 0.4 }
+
+  it("opens the portal from the sky and remembers where the orb was", () => {
+    const next = journeyReducer(s({ screen: "sky", hoveredFacet: "now" }), { type: "orbOpened", ...at })
+    expect(next).toMatchObject({ screen: "orbWarp", orbOrigin: at, hoveredFacet: null })
+  })
+
+  it("ignores the orb outside the sky", () => {
+    for (const screen of ["gate", "place", "entry", "orbWarp", "memories"] as const) {
+      const state = s({ screen })
+      expect(journeyReducer(state, { type: "orbOpened", ...at })).toBe(state)
+    }
+  })
+
+  it("lands in the memories space only when the warp ends", () => {
+    const warp = s({ screen: "orbWarp", orbOrigin: at })
+    expect(journeyReducer(warp, { type: "orbArrived" })).toMatchObject({ screen: "memories", orbOrigin: at })
+    const sky = s({ screen: "sky" })
+    expect(journeyReducer(sky, { type: "orbArrived" })).toBe(sky)
+  })
+
+  it("goes sky, orb warp, memories and back to the sky", () => {
+    let state = s({ screen: "sky" })
+    state = journeyReducer(state, { type: "orbOpened", ...at })
+    expect(state.screen).toBe("orbWarp")
+    state = journeyReducer(state, { type: "orbArrived" })
+    expect(state.screen).toBe("memories")
+    state = journeyReducer(state, { type: "back" })
+    expect(state.screen).toBe("sky")
+  })
+
+  it("cannot be left through back while the portal is still opening", () => {
+    const warp = s({ screen: "orbWarp", orbOrigin: at })
+    expect(journeyReducer(warp, { type: "back" })).toBe(warp)
+  })
+
+  it("keeps the facet journey intact and forgets the orb when a facet opens", () => {
+    const afterOrb = s({ screen: "sky", orbOrigin: at })
+    const next = journeyReducer(afterOrb, { type: "facetOpened", facetId: "now" })
+    expect(next).toMatchObject({ screen: "place", facetId: "now" })
+    expect(next.orbOrigin).toBeUndefined()
+  })
+
+  it("dives toward the orb, then toward whichever place was opened last", () => {
+    expect(journeyOriginFor(s({ screen: "orbWarp", orbOrigin: at }), undefined)).toEqual({ x: 62, y: 60 })
+    expect(journeyOriginFor(s({ screen: "place", facetId: "now" }), { x: 0.39, y: 0.29 })).toEqual({ x: 39, y: 71 })
+    expect(journeyOriginFor(s({ screen: "sky" }), undefined)).toEqual({ x: 50, y: 50 })
+  })
+
+  it("zooms and veils the portal and the memories space", () => {
+    expect(zoomFor("orbWarp")).toBeGreaterThan(zoomFor("sky"))
+    expect(zoomFor("memories")).toBeGreaterThan(zoomFor("orbWarp"))
+    expect(veilFor("orbWarp")).toBeGreaterThan(0)
+    expect(veilFor("memories")).toBeGreaterThan(veilFor("place"))
+    expect(veilFor("memories")).toBeLessThan(1)
+  })
+
+  it("never spotlights a facet star outside the sky", () => {
+    expect(focusIndexFor("orbWarp", "projects", "now", ["stories", "writing", "projects", "now"])).toBe(-1)
+    expect(focusIndexFor("memories", "projects", "now", ["stories", "writing", "projects", "now"])).toBe(-1)
   })
 })
 

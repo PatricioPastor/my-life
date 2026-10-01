@@ -1,8 +1,17 @@
-export type Screen = "gate" | "sky" | "place" | "entry"
+/** `orbWarp` is the portal trip from the sky to the memories space, `memories` where it lands. */
+export type Screen = "gate" | "sky" | "place" | "entry" | "orbWarp" | "memories"
+
+/** A point of the sky in 0..1 stage fractions, y up (the same space as the facet stars). */
+export interface SkyPoint {
+  x: number
+  y: number
+}
 
 export interface JourneyState {
   screen: Screen
   facetId: string | undefined
+  /** Where the memory orb was when it was opened; the sky dives toward it, like toward a facet star. */
+  orbOrigin: SkyPoint | undefined
   entryIndex: number
   page: number
   hoveredFacet: string | null
@@ -12,6 +21,8 @@ export type JourneyEvent =
   | { type: "gateOpened" }
   | { type: "facetOpened"; facetId: string }
   | { type: "entryOpened"; index: number }
+  | ({ type: "orbOpened" } & SkyPoint)
+  | { type: "orbArrived" }
   | { type: "back" }
   | { type: "nextPage"; pageCount: number }
   | { type: "prevPage" }
@@ -20,6 +31,7 @@ export type JourneyEvent =
 export const initialJourneyState: JourneyState = {
   screen: "gate",
   facetId: undefined,
+  orbOrigin: undefined,
   entryIndex: 0,
   page: 0,
   hoveredFacet: null,
@@ -31,13 +43,19 @@ export function journeyReducer(state: JourneyState, event: JourneyEvent): Journe
       return state.screen === "gate" ? { ...state, screen: "sky" } : state
     case "facetOpened":
       return state.screen === "sky"
-        ? { ...state, screen: "place", facetId: event.facetId, hoveredFacet: null }
+        ? { ...state, screen: "place", facetId: event.facetId, orbOrigin: undefined, hoveredFacet: null }
         : state
+    case "orbOpened":
+      return state.screen === "sky"
+        ? { ...state, screen: "orbWarp", orbOrigin: { x: event.x, y: event.y }, hoveredFacet: null }
+        : state
+    case "orbArrived":
+      return state.screen === "orbWarp" ? { ...state, screen: "memories" } : state
     case "entryOpened":
       return state.screen === "place" ? { ...state, screen: "entry", entryIndex: event.index, page: 0 } : state
     case "back":
       if (state.screen === "entry") return { ...state, screen: "place" }
-      if (state.screen === "place") return { ...state, screen: "sky" }
+      if (state.screen === "place" || state.screen === "memories") return { ...state, screen: "sky" }
       return state
     case "nextPage":
       return { ...state, page: Math.min(event.pageCount - 1, state.page + 1) }
@@ -49,8 +67,8 @@ export function journeyReducer(state: JourneyState, event: JourneyEvent): Journe
 }
 
 // Behind the gate the sky waits zoomed in; arriving eases it back to rest.
-const ZOOM: Record<Screen, number> = { gate: 1.35, sky: 1, place: 1.45, entry: 2.1 }
-const VEIL: Record<Screen, number> = { gate: 0, sky: 0, place: 0.5, entry: 0.86 }
+const ZOOM: Record<Screen, number> = { gate: 1.35, sky: 1, place: 1.45, entry: 2.1, orbWarp: 1.3, memories: 1.7 }
+const VEIL: Record<Screen, number> = { gate: 0, sky: 0, place: 0.5, entry: 0.86, orbWarp: 0.3, memories: 0.72 }
 
 export const zoomFor = (screen: Screen): number => ZOOM[screen]
 export const veilFor = (screen: Screen): number => VEIL[screen]
@@ -59,6 +77,14 @@ export const veilFor = (screen: Screen): number => VEIL[screen]
 export function originFor(facet: { x: number; y: number } | undefined): { x: number; y: number } {
   if (!facet) return { x: 50, y: 50 }
   return { x: Number((facet.x * 100).toFixed(2)), y: Number(((1 - facet.y) * 100).toFixed(2)) }
+}
+
+/** Where the sky dives: toward the orb after its portal, otherwise toward the facet last opened. */
+export function journeyOriginFor(
+  state: Pick<JourneyState, "orbOrigin">,
+  facet: { x: number; y: number } | undefined,
+): { x: number; y: number } {
+  return originFor(state.orbOrigin ?? facet)
 }
 
 /** Which sky anchor to spotlight: the star the cursor captured, else the hovered or keyboard-focused one; -1 for none. */

@@ -1,4 +1,6 @@
 export { GateScreen } from "./gate-screen"
+export { AsciiTunnel } from "./ascii-tunnel"
+export type { TunnelPalette } from "./create-tunnel-renderer"
 export { gateReducer, initialGateState } from "./gate-machine"
 export type { GateEvent, GateState, GateStatus } from "./gate-machine"
 export { isValidHandle, normalizeHandle } from "./handle"
