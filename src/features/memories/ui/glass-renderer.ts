@@ -214,7 +214,8 @@ export function createGlassRenderer(canvas: HTMLCanvasElement, options: GlassOpt
       ctx.deleteProgram(program)
       ctx.deleteShader(vs)
       ctx.deleteShader(fs)
-      ctx.getExtension("WEBGL_lose_context")?.loseContext()
+      // No loseContext(): the canvas stays mounted, and the next effect run (a resize, reduced motion, StrictMode)
+      // asks it for the same context. A lost one would fail to compile and drop the view to the CSS glass for good.
     },
   }
 }
