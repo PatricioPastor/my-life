@@ -56,6 +56,10 @@ describe("verifyAudio", () => {
     expect(verifyAudio(voice(), AID)).toEqual({ ok: true, durationMs: 42_500, bytes: 200_000, format: "webm" })
   })
 
+  it("accepts mka, the name Cloudinary gives a MediaRecorder webm that holds only audio", () => {
+    expect(verifyAudio(voice({ format: "mka" }), AID)).toEqual({ ok: true, durationMs: 42_500, bytes: 200_000, format: "mka" })
+  })
+
   it("lowercases the format and rounds the duration to a millisecond", () => {
     expect(verifyAudio(voice({ format: "M4A", durationSeconds: 1.23456 }), AID)).toEqual({
       ok: true,

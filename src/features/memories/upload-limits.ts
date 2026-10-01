@@ -28,6 +28,11 @@ export const AUDIO_DURATION_TOLERANCE_MS = 5000
 export const AUDIO_FORMATS = ["webm", "ogg", "opus", "mp3", "m4a", "mp4", "aac", "wav"] as const
 /** The signed `allowed_formats` upload parameter of an audio. */
 export const AUDIO_FORMATS_PARAM = AUDIO_FORMATS.join(",")
+/**
+ * The formats the server accepts when it reads an audio back: the uploadable ones plus `mka`, the name Cloudinary's
+ * Admin API gives a webm that holds only audio (observed on a Chrome MediaRecorder recording). Never signed.
+ */
+export const AUDIO_STORED_FORMATS = [...AUDIO_FORMATS, "mka"] as const
 
 /** Every memory photo and audio lives under this folder; the public id carries the whole path. */
 export const MEMORY_FOLDER = "my-life/memories"
