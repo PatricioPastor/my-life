@@ -75,6 +75,11 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - Opening an orb shows the photo, the text and the date.
   - Empty, loading and error states.
   - A deep, opaque "other dimension" with round dust, a serif title and the way back renamed "Universo" (user art direction).
+- [ ] **T3b — Orb and portal polish (user feedback, 2026-10-01).**
+  - Hover: remove the amber backdrop the sky paints around a captured target, because it dulls the orb.
+  - A better hover animation: the orb zooms in and turns into a more realistic window onto the memories dimension (dark void, dust and round orbs inside, a lens-like rim).
+  - The way back from the memories place runs through the portal too, faster (about half the trip).
+  - Bug seen in the T4 shots: while the viewer dialog is open, the orb behind it keeps the cursor captured and its label shows over the dialog.
 - [ ] **T5 — Upload.**
   - Form: photo, text and date.
   - A server-signed Cloudinary upload; the server verifies the asset, then inserts a `pending` row under RLS as the visitor.
@@ -142,6 +147,8 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - **Visual check.** Playwright (Chromium) against `next start` on :3001 at 1440x900 and 390x844, through a temporary harness page (deleted before the commit) with 26 fixture memories on public Cloudinary demo images: loading, the constellation assembling, hover (round thumbnail and cursor label), pending marker, the open viewer, next, Escape with focus back on the orb, and the empty, error and loading states. Shots in the session scratchpad `shots/t4-*`. The real database is not reachable yet (T6), so the production path (the action reading Neon) is covered by tests only.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (880 tests) and `pnpm build` pass; `/` stays static.
   - Open notes: the stage shows at most 300 orbs and the layout is best-effort when crowded. Tab walks every orb in list order (no roving tabindex).
+  - Commit `64ebc6c`. RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-ac1140047005f1ef` acknowledged. Reviewed boundary: `64ebc6c`.
+  - User feedback after T4 opened T3b (orb hover and the return portal), which runs before T5.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
@@ -153,4 +160,4 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
 
 ## Next step
 
-T5: upload. A form with photo, text and date, opened from the `action` slot of `MemoriesPlace` (bottom-right, already kept clear by the layout); a server-signed Cloudinary upload, then a `pending` row inserted under RLS as the visitor, with size, type and per-handle rate limits and a "pending approval" confirmation. Append the new memory to the client list so existing orbs stay put.
+T3b: orb and portal polish. Then T5: upload. A form with photo, text and date, opened from the `action` slot of `MemoriesPlace` (bottom-right, already kept clear by the layout); a server-signed Cloudinary upload, then a `pending` row inserted under RLS as the visitor, with size, type and per-handle rate limits and a "pending approval" confirmation. Append the new memory to the client list so existing orbs stay put.
