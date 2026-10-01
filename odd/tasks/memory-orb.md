@@ -169,7 +169,7 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - **Visual check.** Playwright (Chromium) on :3001 at 1440x900 and 390x844 through a temporary `/zz-harness` page (deleted before the commit) with all three actions mocked and fixture images as inline SVG, so nothing left the machine: the place with the control, the empty form, the preview with the fields filled, all validation errors, the rate-limit error, the uploading state at 42%, the success message, and the new pending orb with focus back on the control. Shots in the session scratchpad `shots/t5-*`.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (1065 tests) and `pnpm build` pass; `/` stays static.
   - Open notes: the real upload, signature and Admin API calls have not run yet (T6, after authorization). SHA-256 is our default; if Cloudinary rejects it, flip the default in `cloudinary-signature.ts` to `sha1`. A visitor who closes the form between the Cloudinary upload and `createMemory` leaves an orphan asset with no row; a periodic cleanup of unreferenced `my-life/memories/*` assets is a later chore.
-  - Commits `ac7d44c` (server) and `8de8deb` (form).
+  - Commits `ac7d44c` (server) and `8de8deb` (form). RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-98c89caf022da9f8` acknowledged. Reviewed boundary: `b404a18`.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
