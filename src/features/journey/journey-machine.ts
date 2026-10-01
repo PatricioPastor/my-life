@@ -70,6 +70,12 @@ export function journeyReducer(state: JourneyState, event: JourneyEvent): Journe
 const ZOOM: Record<Screen, number> = { gate: 1.35, sky: 1, place: 1.45, entry: 2.1, orbWarp: 1.3, memories: 1.7 }
 const VEIL: Record<Screen, number> = { gate: 0, sky: 0, place: 0.5, entry: 0.86, orbWarp: 0.3, memories: 0.72 }
 
+/**
+ * Whether the sky can idle (skip painting): behind the gate, and while the memories void fully covers it.
+ * Under the orb's portal it keeps painting, because that is what the trip flies out of.
+ */
+export const skyPausedFor = (screen: Screen): boolean => screen === "gate" || screen === "memories"
+
 export const zoomFor = (screen: Screen): number => ZOOM[screen]
 export const veilFor = (screen: Screen): number => VEIL[screen]
 

@@ -1,5 +1,8 @@
 export type { Memory, MemoryStatus, NewMemory, NewMemoryInput } from "./memory"
 export type { MemoryRepository } from "./memory-repository"
+export type { ListMemoriesResult, MemoriesFailure, MemoryView } from "./memory-view"
 export { validateNewMemory } from "./validate-new-memory"
 export type { MemoryValidationError, ValidationResult } from "./validate-new-memory"
 export { MemoriesPlace } from "./ui/memories-place"
+export type { MemoriesState } from "./ui/memories-place"
+export { MemoriesSpace } from "./ui/memories-space"

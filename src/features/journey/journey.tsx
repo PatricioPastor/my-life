@@ -5,7 +5,7 @@ import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, findFacet } from "@/feat
 import { checkHandle } from "@/features/gate/actions"
 import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
 import { AsciiTunnel, GateScreen, gateReducer, initialGateState } from "@/features/gate"
-import { MemoriesPlace } from "@/features/memories"
+import { MemoriesSpace } from "@/features/memories"
 import { ORB_CURSOR_ID, ORB_PORTAL, Orb } from "@/features/orb"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
@@ -18,6 +18,7 @@ import {
   journeyOriginFor,
   journeyReducer,
   listSideFor,
+  skyPausedFor,
   veilFor,
   zoomFor,
 } from "./journey-machine"
@@ -164,7 +165,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
           ref={skyRef}
           preset={preset}
           anchors={FACET_ANCHORS}
-          hidden={gateActive}
+          hidden={skyPausedFor(screen)}
           allowSparkles={screen === "sky"}
           onLayerShift={onLayerShift}
           onUnavailable={() => setSkyFailed(true)}
@@ -214,7 +215,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
 
       {screen === "place" && facet && (
         <div className="absolute inset-0">
-          <BackButton label="Cielo" hint="Volver al cielo" onClick={() => dispatch({ type: "back" })} />
+          <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
           <FacetPlace
             facet={facet}
             listSide={listSide}
@@ -243,8 +244,9 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
 
       {screen === "memories" && (
         <div className="absolute inset-0">
-          <BackButton label="Cielo" hint="Volver al cielo" onClick={() => dispatch({ type: "back" })} />
-          <MemoriesPlace memories={[]} accent={ORB_PORTAL.rings[1]} />
+          {/* The place paints its own opaque void, so the way back sits above it. */}
+          <MemoriesSpace accent={ORB_PORTAL.rings[1]} palette={ORB_PORTAL.rings} />
+          <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
         </div>
       )}
 

@@ -6,6 +6,7 @@ import {
   listSideFor,
   originFor,
   journeyOriginFor,
+  skyPausedFor,
   veilFor,
   zoomFor,
   type JourneyState,
@@ -182,5 +183,16 @@ describe("derived values", () => {
     expect(listSideFor(0.75)).toBe("left")
     expect(listSideFor(0.5)).toBe("right")
     expect(listSideFor(0.21)).toBe("right")
+  })
+})
+
+describe("skyPausedFor", () => {
+  it("idles the sky behind the gate and while the memories void covers it", () => {
+    expect(skyPausedFor("gate")).toBe(true)
+    expect(skyPausedFor("memories")).toBe(true)
+  })
+
+  it("keeps it painting everywhere it can be seen, including under the orb's portal", () => {
+    for (const screen of ["sky", "place", "entry", "orbWarp"] as const) expect(skyPausedFor(screen)).toBe(false)
   })
 })

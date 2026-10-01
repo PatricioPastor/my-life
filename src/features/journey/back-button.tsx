@@ -1,6 +1,6 @@
 interface BackButtonProps {
   label: string
-  /** Tooltip the magnetic cursor shows, for example "Volver al cielo". */
+  /** Tooltip the magnetic cursor shows, for example "Volver al universo". */
   hint: string
   onClick: () => void
 }

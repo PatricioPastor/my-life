@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 // `server-only` throws outside the react-server condition; tests run in plain node.
 vi.mock("server-only", () => ({}))
 
-import { PrismaMemoryRepository } from "./prisma-memory-repository"
+import { MEMORY_LIST_LIMIT, PrismaMemoryRepository } from "./prisma-memory-repository"
 import type { NewMemoryInput } from "./memory"
 
 const row = {
@@ -31,16 +31,14 @@ function fakeDb(rows: unknown[] = [row]) {
         calls.push({ name: "create", args: [arg] })
         return row
       }),
-    },
-  }
-  const db = {
-    $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
-    memory: {
       findMany: vi.fn(async (arg: unknown) => {
         calls.push({ name: "findMany", args: [arg] })
         return rows
       }),
     },
+  }
+  const db = {
+    $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   }
   return { db, tx, calls }
 }
@@ -54,25 +52,36 @@ const input: NewMemoryInput = {
 }
 
 describe("PrismaMemoryRepository", () => {
-  describe("listApproved", () => {
-    it("asks for approved rows ordered by happenedOn", async () => {
-      const { db } = fakeDb()
-      await new PrismaMemoryRepository(() => db as never).listApproved()
-      expect(db.memory.findMany).toHaveBeenCalledWith({
-        where: { status: "approved" },
+  describe("listForVisitor", () => {
+    it("runs in one transaction that sets the handle before reading", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+      expect(calls.map((c) => c.name)).toEqual(["setConfig", "findMany"])
+      const [sql, value] = calls[0].args as [string, string]
+      expect(sql).toContain("set_config('app.handle'")
+      expect(value).toBe("ana")
+    })
+
+    it("asks for approved rows plus the visitor's own pending ones, oldest first, capped", async () => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(tx.memory.findMany).toHaveBeenCalledWith({
+        where: { OR: [{ status: "approved" }, { handle: "ana", status: "pending" }] },
         orderBy: [{ happenedOn: "asc" }, { createdAt: "asc" }],
+        take: MEMORY_LIST_LIMIT,
       })
+      expect(MEMORY_LIST_LIMIT).toBe(300)
     })
 
     it("maps rows to the domain", async () => {
       const { db } = fakeDb()
-      const memories = await new PrismaMemoryRepository(() => db as never).listApproved()
-      expect(memories).toEqual([row])
+      expect(await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")).toEqual([row])
     })
 
     it("returns an empty list when there are no rows", async () => {
       const { db } = fakeDb([])
-      expect(await new PrismaMemoryRepository(() => db as never).listApproved()).toEqual([])
+      expect(await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")).toEqual([])
     })
   })
 

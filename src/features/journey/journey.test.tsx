@@ -3,12 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const checkHandle = vi.fn()
 vi.mock("@/features/gate/actions", () => ({ checkHandle: (h: string) => checkHandle(h) }))
+const listMemories = vi.fn()
+vi.mock("@/features/memories/actions", () => ({ listMemories: () => listMemories() }))
 const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 
 import { Journey } from "./journey"
 
 beforeEach(() => {
+  listMemories.mockResolvedValue({ ok: true, memories: [] })
   vi.useFakeTimers()
   // jsdom has neither WebGL nor 2D canvas; both renderers degrade gracefully.
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
@@ -19,6 +22,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   checkHandle.mockReset()
+  listMemories.mockReset()
   track.mockReset()
 })
 
@@ -89,7 +93,7 @@ describe("Journey after the gate", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
     expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
-    expect(screen.getByRole("button", { name: "Cielo" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Universo" })).toBeTruthy()
 
     fireEvent.click(screen.getByRole("button", { name: /\[Foco actual\]/ }))
     expect(screen.getByRole("heading", { name: "[Foco actual]" })).toBeTruthy()
@@ -98,7 +102,7 @@ describe("Journey after the gate", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
     expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
   })
 })
@@ -220,7 +224,7 @@ describe("Journey memory orb", () => {
     expect(screen.getByText("Todavía no hay recuerdos.")).toBeTruthy()
     expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
 
-    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
     expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
@@ -237,7 +241,7 @@ describe("Journey memory orb", () => {
     await toSky()
     fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
     await act(() => vi.advanceTimersByTimeAsync(1800))
-    fireEvent.click(screen.getByRole("button", { name: "Cielo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
     fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
     expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
   })

@@ -5,6 +5,9 @@ import { withVisitor } from "@/shared/db/with-visitor"
 import type { Memory, NewMemory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 
+/** The most memories one listing returns. */
+export const MEMORY_LIST_LIMIT = 300
+
 type Db = Pick<PrismaClient, "$transaction" | "memory">
 
 function toDomain(row: MemoryRow): Memory {
@@ -23,17 +26,22 @@ function toDomain(row: MemoryRow): Memory {
 
 /**
  * Adapter over Prisma. The client is resolved lazily (`getDb`), so constructing the repository
- * never connects. Row-level security does the authorization: reads run without a visitor and
- * therefore only see approved rows; writes run through `withVisitor`.
+ * never connects. Row-level security does the authorization: every read and write runs through
+ * `withVisitor`, so the policies see the visitor's handle.
  */
 export class PrismaMemoryRepository implements MemoryRepository {
   constructor(private readonly getDb: () => Db = getPrisma) {}
 
-  async listApproved(): Promise<Memory[]> {
-    const rows = await this.getDb().memory.findMany({
-      where: { status: "approved" },
-      orderBy: [{ happenedOn: "asc" }, { createdAt: "asc" }],
-    })
+  async listForVisitor(handle: string): Promise<Memory[]> {
+    // The policy already limits rows to approved ones plus this visitor's own; the explicit `where`
+    // repeats that (and leaves out their rejected ones) so a loosened policy cannot widen the result.
+    const rows = await withVisitor(this.getDb(), handle, (tx) =>
+      tx.memory.findMany({
+        where: { OR: [{ status: "approved" }, { handle, status: "pending" }] },
+        orderBy: [{ happenedOn: "asc" }, { createdAt: "asc" }],
+        take: MEMORY_LIST_LIMIT,
+      }),
+    )
     return rows.map(toDomain)
   }
 
