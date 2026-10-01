@@ -6,7 +6,7 @@ export interface DustParticle {
   /** Depth layer: 0 is the farthest. */
   layer: number
   radius: number
-  /** 0 is a crisp dot, 1 a very soft bokeh. */
+  /** 0 is a crisp dot, 1 a very soft bokeh (the layers stay under 0.4). */
   softness: number
   alpha: number
   /** Drift, as stage fractions per second. */
@@ -29,13 +29,14 @@ interface DustLayer {
 }
 
 /**
- * Three depths. Far dust is tiny, crisp, faint and nearly still; near dust is bigger, softer, drifts
- * faster and answers the pointer more, so the void has volume.
+ * Three depths. Far dust is a tiny, crisp, nearly still point; near dust is a little bigger and drifts faster and
+ * answers the pointer more, so the void has volume. All of it is small and sharp: dust is a texture, never a blur
+ * over the orbs.
  */
 export const DUST_LAYERS: readonly DustLayer[] = [
-  { share: 0.55, radius: [0.6, 1.1], softness: 0.15, alpha: [0.25, 0.45], speed: 0.0016, parallax: 4 },
-  { share: 0.3, radius: [1.1, 1.9], softness: 0.5, alpha: [0.3, 0.55], speed: 0.0035, parallax: 10 },
-  { share: 0.15, radius: [2, 3.2], softness: 0.9, alpha: [0.12, 0.28], speed: 0.0065, parallax: 22 },
+  { share: 0.55, radius: [0.5, 0.9], softness: 0.05, alpha: [0.3, 0.5], speed: 0.0016, parallax: 4 },
+  { share: 0.3, radius: [0.8, 1.4], softness: 0.2, alpha: [0.3, 0.55], speed: 0.0035, parallax: 10 },
+  { share: 0.15, radius: [1.3, 2.2], softness: 0.4, alpha: [0.2, 0.4], speed: 0.0065, parallax: 22 },
 ]
 
 export const DUST_TINTS = 3
@@ -95,10 +96,24 @@ export function dustPositionAt(p: DustParticle, seconds: number): { x: number; y
 }
 
 const PHONE_PX = 640
+// The field is about 40% of what it used to be, so the orbs always read first.
+const AREA_PER_MOTE = 22_500
+const DESKTOP_COUNT: readonly [number, number] = [36, 60]
+const PHONE_MAX = 24
 
-/** How many motes to draw: enough to feel like depth on a desktop, fewer on a phone where fill rate is scarce. */
+/** How many motes to draw: a sparse texture on a desktop, fewer still on a phone where fill rate is scarce. */
 export function dustCount(width: number, height: number): number {
   const area = Math.max(width, 320) * Math.max(height, 480)
-  const base = Math.round(area / 9000)
-  return width < PHONE_PX ? Math.min(base, 60) : Math.min(Math.max(base, 90), 150)
+  const base = Math.round(area / AREA_PER_MOTE)
+  return width < PHONE_PX ? Math.min(base, PHONE_MAX) : Math.min(Math.max(base, DESKTOP_COUNT[0]), DESKTOP_COUNT[1])
+}
+
+/** Where the sprite's solid core ends, as a fraction of its radius: nearly the whole disc, so the edge is sharp. */
+export function spriteCoreStop(softness: number): number {
+  return 0.45 + 0.45 * (1 - Math.min(Math.max(softness, 0), 1))
+}
+
+/** Half the drawn size of a mote in px: barely past its radius, a little more as it softens. */
+export function dustReach(p: Pick<DustParticle, "radius" | "softness">): number {
+  return p.radius * (1.15 + p.softness * 1.2)
 }

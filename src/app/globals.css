@@ -277,8 +277,37 @@
   /* The memories space: its own deep void, round orbs that drift, and a viewer that opens out of a point. */
   .mem-void {
     background:
-      radial-gradient(ellipse 62% 55% at 50% 44%, rgba(86, 74, 170, 0.14) 0%, rgba(40, 34, 96, 0.07) 42%, transparent 72%),
+      radial-gradient(ellipse 62% 55% at 50% 44%, rgba(86, 74, 170, 0.08) 0%, rgba(40, 34, 96, 0.04) 42%, transparent 72%),
       radial-gradient(ellipse 120% 110% at 50% 50%, transparent 38%, rgba(0, 0, 4, 0.78) 100%), #040309;
+  }
+  /* Very soft glows (violet and indigo, each with a faint orb tint) drifting on long cycles of different lengths. */
+  .mem-glow {
+    position: absolute;
+    left: var(--glow-x);
+    top: var(--glow-y);
+    width: var(--glow-size);
+    height: var(--glow-size);
+    margin: calc(var(--glow-size) / -2) 0 0 calc(var(--glow-size) / -2);
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--glow) calc(var(--glow-alpha) * 100%), transparent) 0%,
+      color-mix(in oklab, var(--glow) calc(var(--glow-alpha) * 62%), transparent) 20%,
+      color-mix(in oklab, var(--glow-tint) calc(var(--glow-alpha) * 26%), transparent) 42%,
+      color-mix(in oklab, var(--glow) calc(var(--glow-alpha) * 7%), transparent) 62%,
+      transparent 78%
+    );
+    pointer-events: none;
+    will-change: transform;
+    animation: mem-glow-drift var(--glow-dur) ease-in-out var(--glow-delay) infinite alternate;
+  }
+  .mem-void[data-reduced="true"] .mem-glow {
+    animation: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mem-glow {
+      animation: none;
+    }
   }
   .mem-point {
     --ease: cubic-bezier(0.23, 1, 0.32, 1);
@@ -1334,6 +1363,14 @@
   }
   to {
     transform: translate3d(var(--dx, 6px), var(--dy, 6px), 0);
+  }
+}
+@keyframes mem-glow-drift {
+  from {
+    transform: translate3d(calc(var(--glow-dx) * -0.5), calc(var(--glow-dy) * -0.5), 0) scale(0.92);
+  }
+  to {
+    transform: translate3d(calc(var(--glow-dx) * 0.5), calc(var(--glow-dy) * 0.5), 0) scale(1.08);
   }
 }
 @keyframes mem-fade-out {

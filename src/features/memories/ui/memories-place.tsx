@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react"
 import { ensureGambarinoStylesheet } from "@/features/onboarding/font"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import type { MemoriesFailure, MemoryView } from "../memory-view"
 import { DustCanvas } from "./dust-canvas"
 import { MemoryPoints } from "./memory-points"
 import { MemoryViewer } from "./memory-viewer"
+import { VOID_GLOWS } from "./void-glows"
 
 export type MemoriesState =
   | { status: "loading" }
@@ -61,7 +62,29 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
 
   return (
     <div ref={setRoot} className="absolute inset-0 overflow-hidden">
-      <div data-void aria-hidden="true" className="mem-void absolute inset-0" />
+      <div data-void data-reduced={reduced} aria-hidden="true" className="mem-void absolute inset-0 overflow-hidden">
+        {VOID_GLOWS.map((glow, i) => (
+          <span
+            key={glow.color}
+            className="mem-glow"
+            style={
+              {
+                "--glow": glow.color,
+                "--glow-tint": glow.tint,
+                "--glow-alpha": glow.alpha,
+                "--glow-x": `${glow.x}%`,
+                "--glow-y": `${glow.y}%`,
+                "--glow-size": `${glow.size}vmax`,
+                "--glow-dx": `${glow.travelX}vw`,
+                "--glow-dy": `${glow.travelY}vh`,
+                "--glow-dur": `${glow.duration}s`,
+                "--glow-delay": `${glow.delay}s`,
+                "--glow-i": i,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
       <DustCanvas reduced={reduced} />
       <h1
         className="t-title rise-late pointer-events-none absolute bottom-[72px] left-6 m-0 text-[length:var(--type-display)] leading-[0.9] md:left-20"

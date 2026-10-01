@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DUST_LAYERS, dustCount, dustPositionAt, makeDust } from "./dust-field"
+import { DUST_LAYERS, dustCount, dustPositionAt, dustReach, makeDust, spriteCoreStop } from "./dust-field"
 
 const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length
 
@@ -86,8 +86,50 @@ describe("dustCount", () => {
     const desktop = dustCount(1440, 900)
     const phone = dustCount(390, 844)
     expect(phone).toBeLessThan(desktop)
-    expect(phone).toBeLessThanOrEqual(70)
-    expect(desktop).toBeLessThanOrEqual(160)
+    expect(phone).toBeLessThanOrEqual(26)
     expect(dustCount(0, 0)).toBeGreaterThan(0)
+  })
+
+  it("is sparse: about 40% of the earlier field, so the orbs stay in view", () => {
+    // The earlier rule drew round(area / 9000), clamped to 90..150 on desktop and to 60 on a phone.
+    const before = (w: number, h: number) => {
+      const base = Math.round((Math.max(w, 320) * Math.max(h, 480)) / 9000)
+      return w < 640 ? Math.min(base, 60) : Math.min(Math.max(base, 90), 150)
+    }
+    for (const [w, h] of [
+      [1440, 900],
+      [1920, 1080],
+      [1280, 720],
+      [390, 844],
+      [360, 740],
+    ]) {
+      expect(dustCount(w, h)).toBeLessThanOrEqual(Math.ceil(before(w, h) * 0.4))
+      expect(dustCount(w, h)).toBeGreaterThanOrEqual(Math.floor(before(w, h) * 0.25))
+    }
+    expect(dustCount(1440, 900)).toBeLessThanOrEqual(60)
+    expect(dustCount(3840, 2160)).toBeLessThanOrEqual(60)
+  })
+})
+
+describe("crisp dust", () => {
+  it("keeps every layer small and sharp, with no big blurred bokeh", () => {
+    for (const layer of DUST_LAYERS) {
+      expect(layer.radius[1]).toBeLessThanOrEqual(2.2)
+      expect(layer.softness).toBeLessThanOrEqual(0.4)
+      expect(layer.alpha[1]).toBeLessThanOrEqual(0.6)
+    }
+  })
+
+  it("draws a mote barely wider than itself, wider only as it gets softer", () => {
+    const [p] = makeDust(4, 1)
+    expect(dustReach({ ...p, radius: 2, softness: 0 })).toBeLessThanOrEqual(2 * 1.3)
+    expect(dustReach({ ...p, radius: 2, softness: 0.4 })).toBeGreaterThan(dustReach({ ...p, radius: 2, softness: 0 }))
+    for (const mote of makeDust(6, 200)) expect(dustReach(mote)).toBeLessThanOrEqual(mote.radius * 1.8)
+  })
+
+  it("keeps the sprite's solid core wide: a sharp falloff, softer only a little", () => {
+    expect(spriteCoreStop(0)).toBeGreaterThanOrEqual(0.85)
+    expect(spriteCoreStop(0.4)).toBeLessThan(spriteCoreStop(0))
+    for (const layer of DUST_LAYERS) expect(spriteCoreStop(layer.softness)).toBeGreaterThanOrEqual(0.6)
   })
 })

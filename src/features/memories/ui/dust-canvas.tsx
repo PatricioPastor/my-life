@@ -1,7 +1,16 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { DUST_LAYERS, DUST_TINTS, dustCount, dustPositionAt, makeDust, type DustParticle } from "./dust-field"
+import {
+  DUST_LAYERS,
+  DUST_TINTS,
+  dustCount,
+  dustPositionAt,
+  dustReach,
+  makeDust,
+  spriteCoreStop,
+  type DustParticle,
+} from "./dust-field"
 
 interface DustCanvasProps {
   /** Reduced motion: one still frame, no drift and no pointer parallax. */
@@ -15,14 +24,14 @@ const MAX_DPR = 2
 const DEFAULT_TINTS = ["#cfe0ff", "#d9ccff", "#bfeaff"]
 const PARALLAX_EASE_PER_S = 3
 
-/** A soft round sprite: a bright core that falls off smoothly; `softness` widens the falloff into a haze. */
+/** A crisp round sprite: a solid core and a short, sharp falloff; `softness` only widens that falloff a little. */
 function makeSprite(color: string, softness: number): HTMLCanvasElement {
   const size = 64
   const sprite = document.createElement("canvas")
   sprite.width = sprite.height = size
   const ctx = sprite.getContext("2d")
   if (!ctx) return sprite
-  const core = Math.max(0.05, 0.5 * (1 - softness))
+  const core = spriteCoreStop(softness)
   const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
   gradient.addColorStop(0, color)
   gradient.addColorStop(core, color)
@@ -33,7 +42,7 @@ function makeSprite(color: string, softness: number): HTMLCanvasElement {
 }
 
 /**
- * The void's dust: tiny round motes in three depths on one DPR-aware 2D canvas. Positions are a pure function
+ * The void's dust: tiny, crisp, round motes in three depths on one DPR-aware 2D canvas. Positions are a pure function
  * of time, so the field is deterministic. It drifts slowly, leans a little toward the pointer on fine pointers
  * (nearer motes more), pauses when the tab is hidden or the canvas is off screen, and holds still under
  * reduced motion.
@@ -83,8 +92,7 @@ export function DustCanvas({ reduced, tints = DEFAULT_TINTS }: DustCanvasProps) 
         const at = dustPositionAt(p, seconds)
         const x = at.x * cssW + lean.x * p.parallax
         const y = at.y * cssH + lean.y * p.parallax
-        // The halo reaches wider than the core as the mote gets softer.
-        const reach = p.radius * (1.6 + p.softness * 3.4)
+        const reach = dustReach(p)
         ctx.globalAlpha = p.alpha
         ctx.drawImage(sprites[p.layer][p.tint], x - reach, y - reach, reach * 2, reach * 2)
       }

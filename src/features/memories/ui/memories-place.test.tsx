@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
+import { VOID_GLOWS } from "./void-glows"
 
 afterEach(() => {
   cleanup()
@@ -93,6 +94,24 @@ describe("MemoriesPlace dimension", () => {
     const dark = container.querySelector("[data-void]") as HTMLElement
     expect(dark.className).toContain("mem-void")
     expect(dark.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("drifts its void: one very soft glow per configured glow, each on its own long cycle", () => {
+    const { container } = render(<MemoriesPlace state={ready()} />)
+    const dark = container.querySelector("[data-void]") as HTMLElement
+    const glows = Array.from(dark.querySelectorAll<HTMLElement>(".mem-glow"))
+    expect(glows).toHaveLength(VOID_GLOWS.length)
+    expect(dark.getAttribute("data-reduced")).toBe("false")
+    glows.forEach((glow, i) => {
+      expect(glow.style.getPropertyValue("--glow-dur")).toBe(`${VOID_GLOWS[i].duration}s`)
+      expect(glow.style.getPropertyValue("--glow-delay")).toBe(`${VOID_GLOWS[i].delay}s`)
+    })
+  })
+
+  it("holds the void still under reduced motion", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+    const { container } = render(<MemoriesPlace state={ready()} />)
+    expect((container.querySelector("[data-void]") as HTMLElement).getAttribute("data-reduced")).toBe("true")
   })
 
   it("sets each orb's seeded depth, which sizes and dims it", () => {
