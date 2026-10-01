@@ -244,7 +244,7 @@ describe("AddMemory submit", () => {
     const { prepare, upload } = setup()
     open()
     submit()
-    expect(screen.getByText("Elige una foto JPG, PNG, WebP o HEIC.")).toBeTruthy()
+    expect(screen.getByText("Agrega una foto o un audio.")).toBeTruthy()
     const caption = screen.getByText("Escribe entre 1 y 140 caracteres.")
     expect(screen.getByLabelText("¿Qué recuerdas?").getAttribute("aria-describedby")).toContain(caption.id)
     const date = screen.getByText("Elige una fecha entre 1900 y hoy.")

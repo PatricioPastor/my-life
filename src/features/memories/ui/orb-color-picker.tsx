@@ -7,9 +7,10 @@ import { DEFAULT_ORB_COLOR, rimColor, swatchNames } from "../orb-color"
 /** The picker's Spanish copy (neutral, `tú`). */
 export const ORB_COLOR_COPY = {
   label: "Color de tu orbe",
-  idle: "Elige una foto para sacar los colores de tu orbe.",
+  idle: "Elige una foto o un audio para ver los colores de tu orbe.",
   reading: "Buscando los colores de tu foto…",
   fromPhoto: "Colores sacados de tu foto.",
+  voice: "Sin foto, tu orbe toma uno de estos colores.",
   fallback: "No pudimos leer los colores de esta foto. Elige uno de estos.",
 } as const
 
@@ -22,6 +23,8 @@ export interface OrbColorPickerProps {
   value: string | null
   /** False when the photo could not be read and the site's cool palette stands in. */
   fromPhoto: boolean
+  /** True for a memory with no photo (only an audio): the site's cool palette is the offer, and says so. */
+  voice?: boolean
   disabled: boolean
   onChange: (hex: string) => void
 }
@@ -32,9 +35,10 @@ const NOTE_ID = "memory-orb-note"
 const LABEL_ID = "memory-orb-label"
 const SLOTS = 6
 
-function noteFor({ status, fromPhoto }: Pick<OrbColorPickerProps, "status" | "fromPhoto">): string {
+function noteFor({ status, fromPhoto, voice }: Pick<OrbColorPickerProps, "status" | "fromPhoto" | "voice">): string {
   if (status === "idle") return ORB_COLOR_COPY.idle
   if (status === "reading") return ORB_COLOR_COPY.reading
+  if (voice) return ORB_COLOR_COPY.voice
   return fromPhoto ? ORB_COLOR_COPY.fromPhoto : ORB_COLOR_COPY.fallback
 }
 
@@ -53,12 +57,12 @@ function OrbPreview({ color }: { color: string }) {
 }
 
 /**
- * "Color de tu orbe": swatches taken from the photo, as a radiogroup of round buttons, and a live preview of the
+ * "Color de tu orbe": swatches taken from the photo (or the site's own for a memory with only a voice), as a radiogroup of round buttons, and a live preview of the
  * orb in the chosen color. Arrow keys move the selection (and the focus) the way native radios do; only the
  * selected swatch is a tab stop. The swatch row and the preview keep their space before there is a photo, so the
  * dialog does not jump when the colors arrive.
  */
-export function OrbColorPicker({ status, colors, value, fromPhoto, disabled, onChange }: OrbColorPickerProps) {
+export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabled, onChange }: OrbColorPickerProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
   const names = swatchNames(colors)
   const selected = value ? colors.indexOf(value) : -1
@@ -149,7 +153,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, disabled, onC
         <OrbPreview color={value ?? DEFAULT_ORB_COLOR} />
       </div>
       <p id={NOTE_ID} aria-live="polite" className="m-0 min-h-4 text-xs tracking-[0.04em] text-ink-faint">
-        {noteFor({ status, fromPhoto })}
+        {noteFor({ status, fromPhoto, voice })}
       </p>
     </div>
   )

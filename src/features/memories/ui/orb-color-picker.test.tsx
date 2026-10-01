@@ -178,3 +178,24 @@ describe("OrbColorPicker preview and states", () => {
     expect(ORB_COLOR_COPY.label).toBe("Color de tu orbe")
   })
 })
+
+describe("OrbColorPicker with no photo (a voice-only memory)", () => {
+  it("says the colors are the site's own, not the photo's", () => {
+    setup({ fromPhoto: false, voice: true })
+    expect(screen.getByText(ORB_COLOR_COPY.voice)).toBeTruthy()
+    expect(screen.queryByText(ORB_COLOR_COPY.fallback)).toBeNull()
+    expect(screen.queryByText(ORB_COLOR_COPY.fromPhoto)).toBeNull()
+  })
+
+  it("still offers a radiogroup of swatches that can be chosen", () => {
+    const { onChange } = setup({ fromPhoto: false, voice: true })
+    fireEvent.click(radios()[2])
+    expect(onChange).toHaveBeenCalledWith(COLORS[2])
+  })
+
+  it("asks for a photo or an audio while there is neither", () => {
+    setup({ status: "idle", colors: [], value: null, fromPhoto: false })
+    expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
+    expect(ORB_COLOR_COPY.idle).toMatch(/foto o un audio/)
+  })
+})

@@ -6,16 +6,22 @@ import { track } from "@/shared/analytics"
 import { useKeyboardInset } from "@/shared/lib/use-keyboard-inset"
 import { cn } from "@/shared/lib/utils"
 import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
+import { DEFAULT_ORB_COLOR } from "../orb-color"
 import type { MemoryView } from "../memory-view"
-import { checkPhoto } from "../upload-limits"
+import { MAX_AUDIO_MS, checkAudio, checkPhoto } from "../upload-limits"
 import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadInput, PrepareUploadResult } from "../upload-view"
+import { readAudioDuration, type ReadAudioDuration } from "./audio-duration"
+import { AudioSection } from "./audio-section"
 import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
 import type { GpsParser } from "./photo-gps"
 import { OrbColorPicker } from "./orb-color-picker"
+import { fallbackPalette } from "./photo-palette"
 import { PLACE_COPY } from "./place-model"
 import { PlaceSection } from "./place-section"
 import { useMapsLink, type ResolveLink } from "./use-maps-link"
+import type { LevelEnv } from "./use-audio-level"
+import { useAudioRecorder, type RecorderEnv } from "./use-audio-recorder"
 import { usePhotoPalette, type ReadPalette } from "./use-photo-palette"
 import { usePhotoPlace, type SuggestPlace } from "./use-photo-place"
 
@@ -33,6 +39,12 @@ export interface AddMemoryProps {
   parseGps?: GpsParser
   /** Reads the colors of the picked photo for the orb swatches. Defaults to a small canvas in the browser (a seam for tests). */
   readPalette?: ReadPalette
+  /** The microphone and `MediaRecorder` the audio section records with (a seam for tests). Defaults to the browser's. */
+  recorderEnv?: RecorderEnv
+  /** Reads how long a picked audio is (a seam for tests). Defaults to a throwaway `Audio` element. */
+  readAudioDuration?: ReadAudioDuration
+  /** The Web Audio the talking orb listens through (a seam for tests). Defaults to the browser's. */
+  levelEnv?: LevelEnv
   /** Called with the new, still pending memory as soon as it is saved. */
   onCreated: (memory: MemoryView) => void
   /** The visitor's local `YYYY-MM-DD` (a seam for tests). */
@@ -82,8 +94,14 @@ function MemoryForm({
   // The swatch the visitor pressed; until they press one, the dominant tone (the first swatch) is the choice.
   const [chosenColor, setChosenColor] = useState<string | null>(null)
   const { phase: palette, begin: readColors, reset: resetColors } = usePhotoPalette(props.readPalette)
-  const swatches = palette.status === "ready" ? palette.colors : []
+  const recorder = useAudioRecorder(props.recorderEnv)
+  const clip = recorder.clip
+  const hasAudio = clip !== null && (recorder.state.phase === "recorded" || recorder.state.phase === "playing")
+  // With a photo the swatches come from it; with only a voice they are the site's own, lifted to glow.
+  const [voiceSwatches] = useState(fallbackPalette)
+  const swatches = picked ? (palette.status === "ready" ? palette.colors : []) : hasAudio ? voiceSwatches : []
   const orbColor = chosenColor && swatches.includes(chosenColor) ? chosenColor : (swatches[0] ?? null)
+  const audioRun = useRef(0)
   const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)
   // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
   const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => setShareLocation(true))
@@ -126,9 +144,43 @@ function MemoryForm({
     }
     previewUrl.current = URL.createObjectURL(file)
     setPicked({ file, url: previewUrl.current })
-    setErrors((e) => ({ ...e, photo: undefined }))
+    setErrors((e) => ({ ...e, photo: undefined, media: undefined }))
     void readPlace(file)
     void readColors(file)
+  }
+
+  function removePhoto() {
+    if (busy) return
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
+    previewUrl.current = null
+    setPreviewFailed(false)
+    setPicked(null)
+    setChosenColor(null)
+    resetPlace()
+    resetColors()
+    // The consent was for the photo's place; a pasted link that resolved keeps its own.
+    if (!linkPlace) setShareLocation(false)
+    setErrors((e) => ({ ...e, photo: undefined }))
+  }
+
+  async function chooseAudio(file: File | undefined) {
+    if (!file || busy) return
+    const mine = ++audioRun.current
+    const check = checkAudio(file)
+    if (check !== "ok") {
+      recorder.discard()
+      setErrors((e) => ({ ...e, media: undefined, audio: check === "too_large" ? COPY.audioSize : COPY.audioType }))
+      return
+    }
+    setErrors((e) => ({ ...e, media: undefined, audio: undefined }))
+    const duration = await (props.readAudioDuration ?? readAudioDuration)(file)
+    if (mine !== audioRun.current) return
+    if (duration !== null && duration > MAX_AUDIO_MS) {
+      recorder.discard()
+      setErrors((e) => ({ ...e, audio: COPY.audioLong }))
+      return
+    }
+    recorder.load(file, duration)
   }
 
   // Clearing the link of a photo with no GPS leaves nothing to keep, so the consent goes with it.
@@ -153,8 +205,18 @@ function MemoryForm({
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     if (busy || phase.kind === "done") return
-    const found = validateForm({ file: picked?.file ?? null, caption, date, today })
-    if (found.photo || found.caption || found.date) {
+    const found = validateForm({
+      file: picked?.file ?? null,
+      audio:
+        hasAudio && clip
+          ? { name: clip.name, type: clip.blob.type, size: clip.blob.size, durationMs: recorder.state.durationMs }
+          : null,
+      recording: recorder.state.phase === "recording" || recorder.state.phase === "requesting",
+      caption,
+      date,
+      today,
+    })
+    if (found.media || found.photo || found.audio || found.caption || found.date) {
       setErrors(found)
       return
     }
@@ -170,20 +232,52 @@ function MemoryForm({
     controller.current = abort
     setPhase({ kind: "uploading", percent: 0 })
     try {
-      const prepared = await props.prepare({ photo: true, audio: false })
+      const photoFile = picked?.file ?? null
+      const audioClip = hasAudio ? clip : null
+      const prepared = await props.prepare({ photo: photoFile !== null, audio: audioClip !== null })
       if (abort.signal.aborted) return
       if (!prepared.ok) return fail(messageForFailure(prepared))
 
-      const sent = await props.upload({
-        file: picked!.file,
-        cloudName: prepared.upload.cloudName,
-        fields: prepared.upload.photo ?? {},
-        resource: "image",
-        onProgress: (percent) => setPhase((p) => (p.kind === "uploading" ? { kind: "uploading", percent } : p)),
-        signal: abort.signal,
-      })
-      if (abort.signal.aborted || (!sent.ok && sent.reason === "cancelled")) return
-      if (!sent.ok) return fail({ form: COPY.unavailable })
+      // One progress bar for both files: each one counts for its share of the bytes.
+      const photoBytes = photoFile?.size ?? 0
+      const audioBytes = audioClip?.blob.size ?? 0
+      const total = Math.max(photoBytes + audioBytes, 1)
+      const progress = (before: number, bytes: number) => (percent: number) =>
+        setPhase((p) =>
+          p.kind === "uploading"
+            ? { kind: "uploading", percent: Math.round(((before + (bytes * percent) / 100) / total) * 100) }
+            : p,
+        )
+
+      // Each upload goes to its own Cloudinary endpoint with the fields the server signed for it.
+      const { cloudName, photo: photoFields, audio: audioFields } = prepared.upload
+      if (photoFile) {
+        if (!photoFields) return fail({ form: COPY.unavailable })
+        const sent = await props.upload({
+          file: photoFile,
+          cloudName,
+          fields: photoFields,
+          resource: "image",
+          onProgress: progress(0, photoBytes),
+          signal: abort.signal,
+        })
+        if (abort.signal.aborted || (!sent.ok && sent.reason === "cancelled")) return
+        if (!sent.ok) return fail({ form: COPY.unavailable })
+      }
+      if (audioClip) {
+        if (!audioFields) return fail({ form: COPY.unavailable })
+        const sent = await props.upload({
+          file: audioClip.blob,
+          name: audioClip.name,
+          cloudName,
+          fields: audioFields,
+          resource: "video",
+          onProgress: progress(photoBytes, audioBytes),
+          signal: abort.signal,
+        })
+        if (abort.signal.aborted || (!sent.ok && sent.reason === "cancelled")) return
+        if (!sent.ok) return fail({ form: COPY.unavailable })
+      }
 
       setPhase({ kind: "saving" })
       onLockChange(true)
@@ -202,6 +296,7 @@ function MemoryForm({
 
       setPlaceNotSaved(share && !created.locationSaved)
       track("memory_submitted")
+      if (recorder.state.source === "recording") track("memory_audio_recorded")
       props.onCreated(created.memory)
       setPhase({ kind: "done" })
       onLockChange(false)
@@ -237,6 +332,7 @@ function MemoryForm({
                 className="peer sr-only"
               />
               {/* A fixed-height box: the preview fills it, so picking a photo never moves what is below. */}
+              <div className="relative">
               <label
                 htmlFor="memory-photo"
                 data-testid="photo-drop"
@@ -250,7 +346,7 @@ function MemoryForm({
                 onDrop={onDrop}
                 className={cn(
                   RIM,
-                  "flex h-44 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-sm border-dashed bg-white/[0.03] p-3 text-center transition-colors duration-200 md:h-48",
+                  "flex h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-sm border-dashed bg-white/[0.03] p-3 text-center transition-colors duration-200 md:h-36",
                   "peer-focus-visible:border-[#a8c8ff]/70 peer-aria-[invalid=true]:border-signal/70",
                   dragging && "border-[#a8c8ff]/70 bg-[#a8c8ff]/[0.07]",
                 )}
@@ -274,6 +370,24 @@ function MemoryForm({
                   </span>
                 )}
               </label>
+              {picked && (
+                <button
+                  type="button"
+                  aria-label="Quitar foto"
+                  onClick={removePhoto}
+                  disabled={busy || phase.kind === "done"}
+                  data-magnetic="light"
+                  data-cursor-label="Quitar foto"
+                  className="press absolute top-0 right-0 grid size-11 place-items-center focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#a8c8ff] disabled:opacity-50"
+                >
+                  <span className="grid size-6 place-items-center rounded-full bg-[#07061a]/80 text-[#eaf0ff] ring-1 ring-[#a8c8ff]/35">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                      <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                </button>
+              )}
+              </div>
               <p id="memory-photo-hint" className="m-0 text-xs tracking-[0.04em] text-ink-faint">
                 JPG, PNG, WebP o HEIC, hasta 10 MB.
               </p>
@@ -284,11 +398,21 @@ function MemoryForm({
               )}
             </div>
 
+            <AudioSection
+              recorder={recorder}
+              color={orbColor ?? DEFAULT_ORB_COLOR}
+              disabled={busy || phase.kind === "done"}
+              error={errors.audio ?? errors.media}
+              onPickFile={(file) => void chooseAudio(file)}
+              levelEnv={props.levelEnv}
+            />
+
             <OrbColorPicker
-              status={palette.status}
+              status={picked ? palette.status : hasAudio ? "ready" : "idle"}
               colors={swatches}
               value={orbColor}
               fromPhoto={palette.status === "ready" ? palette.fromPhoto : true}
+              voice={!picked && hasAudio}
               disabled={busy || phase.kind === "done"}
               onChange={setChosenColor}
             />
@@ -407,8 +531,8 @@ function MemoryForm({
 }
 
 /**
- * The "Agregar recuerdo" control and the dialog it opens: a photo, the color of the orb, a few words, a date and the
- * place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
+ * The "Agregar recuerdo" control and the dialog it opens: a photo and/or an audio (recorded or uploaded), the color of
+ * the orb, a few words, a date and the place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
  * like the viewer. On phones it is a bottom sheet (one scroll region, the submit always in reach); on tablets and
  * desktops it is a two-column card that fits without scrolling.
  */
@@ -461,7 +585,7 @@ export function AddMemory(props: AddMemoryProps) {
               <div className="flex flex-col gap-1 pr-16">
                 <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea]">Agregar recuerdo</Dialog.Title>
                 <Dialog.Description className="t-body m-0 text-[length:var(--type-1)] text-ink-muted">
-                  Tu recuerdo aparecerá en el espacio cuando sea aprobado.
+                  Una foto, un audio o ambos. Tu recuerdo aparecerá en el espacio cuando sea aprobado.
                 </Dialog.Description>
               </div>
             </div>

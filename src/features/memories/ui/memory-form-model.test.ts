@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { MAX_UPLOAD_BYTES } from "../upload-limits"
+import { MAX_AUDIO_BYTES, MAX_AUDIO_MS, MAX_UPLOAD_BYTES } from "../upload-limits"
 import { COPY, localToday, messageForFailure, validateForm } from "./memory-form-model"
 
 const photo = (over: Partial<{ name: string; type: string; size: number }> = {}) => ({
@@ -23,8 +23,12 @@ describe("validateForm", () => {
     expect(validateForm(ok)).toEqual({})
   })
 
-  it("asks for a photo, and refuses the wrong type or size", () => {
-    expect(validateForm({ ...ok, file: null }).photo).toBe(COPY.photoType)
+  it("asks for a photo or an audio when there is neither", () => {
+    expect(validateForm({ ...ok, file: null })).toEqual({ media: COPY.media })
+    expect(COPY.media).toBe("Agrega una foto o un audio.")
+  })
+
+  it("refuses the wrong type or size of a photo", () => {
     expect(validateForm({ ...ok, file: photo({ type: "image/gif", name: "a.gif" }) }).photo).toBe(COPY.photoType)
     expect(validateForm({ ...ok, file: photo({ size: MAX_UPLOAD_BYTES + 1 }) }).photo).toBe(COPY.photoSize)
   })
@@ -51,7 +55,10 @@ describe("messageForFailure", () => {
     expect(messageForFailure({ ok: false, reason: "no_session" })).toEqual({ form: COPY.noSession })
     expect(messageForFailure({ ok: false, reason: "asset_too_large" })).toEqual({ photo: COPY.photoSize })
     expect(messageForFailure({ ok: false, reason: "asset_type" })).toEqual({ photo: COPY.photoType })
-    for (const reason of ["unavailable", "invalid_ticket", "asset_missing", "duplicate"] as const) {
+    expect(messageForFailure({ ok: false, reason: "audio_type" })).toEqual({ audio: COPY.audioType })
+    expect(messageForFailure({ ok: false, reason: "audio_too_large" })).toEqual({ audio: COPY.audioSize })
+    expect(messageForFailure({ ok: false, reason: "audio_too_long" })).toEqual({ audio: COPY.audioLong })
+    for (const reason of ["unavailable", "invalid_ticket", "asset_missing", "audio_missing", "duplicate"] as const) {
       expect(messageForFailure({ ok: false, reason })).toEqual({ form: COPY.unavailable })
     }
   })
@@ -66,5 +73,62 @@ describe("messageForFailure", () => {
       date: COPY.dateInvalid,
     })
     expect(messageForFailure({ ok: false, reason: "invalid", errors: ["width_invalid"] })).toEqual({ form: COPY.unavailable })
+  })
+})
+
+describe("validateForm: audio", () => {
+  const ok = { file: photo(), caption: "Una tarde", date: "2024-03-12", today: "2026-10-01" }
+  const voice = (over: Partial<{ name: string; type: string; size: number; durationMs: number | null }> = {}) => ({
+    name: "nota.webm",
+    type: "audio/webm;codecs=opus",
+    size: 50_000,
+    durationMs: 12_000,
+    ...over,
+  })
+
+  it("accepts an audio with no photo, a photo with no audio, and both", () => {
+    expect(validateForm({ ...ok, file: null, audio: voice() })).toEqual({})
+    expect(validateForm({ ...ok, audio: null })).toEqual({})
+    expect(validateForm({ ...ok, audio: voice() })).toEqual({})
+  })
+
+  it("still asks for a photo or an audio when neither is there, and not for a photo in particular", () => {
+    const errors = validateForm({ ...ok, file: null, audio: null })
+    expect(errors.media).toBe(COPY.media)
+    expect(errors.photo).toBeUndefined()
+    expect(errors.audio).toBeUndefined()
+  })
+
+  it("refuses an audio of the wrong type, over 15 MB, or longer than 2 minutes", () => {
+    expect(validateForm({ ...ok, audio: voice({ type: "image/png", name: "a.png" }) }).audio).toBe(COPY.audioType)
+    expect(validateForm({ ...ok, audio: voice({ size: MAX_AUDIO_BYTES + 1 }) }).audio).toBe(COPY.audioSize)
+    expect(validateForm({ ...ok, audio: voice({ durationMs: MAX_AUDIO_MS + 1 }) }).audio).toBe(COPY.audioLong)
+  })
+
+  it("accepts exactly 15 MB and exactly 2 minutes, and an audio whose length the browser could not read", () => {
+    expect(validateForm({ ...ok, audio: voice({ size: MAX_AUDIO_BYTES }) }).audio).toBeUndefined()
+    expect(validateForm({ ...ok, audio: voice({ durationMs: MAX_AUDIO_MS }) }).audio).toBeUndefined()
+    expect(validateForm({ ...ok, audio: voice({ durationMs: null }) }).audio).toBeUndefined()
+  })
+
+  it("tells the visitor to stop the recording before saving, instead of asking for an audio", () => {
+    expect(validateForm({ ...ok, file: null, audio: null, recording: true })).toEqual({ audio: COPY.audioRecording })
+    expect(COPY.audioRecording).toBe("Detén la grabación antes de guardar.")
+  })
+
+  it("keeps the caption and date rules for an audio-only memory", () => {
+    const errors = validateForm({ ...ok, file: null, audio: voice(), caption: " ", date: "2999-01-01" })
+    expect(errors).toEqual({ caption: COPY.caption, date: COPY.dateFuture })
+  })
+
+  it("maps the server's audio and media answers to their fields", () => {
+    expect(messageForFailure({ ok: false, reason: "invalid", errors: ["media_missing"] })).toEqual({ media: COPY.media })
+    expect(messageForFailure({ ok: false, reason: "invalid", errors: ["audio_invalid"] })).toEqual({ form: COPY.unavailable })
+  })
+
+  it("speaks about the audio in neutral Spanish", () => {
+    expect(COPY.audioType).toBe("Elige un audio WebM, OGG, MP3, M4A, AAC o WAV.")
+    expect(COPY.audioSize).toBe("El audio supera los 15 MB.")
+    expect(COPY.audioLong).toBe("El audio dura más de 2 minutos.")
   })
 })

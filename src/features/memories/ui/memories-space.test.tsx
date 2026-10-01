@@ -40,7 +40,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
 beforeEach(() => {
   vi.stubGlobal("matchMedia", undefined)
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:preview"), revokeObjectURL: vi.fn() }))
-  prepareUpload.mockResolvedValue({ ok: true, upload: { cloudName: "demo", ticket: "t", fields: {} } })
+  prepareUpload.mockResolvedValue({ ok: true, upload: { cloudName: "demo", ticket: "t", photo: {}, audio: null } })
   uploadToCloudinary.mockResolvedValue({ ok: true })
 })
 afterEach(() => {
