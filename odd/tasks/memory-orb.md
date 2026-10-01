@@ -128,6 +128,8 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - **Files:** new `src/features/orb/*`, `src/features/memories/ui/*`, `src/features/facets/facet-keep-out.ts`, `src/features/journey/sky-keep-out.ts`; changed the sky shader, renderer and handle, the tunnel renderer and `AsciiTunnel`, the journey machine and screen, the analytics events, `globals.css`.
   - **Visual check:** Playwright (Chromium, software WebGL) on :3001 with a test whitelist handle passed through the process environment: 1440x900 and 390x844 sky, orb color cycle, hover easing, magnetic label, portal frames, the memories place, back, and keyboard Tab + Enter. Reduced motion checked too. Software GL renders about 2 frames per second, so timing there is slower than on a real GPU.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (801 tests) and `pnpm build` pass; `/` stays static.
+  - Commit `e03990a`. RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-3acd2a5d6829befa` acknowledged. Reviewed boundary: `e03990a`.
+  - Open notes: on narrow phones the orb roams a smaller free area. It restarts at its seed start after a facet visit.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
