@@ -240,6 +240,27 @@ Progress:
   - `app_user` has `INSERT` on the 17 writable columns only (never `id`, `status` or `created_at`), a table-level `SELECT` only, and no UPDATE or DELETE.
   - All three migrations are recorded as applied.
 
+- 2026-10-01 (dated 2026-10-01), Live smoke: with the user's authorization ("mandale mecha") a temporary vitest harness (outside the committed code, deleted afterwards) ran the real modules against Cloudinary, Neon as `app_user` and Nominatim, with one 64x48 JPEG carrying EXIF (Make, Model, DateTimeOriginal, GPS for Plaza de Mayo -34.6083, -58.3712). All checks passed.
+
+  | # | Check | Result | Evidence |
+  |---|-------|--------|----------|
+  | 1 | Signed upload accepted | PASS | `prepareUpload` fields (SHA-256) answered 200 on the first try; no SHA-1 retry needed. Type `authenticated`, `overwrite=false`. |
+  | 2 | Test image | PASS | 1347-byte JPEG, `jpeg-js` + `piexifjs` in a scratch dir (nothing added to the repo). |
+  | 3 | Admin read-back and `photo-details` | PASS | `bytes` 1347, `format` jpg, 64x48, type `authenticated`. `takenAt` 2024-05-17T14:30:00Z, dominant `#dc2829`, 3-color palette, whitelist `Make`/`Model`/`DateTimeOriginal` with no GPS; approximate location -34.61, -58.37 only with consent (null without). |
+  | 4 | `verifyAsset` | PASS | `ok`, width 64, height 48. |
+  | 5 | Delivery | PASS | Signed thumbnail and full URLs 200 (thumbnail `image/png`, full `image/jpeg`), no EXIF and no GPS in either. Unsigned `/authenticated/<id>`, no-signature and bad-signature variants, `fl_keep_iptc`, and the signature reused on another transformation: 401. `/upload/<id>` and `/upload/<transform>/<id>`: 404. |
+  | 6 | Nominatim | PASS | One request, 200, UA `my-life/1.0 (+<site>; contact: ...)`. Address had `suburb` Monserrat, `city` Buenos Aires; label "Monserrat, Buenos Aires". |
+  | 7 | Database as `app_user` | PASS | `createMemoryWith` inserted a pending row through `withVisitor`; `listForVisitor` returned it; `place_name`, `location_source = photo`, `-34.61`/`-58.37`, palette and metadata stored; the DTO has no location, place or source. |
+  | 8 | Cleanup | PASS | Asset destroyed (Admin API 404 afterwards); `smoke_test` rows 0 before and after (1 deleted as the owner). |
+
+  Real shapes learned:
+  - The upload answer carries the metadata under `image_metadata`; the Admin API "get resource" answer carries it under `media_metadata` (no `image_metadata`). The adapter accepts both, so it works.
+  - Metadata values are strings. GPS is ExifTool style: `GPSLatitude` `34 deg 36' 29.88" S`, `GPSLongitude` `58 deg 22' 16.32" W`, plus `GPSLatitudeRef` `South` and `GPSLongitudeRef` `West` (words, not letters). The parser handled them. `DateTimeOriginal` is `2024:05:17 14:30:00`. Other keys seen: `JFIFVersion`, `ResolutionUnit`, `XResolution`, `YResolution`, `Colorspace`, `DPI`.
+  - `colors` is `[["#DC2829", 34.4], ...]` (uppercase hex, share in percent); the answer also has `predominant: { google: [[name, share]], cloudinary: [...] }`.
+  - `f_auto` served the tiny thumbnail as PNG, and the full image as JPEG; neither keeps EXIF.
+  - Local note: with `NEXT_PUBLIC_SITE_URL` unset the Nominatim User-Agent carries `http://localhost:3000`; set the variable in Vercel so the production UA names the real site.
+  - Still not exercised: `OffsetTimeOriginal` (not writable with `piexifjs`), HEIC, Google short links, the browser flow, the 6th-memory rate limit and the replay refusal.
+
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
 2. As the owner, run `ALTER ROLE app_user LOGIN PASSWORD '<generated secret>';` with SQL. The password never goes in the repo.
 3. Build the pooled `app_user` URL (same host, `app_user` and the new password) and set it as `DATABASE_URL` in `.env.local` and Vercel. `DIRECT_URL` stays the owner's unpooled URL. The runtime guard throws if `DATABASE_URL` uses the owner.
