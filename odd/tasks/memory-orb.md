@@ -173,6 +173,17 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
+Progress:
+- 2026-10-01, step 1 done: the user loaded `DIRECT_URL` and asked to run the migration. `pnpm prisma migrate deploy` applied `20261001000000_init` to database `main` on the Neon host.
+- Verified with read-only catalog queries as the owner:
+  - `memories` has RLS enabled and forced; `_prisma_migrations` has it enabled only.
+  - The `memories_select` and `memories_insert` policies are `TO app_user`.
+  - `app_user` has `rolcanlogin=false` and `rolbypassrls=false`.
+  - `app_user` has column-level `INSERT` on the six visitor columns only, plus `SELECT`.
+  - All columns are snake_case.
+  - `neondb_owner` has `rolbypassrls=true`, which confirms why the runtime must not use it.
+- Note: the database is named `main`, not `neondb`, so `DATABASE_URL` must end in `/main`.
+
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
 2. As the owner, run `ALTER ROLE app_user LOGIN PASSWORD '<generated secret>';` with SQL. The password never goes in the repo.
 3. Build the pooled `app_user` URL (same host, `app_user` and the new password) and set it as `DATABASE_URL` in `.env.local` and Vercel. `DIRECT_URL` stays the owner's unpooled URL. The runtime guard throws if `DATABASE_URL` uses the owner.
