@@ -1,4 +1,5 @@
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { memoryAudioPath } from "./audio-path"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import type { ListMemoriesResult, MemoryPlace, MemoryView } from "./memory-view"
@@ -46,10 +47,9 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
     thumbUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
-    // The original (webm, ogg, m4a...) never leaves the server: the browser gets a signed mp3 transcode.
-    audio: memory.audio
-      ? { url: cloudinaryAudioUrl(cloudName, memory.audio.publicId, apiSecret), durationMs: memory.audio.durationMs }
-      : null,
+    // Neither the original (webm, ogg, m4a...) nor the signed mp3 URL leaves the server: the browser plays from our own
+    // route, which streams the audio with byte ranges (Safari and iOS cannot seek a long audio without them).
+    audio: memory.audio ? { url: memoryAudioPath(memory.id), durationMs: memory.audio.durationMs } : null,
   }
 }
 

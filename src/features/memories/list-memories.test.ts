@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { memoryAudioPath } from "./audio-path"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
@@ -36,6 +37,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
 function deps(over: Partial<ListMemoriesDeps> = {}, rows: Memory[] = [memory()]) {
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(async () => rows),
+    findForVisitor: vi.fn(),
     createPending: vi.fn(),
     countRecentBy: vi.fn(),
   }
@@ -170,6 +172,7 @@ describe("listMemoriesWith", () => {
         listForVisitor: async () => {
           throw new Error("DATABASE_URL uses ana's owner role")
         },
+        findForVisitor: vi.fn(),
         createPending: vi.fn(),
     countRecentBy: vi.fn(),
       }),
@@ -237,14 +240,20 @@ describe("listMemoriesWith: photo, audio or both", () => {
       thumbUrl: null,
       fullUrl: null,
       kind: "image",
-      audio: { url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 },
+      audio: { url: "/api/memories/11111111-1111-4111-8111-111111111111/audio", durationMs: 42_500 },
     })
   })
 
   it("maps a photo with an audio: both are present", async () => {
     const view = await list(memory({ audio }))
     expect(view.thumbUrl).toBe(cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"))
-    expect(view.audio).toEqual({ url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 })
+    expect(view.audio).toEqual({ url: memoryAudioPath("11111111-1111-4111-8111-111111111111"), durationMs: 42_500 })
+  })
+
+  it("points the audio at our own route, never at Cloudinary: the signed URL stays on the server", async () => {
+    const view = await list(memory({ audio }))
+    expect(view.audio!.url).toBe("/api/memories/11111111-1111-4111-8111-111111111111/audio")
+    expect(JSON.stringify(view.audio)).not.toMatch(/s--|cloudinary|f_mp3|abcd/)
   })
 
   it("gives an audio-only memory a glowing orb color even when none was stored", async () => {

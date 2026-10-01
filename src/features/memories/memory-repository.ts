@@ -8,6 +8,11 @@ export interface MemoryRepository {
    */
   listForVisitor(handle: string): Promise<Memory[]>
   /**
+   * One memory by id, under the same rule as {@link listForVisitor}: an approved one, or the visitor's own pending one.
+   * Null when it does not exist or the visitor may not see it (the two look the same on purpose).
+   */
+  findForVisitor(handle: string, id: string): Promise<Memory | null>
+  /**
    * Stores a new memory as `pending` under the visitor's handle. Input must be validated.
    * Throws {@link DuplicatePublicIdError} when the public id is already taken.
    */

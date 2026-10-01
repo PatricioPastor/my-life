@@ -141,7 +141,7 @@ describe("uploadInChunks", () => {
     })
 
     it("waits with an increasing backoff between attempts, 1 s, 2 s, 4 s", async () => {
-      const sleep = vi.fn(async () => {})
+      const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {})
       const { run } = setup([{ kind: "retry" }, { kind: "retry" }, { kind: "retry" }, { kind: "ok" }])
       await run({ sleep })
       expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([1000, 2000, 4000])

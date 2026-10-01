@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
@@ -81,6 +81,7 @@ function setup(
   const follow = vi.fn<CreateMemoryDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(),
+    findForVisitor: vi.fn(),
     createPending: vi.fn(async () => stored()),
     countRecentBy: vi.fn(async () => opts.recent ?? 0),
   }
@@ -698,7 +699,7 @@ describe("createMemoryWith: audio", () => {
       height: null,
       thumbUrl: null,
       fullUrl: null,
-      audio: { url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 },
+      audio: { url: "/api/memories/11111111-1111-4111-8111-111111111111/audio", durationMs: 42_500 },
     })
     expect(JSON.stringify(result)).not.toMatch(/publicId|audioPublicId|"format"|"bytes"/)
   })

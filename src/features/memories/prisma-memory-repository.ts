@@ -64,6 +64,14 @@ export class PrismaMemoryRepository implements MemoryRepository {
     return rows.map(toDomain)
   }
 
+  async findForVisitor(handle: string, id: string): Promise<Memory | null> {
+    // Same rule as the listing, restated next to the policy: a loosened policy cannot widen what one id reveals.
+    const row = await withVisitor(this.getDb(), handle, (tx) =>
+      tx.memory.findFirst({ where: { id, OR: [{ status: "approved" }, { handle, status: "pending" }] } }),
+    )
+    return row ? toDomain(row) : null
+  }
+
   async createPending(handle: string, input: NewMemory): Promise<Memory> {
     // Only the columns app_user may insert (column-level grants); id, status and created_at come from DB defaults.
     try {

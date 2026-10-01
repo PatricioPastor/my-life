@@ -21,6 +21,7 @@ const BOTH = { photo: true, audio: true }
 function deps(over: Partial<PrepareUploadDeps> = {}, recent = 0) {
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(),
+    findForVisitor: vi.fn(),
     createPending: vi.fn(),
     countRecentBy: vi.fn(async () => recent),
   }
@@ -59,6 +60,7 @@ describe("prepareUploadWith", () => {
       log,
       repository: () => ({
         listForVisitor: vi.fn(),
+        findForVisitor: vi.fn(),
         createPending: vi.fn(),
         countRecentBy: async () => {
           throw new Error("ana: connection string")
