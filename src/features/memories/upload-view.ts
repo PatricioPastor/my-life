@@ -19,7 +19,7 @@ export interface CreateMemoryInput {
   /** `YYYY-MM-DD`, the visitor calendar date. */
   happenedOn: string
   /**
-   * The visitor ticked "Guardar desde dónde fue". Only an explicit `true` counts; the server alone decides what
+   * The visitor ticked "Guardar dónde se sacó la foto". Only an explicit `true` counts; the server alone decides what
    * is stored (an approximate location, and only when the photo has valid GPS).
    */
   shareLocation: boolean
@@ -36,6 +36,7 @@ export type CreateMemoryFailure =
   | "unavailable"
 
 export type CreateMemoryResult =
-  | { ok: true; memory: MemoryView }
+  /** `locationSaved` is false when no place was stored (no GPS, or a link that could not be read). */
+  | { ok: true; memory: MemoryView; locationSaved: boolean }
   | { ok: false; reason: "invalid"; errors: MemoryValidationError[] }
   | { ok: false; reason: CreateMemoryFailure }

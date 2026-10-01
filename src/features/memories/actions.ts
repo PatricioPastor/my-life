@@ -5,6 +5,8 @@ import { currentVisitor, getSessionSecret } from "@/features/gate/session"
 import { CloudinaryAdminAssets, readCloudinaryConfig } from "./cloudinary-admin-assets"
 import { createMemoryWith } from "./create-memory"
 import { listMemoriesWith } from "./list-memories"
+import { getReverseGeocoder } from "./place/geocoder"
+import { suggestPlaceWith, type SuggestPlaceResult } from "./place/suggest-place"
 import type { ListMemoriesResult } from "./memory-view"
 import { prepareUploadWith } from "./prepare-upload"
 import { PrismaMemoryRepository } from "./prisma-memory-repository"
@@ -49,8 +51,17 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
       cloudinary: config,
       ticketSecret: getSessionSecret(),
       now: Date.now,
+      geocoder: getReverseGeocoder,
       log,
     },
     input,
   )
+}
+
+/**
+ * Names the place of a photo's rounded GPS position, for the "where was it taken" suggestion. The browser rounds to
+ * 2 decimals before calling; anything more precise is refused. A failed lookup answers `{ ok: true, label: null }`.
+ */
+export async function suggestPlace(input: { lat: number; lng: number }): Promise<SuggestPlaceResult> {
+  return suggestPlaceWith({ currentVisitor, geocoder: getReverseGeocoder, log }, input)
 }

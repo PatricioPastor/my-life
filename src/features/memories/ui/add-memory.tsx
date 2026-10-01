@@ -10,6 +10,10 @@ import { checkPhoto } from "../upload-limits"
 import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadResult } from "../upload-view"
 import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
+import type { GpsParser } from "./photo-gps"
+import { PLACE_COPY } from "./place-model"
+import { PlaceSection } from "./place-section"
+import { usePhotoPlace, type SuggestPlace } from "./use-photo-place"
 
 export interface AddMemoryProps {
   /** The element the dialog mounts into, so it stays inside the stage (and its cursor). */
@@ -17,6 +21,10 @@ export interface AddMemoryProps {
   prepare: () => Promise<PrepareUploadResult>
   create: (input: CreateMemoryInput) => Promise<CreateMemoryResult>
   upload: UploadToCloudinary
+  /** Names the place of the photo's rounded GPS position (a server action). */
+  suggest: SuggestPlace
+  /** Reads the GPS of the picked photo in the browser. Defaults to exifr, loaded on demand (a seam for tests). */
+  parseGps?: GpsParser
   /** Called with the new, still pending memory as soon as it is saved. */
   onCreated: (memory: MemoryView) => void
   /** The visitor's local `YYYY-MM-DD` (a seam for tests). */
@@ -60,6 +68,8 @@ function MemoryForm({
   const [date, setDate] = useState("")
   // Off by default: the visitor opts in to keeping an approximate place for this photo.
   const [shareLocation, setShareLocation] = useState(false)
+  const [placeNotSaved, setPlaceNotSaved] = useState(false)
+  const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)
   const [errors, setErrors] = useState<FormErrors>({})
   const [phase, setPhase] = useState<Phase>({ kind: "idle" })
   const controller = useRef<AbortController | null>(null)
@@ -83,8 +93,11 @@ function MemoryForm({
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
     previewUrl.current = null
     setPreviewFailed(false)
+    // A new photo starts over: its own place, and no consent carried over from the previous one.
+    setShareLocation(false)
     const check = checkPhoto(file)
     if (check !== "ok") {
+      resetPlace()
       setPicked(null)
       setErrors((e) => ({ ...e, photo: check === "too_large" ? COPY.photoSize : COPY.photoType }))
       return
@@ -92,6 +105,7 @@ function MemoryForm({
     previewUrl.current = URL.createObjectURL(file)
     setPicked({ file, url: previewUrl.current })
     setErrors((e) => ({ ...e, photo: undefined }))
+    void readPlace(file)
   }
 
   const onPick = (event: ChangeEvent<HTMLInputElement>) => choose(event.target.files?.[0])
@@ -144,6 +158,7 @@ function MemoryForm({
       if (abort.signal.aborted) return
       if (!created.ok) return fail(messageForFailure(created))
 
+      setPlaceNotSaved(shareLocation && !created.locationSaved)
       track("memory_submitted")
       props.onCreated(created.memory)
       setPhase({ kind: "done" })
@@ -273,25 +288,12 @@ function MemoryForm({
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="memory-location" className="flex cursor-pointer items-center gap-3 text-ink">
-          <input
-            id="memory-location"
-            type="checkbox"
-            checked={shareLocation}
-            onChange={(e) => setShareLocation(e.target.checked)}
-            disabled={busy || phase.kind === "done"}
-            aria-describedby="memory-location-help"
-            data-magnetic="light"
-            data-cursor-label="Guardar ubicación"
-            className="h-4 w-4 shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
-          />
-          <span className="t-body text-[length:var(--type-1)]">Guardar desde dónde fue</span>
-        </label>
-        <p id="memory-location-help" className="m-0 pl-7 text-xs tracking-[0.04em] text-ink-faint">
-          Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.
-        </p>
-      </div>
+      <PlaceSection
+        place={place}
+        consent={shareLocation}
+        onConsentChange={setShareLocation}
+        disabled={busy || phase.kind === "done"}
+      />
 
       {errors.form && (
         <p id="memory-form-error" role="alert" className={ERROR_CLASS}>
@@ -299,7 +301,9 @@ function MemoryForm({
         </p>
       )}
       <p role="status" className="t-body m-0 text-[length:var(--type-1)] text-ink empty:hidden">
-        {phase.kind === "done" ? "Listo. Tu recuerdo quedó pendiente de aprobación." : ""}
+        {phase.kind === "done"
+          ? `Listo. Tu recuerdo quedó pendiente de aprobación.${placeNotSaved ? ` ${PLACE_COPY.notSaved}` : ""}`
+          : ""}
       </p>
 
       <div className="flex flex-col gap-2">

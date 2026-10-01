@@ -26,6 +26,8 @@ const row = {
   metadata: { Make: "Apple" },
   approxLatitude: 40.71,
   approxLongitude: -74.01,
+  placeName: "Nueva York",
+  locationSource: "photo" as const,
 }
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
@@ -72,6 +74,8 @@ const input: NewMemory = {
   metadata: { Make: "Apple" },
   approxLatitude: 40.71,
   approxLongitude: -74.01,
+  placeName: "Nueva York",
+  locationSource: "photo",
 }
 
 describe("PrismaMemoryRepository", () => {
@@ -146,6 +150,8 @@ describe("PrismaMemoryRepository", () => {
           metadata: { Make: "Apple" },
           approxLatitude: 40.71,
           approxLongitude: -74.01,
+          placeName: "Nueva York",
+          locationSource: "photo",
         },
       })
     })
@@ -157,9 +163,11 @@ describe("PrismaMemoryRepository", () => {
         takenAt: null,
         approxLatitude: null,
         approxLongitude: null,
+        placeName: null,
+        locationSource: null,
       })
       expect(tx.memory.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ takenAt: null, approxLatitude: null, approxLongitude: null }),
+        data: expect.objectContaining({ takenAt: null, approxLatitude: null, approxLongitude: null, placeName: null, locationSource: null }),
       })
     })
 
@@ -179,6 +187,8 @@ describe("PrismaMemoryRepository", () => {
       expect(memory.approxLongitude).toBe(-74.01)
       expect(memory.palette).toEqual([{ color: "#112233", share: 40 }])
       expect(memory.metadata).toEqual({ Make: "Apple" })
+      expect(memory.placeName).toBe("Nueva York")
+      expect(memory.locationSource).toBe("photo")
     })
 
     it("maps the created row to the domain", async () => {

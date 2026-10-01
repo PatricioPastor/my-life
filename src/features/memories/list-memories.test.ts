@@ -25,6 +25,8 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   metadata: { Make: "Apple" },
   approxLatitude: 40.71,
   approxLongitude: -74.01,
+  placeName: "Nueva York",
+  locationSource: "photo",
   ...over,
 })
 

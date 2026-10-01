@@ -9,7 +9,12 @@
  *    exact coordinates never leave `approximateLocation`: it is the only function that sees them.
  */
 
+import { roundCoordinate } from "./place/coordinates"
+
 export type MediaKind = "image"
+
+/** Where a stored place came from. */
+export type LocationSource = "photo" | "link"
 
 // A type alias, not an interface: it must be assignable to Prisma's JSON input type.
 export type PaletteColor = {
@@ -35,6 +40,10 @@ export interface PhotoDetails {
   /** Rounded to 2 decimals; both set or both null. Only ever set with the visitor's consent. */
   approxLatitude: number | null
   approxLongitude: number | null
+  /** Short label of the stored location. Set by the place decision (geocoding), never by this module. */
+  placeName: string | null
+  /** Set if and only if the location is. */
+  locationSource: LocationSource | null
 }
 
 /** The part of Cloudinary's answer this module reads. */
@@ -157,12 +166,6 @@ function decimalDegrees(value: unknown, ref: unknown, axis: Axis): number | null
   return letter === NEGATIVE_REF[axis] ? -Math.abs(degrees) : Math.abs(degrees)
 }
 
-/** Rounds the magnitude to 2 decimals half away from zero, in decimal (so 1.005 gives 1.01), without `-0`. */
-function roundToHundredths(value: number): number {
-  const magnitude = Number(`${Math.round(Number(`${Math.abs(value)}e2`))}e-2`)
-  return value < 0 && magnitude !== 0 ? -magnitude : magnitude
-}
-
 /**
  * The photo's location rounded to 2 decimals (about 1 km), or null when the GPS fields are missing, malformed or
  * out of range, or are the 0,0 "no fix" position. This is the only place that holds the exact coordinates.
@@ -173,7 +176,7 @@ export function approximateLocation(raw: Record<string, unknown>): { latitude: n
   if (latitude === null || longitude === null) return null
   if (Math.abs(latitude) > LIMIT.latitude || Math.abs(longitude) > LIMIT.longitude) return null
   if (latitude === 0 && longitude === 0) return null
-  return { latitude: roundToHundredths(latitude), longitude: roundToHundredths(longitude) }
+  return { latitude: roundCoordinate(latitude), longitude: roundCoordinate(longitude) }
 }
 
 // --- Metadata whitelist -------------------------------------------------------------------------------------
@@ -264,5 +267,7 @@ export function extractPhotoDetails(photo: RawPhoto, options: { shareLocation: b
     metadata: whitelistMetadata(raw),
     approxLatitude: location?.latitude ?? null,
     approxLongitude: location?.longitude ?? null,
+    placeName: null,
+    locationSource: location ? "photo" : null,
   }
 }

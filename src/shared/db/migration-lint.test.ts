@@ -181,3 +181,40 @@ describe("the photo details migration", () => {
     expect(code).toMatch(/approx_latitude"?\s+IS\s+NULL\)\s*=\s*\(?"?approx_longitude"?\s+IS\s+NULL/i)
   })
 })
+
+describe("the place migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_place"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the photo details migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261001120000_memory_photo_details").toBe(true)
+  })
+
+  it("adds the snake_case place columns and the location_source enum, and touches no other table", () => {
+    expect(code).toContain(`CREATE TYPE "location_source" AS ENUM ('photo', 'link')`)
+    expect(code).toMatch(/ADD\s+COLUMN\s+"place_name"\s+VARCHAR\(120\)/i)
+    expect(code).toMatch(/ADD\s+COLUMN\s+"location_source"\s+"location_source"/i)
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("grants app_user INSERT on exactly the two new columns", () => {
+    const grant = /GRANT\s+INSERT\s*\(([^)]*)\)\s+ON\s+"memories"\s+TO\s+app_user/i.exec(code)
+    expect(grant).not.toBeNull()
+    const columns = grant![1].split(",").map((c) => c.trim().replace(/"/g, ""))
+    expect(columns.sort()).toEqual(["location_source", "place_name"])
+  })
+
+  it("keeps the source set if and only if the coordinates are, and the name only with coordinates", () => {
+    expect(code).toMatch(/location_source"?\s+IS\s+NULL\)\s*=\s*\(?"?approx_latitude"?\s+IS\s+NULL/i)
+    expect(code).toMatch(/place_name"?\s+IS\s+NULL\s+OR\s+"?approx_latitude"?\s+IS\s+NOT\s+NULL/i)
+  })
+
+  it("leaves row-level security and the other grants alone", () => {
+    expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY/i)
+    expect(code).not.toMatch(/CREATE\s+POLICY|DROP\s+POLICY/i)
+    expect(code).not.toMatch(/GRANT\s+(UPDATE|DELETE|ALL|SELECT)/i)
+    expect(code).not.toMatch(/TO\s+PUBLIC/i)
+  })
+})

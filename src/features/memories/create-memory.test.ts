@@ -10,6 +10,7 @@ import { DuplicatePublicIdError, type MemoryRepository } from "./memory-reposito
 import { MAX_UPLOAD_BYTES } from "./upload-limits"
 import type { CreateMemoryInput } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
+import type { ReverseGeocoder } from "./place/reverse-geocoder"
 
 const SECRET = Buffer.alloc(32, 7).toString("base64url")
 const NOW_MS = Date.UTC(2026, 9, 1, 15, 0, 0)
@@ -48,10 +49,13 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   metadata: {},
   approxLatitude: null,
   approxLongitude: null,
+  placeName: null,
+  locationSource: null,
   ...over,
 })
 
 function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; info?: AssetInfo | null } = {}) {
+  const reverse = vi.fn<ReverseGeocoder["reverse"]>(async () => "Palermo, Buenos Aires")
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(),
     createPending: vi.fn(async () => stored()),
@@ -68,10 +72,11 @@ function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; in
     cloudinary: { cloudName: "demo", apiSecret: "abcd" },
     ticketSecret: SECRET,
     now: () => NOW_MS,
+    geocoder: () => ({ reverse }),
     log: vi.fn(),
     ...over,
   }
-  return { full, repository, assets }
+  return { full, repository, assets, reverse }
 }
 
 const input = (
@@ -224,6 +229,8 @@ describe("createMemoryWith: rate limit and insert", () => {
       metadata: {},
       approxLatitude: null,
       approxLongitude: null,
+      placeName: null,
+      locationSource: null,
     })
     expect(assets.destroy).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
@@ -234,6 +241,7 @@ describe("createMemoryWith: rate limit and insert", () => {
     const result = await createMemoryWith(full, input())
     expect(result).toEqual({
       ok: true,
+      locationSaved: false,
       memory: {
         id: "11111111-1111-4111-8111-111111111111",
         caption: "Una tarde",
@@ -351,5 +359,63 @@ describe("createMemoryWith: photo details", () => {
     vi.mocked(repository.createPending).mockRejectedValueOnce(new Error("40.7128,-74.006 boom"))
     await createMemoryWith(full, input({ shareLocation: true }))
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/40\.7|74\.0|GPS|Apple/)
+  })
+})
+
+describe("createMemoryWith: the place", () => {
+  it("stores the photo position, source photo and geocoded name when the visitor opted in", async () => {
+    const { full, repository, reverse } = setup({}, { info: photo() })
+    const result = await createMemoryWith(full, input({ shareLocation: true }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({
+      approxLatitude: 40.71,
+      approxLongitude: -74.01,
+      locationSource: "photo",
+      placeName: "Palermo, Buenos Aires",
+    })
+    expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
+    expect(result).toMatchObject({ ok: true, locationSaved: true })
+  })
+
+  it("never sends the exact coordinates to the geocoder", async () => {
+    const { full, reverse } = setup({}, { info: photo() })
+    await createMemoryWith(full, input({ shareLocation: true }))
+    expect(JSON.stringify(reverse.mock.calls)).not.toMatch(/40.712|74.006/)
+  })
+
+  it("does not geocode, and stores no place, without consent", async () => {
+    const { full, repository, reverse } = setup({}, { info: photo() })
+    const result = await createMemoryWith(full, input({ shareLocation: false }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null, locationSource: null, placeName: null })
+    expect(reverse).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ ok: true, locationSaved: false })
+  })
+
+  it("saves the memory with the location and no name when geocoding fails", async () => {
+    const { full, repository, reverse } = setup({}, { info: photo() })
+    reverse.mockRejectedValueOnce(new Error("down"))
+    const result = await createMemoryWith(full, input({ shareLocation: true }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: 40.71, locationSource: "photo", placeName: null })
+    expect(result).toMatchObject({ ok: true, locationSaved: true })
+  })
+
+  it("saves with no location, and says so, when the photo has no GPS", async () => {
+    const { full, repository } = setup({}, { info: asset({ imageMetadata: { Make: "Apple" }, colors: COLORS }) })
+    const result = await createMemoryWith(full, input({ shareLocation: true }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: null, locationSource: null, placeName: null })
+    expect(result).toMatchObject({ ok: true, locationSaved: false })
+  })
+
+  it("never returns the place name or source in the DTO", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    vi.mocked(repository.createPending).mockResolvedValueOnce(
+      stored({ approxLatitude: 40.71, approxLongitude: -74.01, placeName: "Palermo, Buenos Aires", locationSource: "photo" }),
+    )
+    const result = await createMemoryWith(full, input({ shareLocation: true }))
+    if (!result.ok) throw new Error("expected ok")
+    expect(JSON.stringify(result.memory)).not.toMatch(/Palermo|placeName|locationSource|photo"/)
   })
 })

@@ -3,6 +3,8 @@ import { type AssetInfo, type CloudinaryAssets, verifyAsset } from "./cloudinary
 import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import { extractPhotoDetails } from "./photo-details"
+import { decidePlace } from "./place/decide-place"
+import type { ReverseGeocoder } from "./place/reverse-geocoder"
 import { validateNewMemory } from "./validate-new-memory"
 import { RATE_LIMIT } from "./upload-limits"
 import { verifyUploadTicket } from "./upload-ticket"
@@ -16,6 +18,8 @@ export interface CreateMemoryDeps {
   /** Null when a Cloudinary variable is missing. */
   cloudinary: DeliveryConfig | null
   ticketSecret: string | null
+  /** Lazy: only built when a visitor opted in and the photo has a location to name. */
+  geocoder: () => ReverseGeocoder
   /** Milliseconds, like `Date.now`. */
   now: () => number
   /** One short line, never with personal data. */
@@ -89,9 +93,10 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
 
     const photo = info as AssetInfo // verified above, so it exists
     // Only an explicit `true` opts in. The details keep an approximate location only with that consent.
+    const shareLocation = input.shareLocation === true
     const details = extractPhotoDetails(
       { format: photo.format, bytes: photo.bytes, imageMetadata: photo.imageMetadata, colors: photo.colors },
-      { shareLocation: input.shareLocation === true },
+      { shareLocation },
     )
 
     const repository = deps.repository()
@@ -101,11 +106,23 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
       return { ok: false, reason: "rate_limited" }
     }
 
+    // The server alone decides the place; naming it can fail without blocking the memory.
+    const place = await decidePlace(
+      {
+        shareLocation,
+        photo:
+          details.approxLatitude !== null && details.approxLongitude !== null
+            ? { latitude: details.approxLatitude, longitude: details.approxLongitude }
+            : null,
+      },
+      deps,
+    )
+
     try {
-      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details })
+      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details, ...place })
       const view = toMemoryView(memory, deps.cloudinary)
       if (!view) throw new Error("The new memory has no view.")
-      return { ok: true, memory: view }
+      return { ok: true, memory: view, locationSaved: place.locationSource !== null }
     } catch (error) {
       // The photo belongs to the memory that already exists, so it stays. Any other insert failure may have
       // committed, so the photo stays too: an orphan costs nothing, a broken memory would.

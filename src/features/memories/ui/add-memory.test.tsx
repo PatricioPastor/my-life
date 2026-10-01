@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { MAX_UPLOAD_BYTES } from "../upload-limits"
 import type { CreateMemoryResult, PrepareUploadResult } from "../upload-view"
+import type { SuggestPlaceResult } from "../place/suggest-place"
 import { AddMemory, type AddMemoryProps } from "./add-memory"
 import type { UploadResult } from "./cloudinary-upload"
+import { PLACE_COPY } from "./place-model"
 
 const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...args: unknown[]) => track(...args) }))
@@ -41,7 +43,10 @@ const MEMORY: MemoryView = {
 function setup(over: Partial<AddMemoryProps> = {}) {
   const prepare = vi.fn(async (): Promise<PrepareUploadResult> => GRANT)
   const upload = vi.fn(async (): Promise<UploadResult> => ({ ok: true }))
-  const create = vi.fn(async (): Promise<CreateMemoryResult> => ({ ok: true, memory: MEMORY }))
+  const create = vi.fn(async (): Promise<CreateMemoryResult> => ({ ok: true, memory: MEMORY, locationSaved: false }))
+  // The photo has no GPS unless a test says so; the answer is what exifr reports, with its exact decimals.
+  const parseGps = vi.fn(async (): Promise<{ latitude: number; longitude: number } | undefined> => undefined)
+  const suggest = vi.fn(async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo, Buenos Aires" }))
   const onCreated = vi.fn()
   function Stage() {
     const [el, setEl] = useState<HTMLDivElement | null>(null)
@@ -53,6 +58,8 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           prepare={prepare}
           create={create}
           upload={upload}
+          parseGps={parseGps}
+          suggest={suggest}
           onCreated={onCreated}
           today="2026-10-01"
           doneDelayMs={20}
@@ -62,7 +69,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
     )
   }
   render(<Stage />)
-  return { prepare, upload, create, onCreated }
+  return { prepare, upload, create, onCreated, parseGps, suggest }
 }
 
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
@@ -269,7 +276,7 @@ describe("AddMemory submit", () => {
     expect((saving as HTMLButtonElement).disabled).toBe(true)
     expect(create).toHaveBeenCalledWith({ ticket: "ticket-1", caption: "Una tarde de lluvia", happenedOn: "2024-03-12", shareLocation: false })
 
-    await act(async () => finishCreate({ ok: true, memory: MEMORY }))
+    await act(async () => finishCreate({ ok: true, memory: MEMORY, locationSaved: false }))
     expect((await screen.findByRole("status")).textContent).toBe("Listo. Tu recuerdo quedó pendiente de aprobación.")
     expect(onCreated).toHaveBeenCalledWith(MEMORY)
   })
@@ -416,40 +423,114 @@ describe("AddMemory closing", () => {
     await screen.findByRole("button", { name: "Guardando…" })
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
     expect(screen.getByRole("dialog")).toBeTruthy()
-    await act(async () => finishCreate({ ok: true, memory: MEMORY }))
+    await act(async () => finishCreate({ ok: true, memory: MEMORY, locationSaved: false }))
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
   })
 })
 
-describe("AddMemory location consent", () => {
-  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar desde dónde fue" }) as HTMLInputElement
+describe("AddMemory place section", () => {
+  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar dónde se sacó la foto" }) as HTMLInputElement
+  const HELP = "Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta."
+  // What exifr reports for the photo: exact values, more than 2 decimals.
+  const EXACT = { latitude: -34.593701, longitude: -58.425123 }
 
-  it("offers an unchecked checkbox to keep where the photo was taken", () => {
+  const pickWithGps = (file = photo()) => {
+    open()
+    pick(file)
+  }
+
+  it("asks for a photo first, and always shows the helper text", () => {
     setup()
     open()
-    expect(checkbox().checked).toBe(false)
+    expect(screen.getByText("¿Dónde se sacó?")).toBeTruthy()
+    expect(screen.getByText(PLACE_COPY.idle)).toBeTruthy()
+    expect(screen.getByText(HELP)).toBeTruthy()
+    expect(screen.queryByRole("checkbox")).toBeNull()
   })
 
-  it("explains, through aria-describedby, that only an approximate location is kept", () => {
-    setup()
+  it("rounds to 2 decimals before anything leaves the browser", async () => {
+    const { suggest, parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await waitFor(() => expect(suggest).toHaveBeenCalledWith({ lat: -34.59, lng: -58.43 }))
+    expect(JSON.stringify(suggest.mock.calls)).not.toMatch(/34\.5937|58\.4251/)
+  })
+
+  it("suggests the place, with a safe link to check it on the map", async () => {
+    const { parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    const link = screen.getByRole("link", { name: "Ver en el mapa" }) as HTMLAnchorElement
+    expect(link.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.59,-58.43")
+    expect(link.getAttribute("target")).toBe("_blank")
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer")
+  })
+
+  it("shows the rounded coordinates, and does not block, when the place has no name", async () => {
+    const { parseGps, suggest, create } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    suggest.mockResolvedValue({ ok: true, label: null })
     open()
-    const id = checkbox().getAttribute("aria-describedby")
-    expect(id).toBeTruthy()
-    const help = document.getElementById(id!.split(" ")[0])
-    expect(help?.textContent).toBe("Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.")
-  })
-
-  it("sends shareLocation false when left unchecked", async () => {
-    const { create } = setup()
-    filled()
+    pick(photo())
+    fill()
+    expect(await screen.findByText("Cerca de -34.59, -58.43")).toBeTruthy()
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
   })
 
-  it("sends shareLocation true once the visitor ticks it", async () => {
-    const { create } = setup()
-    filled()
+  it("falls back to the coordinates when the suggestion call fails", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    suggest.mockRejectedValue(new Error("down"))
+    pickWithGps()
+    expect(await screen.findByText("Cerca de -34.59, -58.43")).toBeTruthy()
+  })
+
+  it("shows a loading state while the place is being named", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    let finish!: (r: { ok: true; label: string }) => void
+    suggest.mockImplementation(() => new Promise((resolve) => (finish = resolve)))
+    pickWithGps()
+    expect(await screen.findByText(PLACE_COPY.naming)).toBeTruthy()
+    await act(async () => finish({ ok: true, label: "Palermo, Buenos Aires" }))
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+  })
+
+  it("says so when the photo has no location", async () => {
+    setup()
+    pickWithGps()
+    expect(await screen.findByText(PLACE_COPY.noGps)).toBeTruthy()
+    expect(screen.queryByRole("checkbox")).toBeNull()
+    expect(screen.queryByRole("link", { name: "Ver en el mapa" })).toBeNull()
+    expect(screen.getByText(HELP)).toBeTruthy()
+  })
+
+  it("treats a photo the parser cannot read like one with no location", async () => {
+    const { parseGps } = setup()
+    parseGps.mockRejectedValue(new Error("corrupt"))
+    pickWithGps()
+    expect(await screen.findByText(PLACE_COPY.noGps)).toBeTruthy()
+  })
+
+  it("offers an unchecked consent checkbox described by the helper text", async () => {
+    const { parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    expect(checkbox().checked).toBe(false)
+    const ids = checkbox().getAttribute("aria-describedby")!.split(" ")
+    expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(HELP)
+  })
+
+  it("sends shareLocation false when left unchecked and true once ticked", async () => {
+    const { parseGps, create } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
     fireEvent.click(checkbox())
     expect(checkbox().checked).toBe(true)
     submit()
@@ -458,8 +539,12 @@ describe("AddMemory location consent", () => {
   })
 
   it("can be unticked again before saving", async () => {
-    const { create } = setup()
-    filled()
+    const { parseGps, create } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
     fireEvent.click(checkbox())
     fireEvent.click(checkbox())
     submit()
@@ -467,14 +552,68 @@ describe("AddMemory location consent", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
   })
 
+  it("starts over, unchecked, when another photo is picked, and ignores a slow answer for the old one", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    let finishFirst!: (r: { ok: true; label: string }) => void
+    suggest.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+    open()
+    pick(photo({ name: "uno.jpg" }))
+    await screen.findByText(PLACE_COPY.naming)
+
+    parseGps.mockResolvedValue(undefined)
+    pick(photo({ name: "dos.jpg" }))
+    expect(await screen.findByText(PLACE_COPY.noGps)).toBeTruthy()
+    await act(async () => finishFirst({ ok: true, label: "Palermo, Buenos Aires" }))
+    expect(screen.queryByText("Parece que fue en Palermo, Buenos Aires")).toBeNull()
+    expect(screen.getByText(PLACE_COPY.noGps)).toBeTruthy()
+  })
+
+  it("resets the consent when another photo is picked", async () => {
+    const { parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps(photo({ name: "uno.jpg" }))
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    fireEvent.click(checkbox())
+    pick(photo({ name: "dos.jpg" }))
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    expect(checkbox().checked).toBe(false)
+  })
+
   it("locks the checkbox while saving", async () => {
-    let finish!: (r: UploadResult) => void
-    const upload = vi.fn(() => new Promise<UploadResult>((resolve) => (finish = resolve)))
-    setup({ upload: upload as never })
-    filled()
+    const { parseGps } = setup({
+      upload: (() => new Promise<UploadResult>(() => undefined)) as never,
+    })
+    parseGps.mockResolvedValue(EXACT)
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
     expect(checkbox().disabled).toBe(true)
-    await act(async () => finish({ ok: true }))
+  })
+
+  it("says honestly when the place could not be saved", async () => {
+    const { parseGps, create } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    create.mockResolvedValue({ ok: true, memory: MEMORY, locationSaved: false })
+    open()
+    pick(photo())
+    fill()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    fireEvent.click(checkbox())
+    submit()
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "Listo. Tu recuerdo quedó pendiente de aprobación. No pudimos guardar el lugar.",
+    )
+  })
+
+  it("never uses wording that suggests the visitor's own location", async () => {
+    const { parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    expect(document.body.textContent).not.toMatch(/desde dónde fue/i)
   })
 })

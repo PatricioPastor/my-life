@@ -335,6 +335,8 @@ describe("extractPhotoDetails", () => {
       metadata: { Make: "Apple", DateTimeOriginal: "2024:03:12 14:05:09", OffsetTimeOriginal: "+02:00" },
       approxLatitude: null,
       approxLongitude: null,
+      placeName: null,
+      locationSource: null,
     })
   })
 
@@ -342,10 +344,13 @@ describe("extractPhotoDetails", () => {
     expect(extractPhotoDetails(asset, { shareLocation: true })).toMatchObject({
       approxLatitude: 40.71,
       approxLongitude: -74.01,
+      locationSource: "photo",
+      placeName: null,
     })
     expect(extractPhotoDetails(asset, { shareLocation: false })).toMatchObject({
       approxLatitude: null,
       approxLongitude: null,
+      locationSource: null,
     })
   })
 
@@ -380,6 +385,8 @@ describe("extractPhotoDetails", () => {
       metadata: {},
       approxLatitude: null,
       approxLongitude: null,
+      placeName: null,
+      locationSource: null,
     })
   })
 

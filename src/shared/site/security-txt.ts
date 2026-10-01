@@ -1,7 +1,7 @@
-import { OWNER_HANDLE } from "./owner"
+import { OWNER_CONTACT_URL } from "./owner"
 
 // The Instagram DM is the disclosure channel.
-const CONTACT = `https://ig.me/m/${OWNER_HANDLE}`
+const CONTACT = OWNER_CONTACT_URL
 const VALID_DAYS = 364
 const DAY_MS = 24 * 60 * 60 * 1000
 

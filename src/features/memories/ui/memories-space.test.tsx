@@ -6,11 +6,13 @@ import { MemoriesSpace } from "./memories-space"
 const listMemories = vi.fn()
 const prepareUpload = vi.fn()
 const createMemory = vi.fn()
+const suggestPlace = vi.fn()
 const uploadToCloudinary = vi.fn()
 vi.mock("../actions", () => ({
   listMemories: () => listMemories(),
   prepareUpload: () => prepareUpload(),
   createMemory: (input: unknown) => createMemory(input),
+  suggestPlace: (input: unknown) => suggestPlace(input),
 }))
 vi.mock("./cloudinary-upload", () => ({ uploadToCloudinary: (o: unknown) => uploadToCloudinary(o) }))
 vi.mock("@/shared/analytics", () => ({ track: vi.fn() }))
@@ -59,7 +61,7 @@ describe("MemoriesSpace adding a memory", () => {
   it("appends the saved memory as a pending orb and leaves the others where they are", async () => {
     listMemories.mockResolvedValue({ ok: true, memories: [view("a", "El primer viaje")] })
     const saved = view("new", "Una tarde de lluvia", { status: "pending" })
-    createMemory.mockResolvedValue({ ok: true, memory: saved })
+    createMemory.mockResolvedValue({ ok: true, memory: saved, locationSaved: false })
     render(<MemoriesSpace />)
     await screen.findByRole("button", { name: /El primer viaje/ })
     const before = screen.getByRole("button", { name: /El primer viaje/ }).getAttribute("style")

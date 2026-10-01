@@ -21,6 +21,14 @@ enum MemoryStatus {
   @@map("memory_status")
 }
 
+/// Where a stored place came from: the photo's own GPS, or a Google Maps link the visitor pasted.
+enum LocationSource {
+  photo
+  link
+
+  @@map("location_source")
+}
+
 /// What kind of media a memory holds. Only photos for now; audio and video come later.
 enum MediaKind {
   image
@@ -58,6 +66,10 @@ model Memory {
   /// Approximate location, rounded to 2 decimals (about 1 km). Set only when the visitor opted in. Never exact.
   approxLatitude  Decimal? @map("approx_latitude") @db.Decimal(5, 2)
   approxLongitude Decimal? @map("approx_longitude") @db.Decimal(5, 2)
+  /// Short human label of the approximate location (neighbourhood and city). Only with a location. Never sent to the client.
+  placeName      String?         @map("place_name") @db.VarChar(120)
+  /// Set if and only if the approximate location is.
+  locationSource LocationSource? @map("location_source")
 
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")

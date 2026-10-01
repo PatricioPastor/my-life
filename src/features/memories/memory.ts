@@ -1,4 +1,4 @@
-import type { MediaKind, MetadataValue, PaletteColor, PhotoDetails } from "./photo-details"
+import type { LocationSource, MediaKind, MetadataValue, PaletteColor, PhotoDetails } from "./photo-details"
 
 export type MemoryStatus = "pending" | "approved" | "rejected"
 
@@ -29,6 +29,10 @@ export interface Memory {
   /** Rounded to 2 decimals (about 1 km), stored only when the visitor opted in. Never sent to the client. */
   approxLatitude: number | null
   approxLongitude: number | null
+  /** Short label of the approximate location. Never sent to the client. */
+  placeName: string | null
+  /** Where the location came from; set if and only if the location is. */
+  locationSource: LocationSource | null
 }
 
 /** What a visitor submits. The handle comes from the session, never from this input. */

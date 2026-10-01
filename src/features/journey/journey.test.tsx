@@ -8,6 +8,7 @@ vi.mock("@/features/memories/actions", () => ({
   listMemories: () => listMemories(),
   prepareUpload: vi.fn(),
   createMemory: vi.fn(),
+  suggestPlace: vi.fn(),
 }))
 const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
