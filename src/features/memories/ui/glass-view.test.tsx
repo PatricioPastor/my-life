@@ -41,11 +41,12 @@ interface Props {
   onStep: (id: string) => void
   onClose: () => void
   onRestoreFocus: (id: string) => void
+  onWarm: (memory: MemoryView) => void
 }
 
 const DESKTOP = { width: 1440, height: 900 }
 
-function mount(over: Partial<Props> = {}, viewport = DESKTOP) {
+function mount(over: Partial<Props> = {}, viewport: { width: number; height: number; dpr?: number } = DESKTOP) {
   const props: Props = {
     memory: photo,
     prev: null,
@@ -54,6 +55,7 @@ function mount(over: Partial<Props> = {}, viewport = DESKTOP) {
     onStep: vi.fn(),
     onClose: vi.fn(),
     onRestoreFocus: vi.fn(),
+    onWarm: vi.fn(),
     ...over,
   }
   const utils = render(<GlassView {...props} container={document.body} viewport={viewport} />)
@@ -157,6 +159,19 @@ describe("GlassView photo", () => {
     mount()
     const img = within(dialog()).getByRole("img", { name: "Una tarde de lluvia" }) as HTMLImageElement
     expect(img.src).toBe("https://res.cloudinary.com/demo/f/p")
+  })
+
+  it("holds the photo at the size the glass shows it on this screen, the same square crop as the orb", () => {
+    const sizes = [96, 192, 384, 768, 1600].map((width) => ({ width, url: `https://res.cloudinary.com/demo/sq/${width}/p` }))
+    const ladder = view("p", "Una tarde de lluvia", { photo: { sizes } })
+    const srcAt = (dpr: number) => {
+      const { unmount } = mount({ memory: ladder }, { ...DESKTOP, dpr })
+      const src = (within(dialog()).getByRole("img", { name: "Una tarde de lluvia" }) as HTMLImageElement).src
+      unmount()
+      return src
+    }
+    expect(srcAt(1)).toBe("https://res.cloudinary.com/demo/sq/768/p")
+    expect(srcAt(2)).toBe("https://res.cloudinary.com/demo/sq/1600/p")
   })
 
   it("loads the photo with CORS so WebGL may read it", () => {
@@ -276,6 +291,12 @@ describe("GlassView next and previous", () => {
     expect(props.onStep).toHaveBeenLastCalledWith("y")
     fireEvent.click(within(dialog()).getByRole("button", { name: "Anterior" }))
     expect(props.onStep).toHaveBeenLastCalledWith("x")
+  })
+
+  it("keeps the memories on either side warm while it is open, so a step lands on a sharp photo", () => {
+    const { props } = mount({ prev, next })
+    expect(props.onWarm).toHaveBeenCalledWith(prev)
+    expect(props.onWarm).toHaveBeenCalledWith(next)
   })
 
   it("stops at the ends", () => {

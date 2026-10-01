@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl, squareTransform } from "./cloudinary-url"
 import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
@@ -291,6 +291,9 @@ describe("createMemoryWith: rate limit and insert", () => {
         orbColor: DEFAULT_ORB_COLOR,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
+        photo: {
+          sizes: [96, 192, 384, 768, 1600].map((width) => ({ width, url: cloudinaryUrl("demo", PID, squareTransform(width), "abcd") })),
+        },
         audio: null,
       },
     })
@@ -458,7 +461,8 @@ describe("createMemoryWith: the place", () => {
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     if (!result.ok) throw new Error("expected ok")
     expect(result.memory.place).toEqual({ lat: 40.71, lng: -74.01, name: "Palermo, Buenos Aires" })
-    expect(JSON.stringify(result.memory)).not.toMatch(/locationSource|photo"|40\.7128|74\.006/)
+    // The source never leaves as a value (`"photo"`); the DTO's own `photo` key (its sizes) is not a leak.
+    expect(JSON.stringify(result.memory)).not.toMatch(/locationSource|:"photo"|40\.7128|74\.006/)
   })
 
   it("returns a null place in the DTO when no location was stored", async () => {

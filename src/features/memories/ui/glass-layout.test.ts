@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { OPEN_ZOOM, glassLayout } from "./glass-layout"
+import { LENS_MAX_DPR, OPEN_ZOOM, glassLayout, lensGeometry } from "./glass-layout"
 
 describe("glassLayout", () => {
   it("is a big sphere on a desktop, limited by the height", () => {
@@ -54,5 +54,65 @@ describe("glassLayout on a short, wide screen (a phone in landscape)", () => {
     for (const v of [{ width: 390, height: 844 }, { width: 360, height: 740 }, { width: 1440, height: 900 }]) {
       expect(glassLayout(v).caption).toBe("below")
     }
+  })
+})
+
+describe("lensGeometry: the sphere snapped to the device pixel grid", () => {
+  const sizes = [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+    { width: 1366, height: 768 },
+    { width: 1278, height: 711 },
+  ]
+  const ratios = [1, 1.25, 1.5, 2, 2.625, 3]
+  const onGrid = (css: number, dpr: number) => Math.abs(css * dpr - Math.round(css * dpr)) < 1e-6
+
+  it("puts the center, the sphere's edges and the canvas on whole device pixels, at every size and ratio", () => {
+    for (const vp of sizes)
+      for (const dpr of ratios) {
+        const lens = lensGeometry(vp, dpr)
+        expect(onGrid(lens.center.x, dpr)).toBe(true)
+        expect(onGrid(lens.center.y, dpr)).toBe(true)
+        expect(onGrid(lens.center.x - lens.diameter / 2, dpr)).toBe(true)
+        expect(onGrid(lens.center.y - lens.diameter / 2, dpr)).toBe(true)
+        expect(onGrid(lens.canvas.left, dpr)).toBe(true)
+        expect(onGrid(lens.canvas.top, dpr)).toBe(true)
+        // The canvas backing store is exactly its CSS size in device pixels: nothing is resampled.
+        expect(lens.canvas.css * dpr).toBeCloseTo(lens.canvas.device, 6)
+        expect(Number.isInteger(lens.canvas.device)).toBe(true)
+        expect(lens.canvas.device % 2).toBe(0)
+      }
+  })
+
+  it("keeps the sphere where the layout wants it, within a device pixel", () => {
+    for (const vp of sizes)
+      for (const dpr of ratios) {
+        const layout = glassLayout(vp)
+        const lens = lensGeometry(vp, dpr)
+        expect(Math.abs(lens.diameter - layout.diameter)).toBeLessThanOrEqual(1 / dpr + 1e-9)
+        expect(Math.abs(lens.center.x - layout.anchor.x * vp.width)).toBeLessThanOrEqual(0.5 / dpr + 1e-9)
+        expect(Math.abs(lens.center.y - layout.anchor.y * vp.height)).toBeLessThanOrEqual(0.5 / dpr + 1e-9)
+        expect(lens.caption).toBe(layout.caption)
+      }
+  })
+
+  it("gives the camera the exact center as its anchor", () => {
+    const lens = lensGeometry({ width: 1366, height: 768 }, 1.25)
+    expect(lens.anchor.x * 1366).toBeCloseTo(lens.center.x, 9)
+    expect(lens.anchor.y * 768).toBeCloseTo(lens.center.y, 9)
+  })
+
+  it("leaves the canvas a margin all round the sphere for its rim", () => {
+    const lens = lensGeometry({ width: 1440, height: 900 }, 2)
+    expect(lens.canvas.css).toBeGreaterThan(lens.diameter * 1.05)
+    expect(lens.canvas.left + lens.canvas.css / 2).toBeCloseTo(lens.center.x, 9)
+  })
+
+  it("draws at the device ratio, up to 3", () => {
+    expect(lensGeometry({ width: 390, height: 844 }, 3).dpr).toBe(3)
+    expect(lensGeometry({ width: 390, height: 844 }, 4).dpr).toBe(3)
+    expect(lensGeometry({ width: 390, height: 844 }, 0).dpr).toBe(1)
+    expect(LENS_MAX_DPR).toBe(3)
   })
 })

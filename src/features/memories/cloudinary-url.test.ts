@@ -9,6 +9,7 @@ import {
   cloudinaryAudioUrl,
   cloudinaryUrl,
   signDeliveryPath,
+  squareTransform,
 } from "./cloudinary-url"
 
 // Test vector from Cloudinary's "Delivery URL signatures" page: secret `abcd`, the `sample-authenticated.png`
@@ -99,5 +100,21 @@ describe("cloudinaryAudioUrl", () => {
     expect(() => cloudinaryAudioUrl("demo", "a/../b", "abcd")).toThrow()
     expect(() => cloudinaryAudioUrl("", AID, "abcd")).toThrow()
     expect(() => cloudinaryAudioUrl("demo", AID, "")).toThrow()
+  })
+})
+
+describe("squareTransform", () => {
+  it("crops a face-aware square of an exact side, in the best format the browser takes", () => {
+    expect(squareTransform(384)).toBe("f_auto,q_auto,c_fill,g_auto,w_384,h_384")
+  })
+
+  it("asks for the best quality on the sizes the glass and the approach show up close", () => {
+    expect(squareTransform(768)).toBe("f_auto,q_auto:best,c_fill,g_auto,w_768,h_768")
+    expect(squareTransform(1600)).toBe("f_auto,q_auto:best,c_fill,g_auto,w_1600,h_1600")
+  })
+
+  it("only takes whole positive sides", () => {
+    expect(() => squareTransform(0)).toThrow()
+    expect(() => squareTransform(12.5)).toThrow()
   })
 })

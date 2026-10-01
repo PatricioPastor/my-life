@@ -1,8 +1,9 @@
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl, squareTransform } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
-import type { ListMemoriesResult, MemoryPlace, MemoryView } from "./memory-view"
+import type { ListMemoriesResult, MemoryPhoto, MemoryPlace, MemoryView } from "./memory-view"
 import { chooseOrbColor } from "./orb-color"
+import { deliverySides } from "./photo-ladder"
 import { roundCoordinate } from "./place/coordinates"
 
 export interface ListMemoriesDeps {
@@ -27,6 +28,17 @@ function toPlace(memory: Memory): MemoryPlace | null {
   return { lat: roundCoordinate(memory.latitude), lng: roundCoordinate(memory.longitude), name: memory.placeName }
 }
 
+/** The photo's signed square crops, one per side the photo can fill (see `deliverySides`). */
+function toPhoto(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryPhoto | null {
+  if (memory.publicId === null || memory.width === null || memory.height === null) return null
+  const publicId = memory.publicId
+  const sizes = deliverySides(memory.width, memory.height).map((width) => ({
+    width,
+    url: cloudinaryUrl(cloudName, publicId, squareTransform(width), apiSecret),
+  }))
+  return sizes.length > 0 ? { sizes } : null
+}
+
 export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryView | null {
   if (memory.status === "rejected") return null
   // A row with neither a photo nor an audio cannot exist (a CHECK refuses it); if one did, it would show nothing.
@@ -46,6 +58,7 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
     thumbUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
+    photo: toPhoto(memory, { cloudName, apiSecret }),
     // The original (webm, ogg, m4a...) never leaves the server: the browser gets a signed mp3 transcode.
     audio: memory.audio
       ? { url: cloudinaryAudioUrl(cloudName, memory.audio.publicId, apiSecret), durationMs: memory.audio.durationMs }

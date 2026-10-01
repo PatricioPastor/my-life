@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl, squareTransform } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
@@ -77,10 +77,28 @@ describe("listMemoriesWith", () => {
           orbColor: "#ff9a3c",
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
+          // An 800 x 600 photo: every rung its 600 px side fills, plus 600 itself; nothing is upscaled.
+          photo: {
+            sizes: [96, 192, 384, 600].map((width) => ({
+              width,
+              url: cloudinaryUrl("demo", "memories/a b", squareTransform(width), "abcd"),
+            })),
+          },
           audio: null,
         },
       ],
     })
+  })
+
+  it("signs the photo at every size of the width ladder for a big photo, square and face-aware", async () => {
+    const { full } = deps({}, [memory({ width: 4032, height: 3024 })])
+    const result = await listMemoriesWith(full)
+    const sizes = result.ok ? result.memories[0].photo?.sizes : null
+    expect(sizes?.map((s) => s.width)).toEqual([96, 192, 384, 768, 1600])
+    for (const size of sizes ?? []) {
+      expect(size.url).toContain(`c_fill,g_auto,w_${size.width},h_${size.width}`)
+      expect(size.url).toContain("/image/authenticated/s--")
+    }
   })
 
   it("never leaks the handle or the public id", async () => {
@@ -222,6 +240,11 @@ describe("listMemoriesWith: photo, audio or both", () => {
     if (!result.ok) throw new Error("expected ok")
     return result.memories[0]
   }
+
+  it("sends no photo sizes for a voice with no photo", async () => {
+    const view = await list(memory({ publicId: null, width: null, height: null, format: null, bytes: null, audio }))
+    expect(view.photo).toBeNull()
+  })
 
   it("maps a photo-only memory with a null audio", async () => {
     expect(await list(memory())).toMatchObject({ audio: null, width: 800, height: 600 })

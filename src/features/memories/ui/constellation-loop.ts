@@ -45,6 +45,11 @@ interface LoopOptions {
   onFrame?: (dt: number) => void
   /** One settled, still frame; nothing is scheduled. */
   reduced: boolean
+  /**
+   * The approach disc: laid out at the glass diameter, it is moved onto the orb being approached and scaled to its size
+   * every frame (never above 1), and marked `data-on` while there is one.
+   */
+  disc?: HTMLElement | null
 }
 
 export interface ConstellationLoop {
@@ -83,7 +88,7 @@ const hexToRgb = (hex: string): [number, number, number] => {
  * schedules anything: the camera asks it to `redraw` when it moves.
  */
 export function startConstellation(options: LoopOptions): ConstellationLoop {
-  const { sim, edges, colors, items, canvas, reduced, camera, onFrame } = options
+  const { sim, edges, colors, items, canvas, reduced, camera, onFrame, disc } = options
   let { width, height } = options
   const n = sim.count
   const ctx = canvas?.getContext("2d") ?? null
@@ -182,14 +187,21 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
       const at = worldToScreen(cam, viewport, { x: worldX[i], y: worldY[i] })
       drawX[i] = at.x
       drawY[i] = at.y
-      let s = scale
-      if (emphasis && emphasis.index === i && emphasis.amount > 0) {
-        s *= 1 + (Math.max(emphasis.diameter / (THUMB_PX * scale), 1) - 1) * emphasis.amount
-      }
+      // The orb itself keeps its size: the approach disc grows in its place.
       const el = items[i]
-      if (el) el.style.transform = `translate3d(${at.x.toFixed(2)}px, ${at.y.toFixed(2)}px, 0) scale(${s.toFixed(3)})`
+      if (el) el.style.transform = `translate3d(${at.x.toFixed(2)}px, ${at.y.toFixed(2)}px, 0) scale(${scale.toFixed(3)})`
     }
     const now = emphasis && emphasis.amount > 0.02 ? emphasis.index : null
+    if (disc) {
+      if (now !== null && emphasis) {
+        // Laid out at the glass diameter and scaled down to the orb: at arrival it is exactly the sphere, unscaled.
+        const full = emphasis.diameter
+        const base = THUMB_PX * scale
+        const size = base + Math.max(full - base, 0) * emphasis.amount
+        disc.style.transform = `translate3d(${(drawX[now] - full / 2).toFixed(2)}px, ${(drawY[now] - full / 2).toFixed(2)}px, 0) scale(${(size / full).toFixed(4)})`
+        if (disc.dataset.on !== "true") disc.dataset.on = "true"
+      } else if (disc.dataset.on === "true") disc.dataset.on = "false"
+    }
     if (now !== focused) {
       const before = focused !== null ? items[focused]?.firstElementChild : null
       if (before) {

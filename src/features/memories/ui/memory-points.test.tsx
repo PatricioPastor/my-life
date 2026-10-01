@@ -4,7 +4,10 @@ import type { MemoryView } from "../memory-view"
 import { worldBounds, type Camera } from "./camera"
 import { createCameraController, type CameraController } from "./camera-controller"
 import { MemoryPoints, type PointsHandle } from "./memory-points"
-import { OPEN_ZOOM } from "./glass-layout"
+import { OPEN_ZOOM, lensGeometry } from "./glass-layout"
+import { PHOTO_RUNGS, approachSizes } from "../photo-ladder"
+import type { PhotoCache } from "./photo-cache"
+import { orbScale } from "./camera"
 
 const view = (id: string, caption: string, over: Partial<MemoryView> = {}): MemoryView => ({
   id,
@@ -41,7 +44,7 @@ function mount(
   memories: readonly MemoryView[],
   reduced = false,
   onOpen: (id: string, world: { x: number; y: number }) => void = () => {},
-  extra: { approachId?: string | null } = {},
+  extra: { approachId?: string | null; cache?: PhotoCache } = {},
 ) {
   const aspect = window.innerWidth / window.innerHeight
   controller = createCameraController({
@@ -58,6 +61,7 @@ function mount(
     reduced,
     approachId,
     onOpen,
+    cache: extra.cache,
     ref: handle,
   })
   const utils = render(<MemoryPoints {...props(memories, extra.approachId ?? null)} />)
@@ -450,20 +454,154 @@ describe("MemoryPoints approach", () => {
     expect(orb(/Uno/).getAttribute("data-link")).toBe("idle")
   })
 
-  it("grows the orb toward the glass as the camera comes in, and shows its photo", () => {
+  it("marks the orb being approached, and stops its breath as the camera comes in", () => {
     const { again } = mount(trip, true)
     again(trip, { approachId: "a" })
     const a = orb(/Uno/)
-    const small = scaleOf(a)
     const world = handle.current!.worldOf("a")!
     controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM })
-    expect(scaleOf(a)).toBeGreaterThan(small * 3)
     expect(a.getAttribute("data-focus")).toBe("true")
     // The orb stops breathing as it fills the screen (the breath would be scaled up with it).
     expect(Number(a.style.getPropertyValue("--focus"))).toBeCloseTo(1, 2)
     controller.jump({ ...controller.camera(), zoom: 0.5 })
     expect(a.hasAttribute("data-focus")).toBe(false)
     expect(Number(a.style.getPropertyValue("--focus"))).toBe(0)
+  })
+})
+
+/** A photo cache the test drives: what is decoded, and when something lands. */
+function fakeCache(decoded: string[] = []) {
+  const ready = new Set(decoded)
+  const listeners = new Set<(url: string) => void>()
+  const cache = {
+    warm: vi.fn(),
+    adopt: vi.fn(),
+    isDecoded: (url: string) => ready.has(url),
+    get: () => null,
+    load: vi.fn(() => new Promise<HTMLImageElement>(() => {})),
+    bitmap: vi.fn(() => new Promise<ImageBitmap>(() => {})),
+    subscribe: (listener: (url: string) => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
+  const land = (url: string) =>
+    act(() => {
+      ready.add(url)
+      for (const listener of [...listeners]) listener(url)
+    })
+  return { cache: cache as unknown as PhotoCache & typeof cache, land }
+}
+
+const withLadder = (m: MemoryView): MemoryView => ({
+  ...m,
+  photo: { sizes: PHOTO_RUNGS.map((width) => ({ width, url: `${m.id}-${width}` })) },
+})
+const ladderTrip = trip.map(withLadder)
+const photoOf = (name: RegExp) => orb(name).querySelector("img")?.getAttribute("src")
+const lens = () => lensGeometry({ width: window.innerWidth, height: window.innerHeight }, window.devicePixelRatio || 1)
+
+describe("MemoryPoints photos at the size they are shown", () => {
+  it("shows each orb's photo at the size it is drawn on this screen", () => {
+    mount(ladderTrip, true, undefined, { cache: fakeCache().cache })
+    // A 40 px orb at the fitted zoom on a 1x screen: the 96 px crop.
+    expect(photoOf(/Uno/)).toBe("a-96")
+  })
+
+  it("fetches a bigger size once the camera zooms in, and keeps it when it zooms back out", () => {
+    vi.stubGlobal("devicePixelRatio", 2)
+    mount(ladderTrip, true, undefined, { cache: fakeCache().cache })
+    act(() => controller.jump({ ...controller.camera(), zoom: 3 }))
+    // 40 x orbScale(3) x 2 is about 154 device px: 192.
+    expect(40 * orbScale(3) * 2).toBeGreaterThan(120)
+    expect(photoOf(/Uno/)).toBe("a-192")
+    act(() => controller.jump({ ...controller.camera(), zoom: 0.5 }))
+    expect(photoOf(/Uno/)).toBe("a-192")
+  })
+
+  it("loads the orb photos with CORS and hands each one to the shared cache", () => {
+    const { cache } = fakeCache()
+    mount(ladderTrip, true, undefined, { cache })
+    const img = orb(/Uno/).querySelector("img")!
+    expect(img.crossOrigin).toBe("anonymous")
+    fireEvent.load(img)
+    expect(cache.adopt).toHaveBeenCalledWith("a-96", img)
+  })
+
+  it("warms the glass sizes as soon as the visitor shows intent: a hover, a focus or a finger down", () => {
+    const { cache } = fakeCache()
+    mount(ladderTrip, false, undefined, { cache })
+    const sizesOf = (i: number) => approachSizes(ladderTrip[i].photo!.sizes, lens().diameter, lens().dpr)
+    fireEvent.pointerOver(orb(/Uno/), { pointerType: "mouse" })
+    expect(cache.warm).toHaveBeenLastCalledWith(sizesOf(0))
+    act(() => orb(/Dos/).focus())
+    expect(cache.warm).toHaveBeenLastCalledWith(sizesOf(1))
+    fireEvent.pointerDown(orb(/Tres/), { pointerType: "touch" })
+    expect(cache.warm).toHaveBeenLastCalledWith(sizesOf(2))
+  })
+
+  it("asks for nothing for a voice with no photo", () => {
+    const { cache } = fakeCache()
+    const voice = view("v", "Voz", { thumbUrl: null, fullUrl: null, width: null, height: null, audio: { url: "x", durationMs: 1 } })
+    mount([voice], false, undefined, { cache })
+    fireEvent.pointerOver(orb(/Voz/), { pointerType: "mouse" })
+    expect(cache.warm).not.toHaveBeenCalled()
+  })
+})
+
+describe("MemoryPoints approach disc", () => {
+  const disc = () => document.querySelector<HTMLElement>("[data-focus-disc]")!
+  const discImages = () => Array.from(disc().querySelectorAll("img")).map((img) => img.getAttribute("src"))
+
+  it("grows a disc to the glass as the camera comes in, while the orb itself keeps its size", () => {
+    const { again } = mount(ladderTrip, true, undefined, { cache: fakeCache(["a-96"]).cache })
+    again(ladderTrip, { approachId: "a" })
+    const world = handle.current!.worldOf("a")!
+    const { diameter } = lens()
+    act(() => controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM }))
+    expect(disc().getAttribute("data-on")).toBe("true")
+    expect(disc().style.width).toBe(`${diameter}px`)
+    const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0\) scale\(([\d.]+)\)/.exec(disc().style.transform)!
+    const center = at(orb(/Uno/))!
+    expect(Number(m[3])).toBeCloseTo(1, 3)
+    expect(Number(m[1]) + diameter / 2).toBeCloseTo(center.x, 1)
+    expect(Number(m[2]) + diameter / 2).toBeCloseTo(center.y, 1)
+    // The orb is never blown up itself: only the disc grows.
+    expect(scaleOf(orb(/Uno/))).toBeCloseTo(orbScale(OPEN_ZOOM), 3)
+    act(() => controller.jump({ ...controller.camera(), zoom: 0.5 }))
+    expect(disc().getAttribute("data-on")).toBe("false")
+  })
+
+  it("shows the sharpest decoded size and fades a sharper one in over it when it lands", () => {
+    vi.useFakeTimers()
+    const { cache, land } = fakeCache(["a-96"])
+    const { again } = mount(ladderTrip, true, undefined, { cache })
+    again(ladderTrip, { approachId: "a" })
+    expect(discImages()).toEqual(["a-96"])
+    land("a-384")
+    expect(discImages()).toEqual(["a-96", "a-384"])
+    expect(disc().querySelectorAll("img")[1].hasAttribute("data-enter")).toBe(true)
+    act(() => vi.advanceTimersByTime(400))
+    expect(discImages()).toEqual(["a-384"])
+    // A smaller size landing late never replaces a sharper one.
+    land("a-192")
+    expect(discImages()).toEqual(["a-384"])
+    vi.useRealTimers()
+  })
+
+  it("is never blank: before any photo has landed it holds the orb's own light", () => {
+    const { again } = mount(ladderTrip, true, undefined, { cache: fakeCache().cache })
+    again(ladderTrip, { approachId: "a" })
+    expect(discImages()).toEqual([])
+    expect(disc().querySelector("[data-disc-light]")).not.toBeNull()
+    expect(disc().style.getPropertyValue("--pc")).toBe("#8ab4ff")
+  })
+
+  it("warms the sizes the approach needs as soon as it starts", () => {
+    const { cache } = fakeCache()
+    const { again } = mount(ladderTrip, true, undefined, { cache })
+    again(ladderTrip, { approachId: "b" })
+    expect(cache.warm).toHaveBeenLastCalledWith(approachSizes(ladderTrip[1].photo!.sizes, lens().diameter, lens().dpr))
   })
 })
 

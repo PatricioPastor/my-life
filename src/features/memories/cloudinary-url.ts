@@ -8,6 +8,20 @@ export const THUMB_TRANSFORM = "f_auto,q_auto,c_fill,g_auto,w_160,h_160"
 /** The viewer's photo: never upscaled, never wider than 1600 px. */
 export const FULL_TRANSFORM = "f_auto,q_auto,c_limit,w_1600"
 
+/** From this side up the crop is shown up close (the approach and the glass), so it asks for the best quality. */
+const BEST_QUALITY_FROM = 768
+
+/**
+ * A face-aware square crop of an exact side: the size ladder of the canvas. The orb, the approach and the glass all
+ * show the same crop, so nothing re-frames as the camera comes in. The caller never asks for more than the photo's
+ * shorter side (see `deliverySides`), so `c_fill` never upscales.
+ */
+export function squareTransform(side: number): string {
+  if (!Number.isInteger(side) || side <= 0) throw new Error("A square side must be a positive whole number of pixels.")
+  const quality = side >= BEST_QUALITY_FROM ? "q_auto:best" : "q_auto"
+  return `f_auto,${quality},c_fill,g_auto,w_${side},h_${side}`
+}
+
 /**
  * An audio plays in every browser as mp3, whatever the visitor recorded (Safari and iOS cannot play webm or opus).
  * The format rides in the signed transformation, so the signature covers it.

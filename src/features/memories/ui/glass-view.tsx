@@ -5,9 +5,10 @@ import { Dialog } from "radix-ui"
 import { probeRenderer } from "@/features/onboarding/gpu-probe"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
+import { ladderOf, pickSize } from "../photo-ladder"
 import type { Viewport } from "./camera"
 import { smoothedReader } from "./audio-level"
-import { glassLayout } from "./glass-layout"
+import { glassLayout, lensGeometry } from "./glass-layout"
 import { formatClock, pickGlassMode } from "./glass-mode"
 import { GlassOrb } from "./glass-orb"
 import { swipeStep } from "./swipe"
@@ -21,12 +22,15 @@ interface GlassViewProps {
   /** The element the dialog mounts into, so it stays inside the stage (and its cursor). */
   container: HTMLElement | null
   reduced: boolean
-  viewport: Viewport
+  /** The viewport, and its device pixel ratio (the photo is fetched for the sphere's size in device pixels). */
+  viewport: Viewport & { dpr?: number }
   /** Another memory to fly to (the arrows, the buttons, a swipe). */
   onStep: (id: string) => void
   onClose: () => void
   /** Called once the dialog has closed, to put focus back on the orb that was opened. */
   onRestoreFocus: (id: string) => void
+  /** Warms a memory's photo (the neighbours, while this one is open), so a step lands on a sharp photo. */
+  onWarm?: (memory: MemoryView) => void
 }
 
 const Chevron = ({ flip }: { flip?: boolean }) => (
@@ -91,6 +95,8 @@ function GlassBody({
   }
 
   const { diameter, anchor, caption: captionAt } = glassLayout(viewport)
+  // The same square crop the orb showed, at the size the sphere needs on this screen.
+  const photoUrl = pickSize(ladderOf(memory), diameter, lensGeometry(viewport, viewport.dpr ?? 1).dpr)?.url ?? null
   const side = captionAt === "side"
   const sphere: SphereStyle = {
     "--pc": memory.orbColor,
@@ -139,7 +145,15 @@ function GlassBody({
         className="mem-glass-sphere pointer-events-auto absolute touch-none"
         style={sphere}
       >
-        <GlassOrb memory={memory} mode={mode} reduced={reduced} level={level} diameter={diameter} onFail={onFail} />
+        <GlassOrb
+          memory={memory}
+          photoUrl={photoUrl}
+          mode={mode}
+          reduced={reduced}
+          level={level}
+          diameter={diameter}
+          onFail={onFail}
+        />
         {memory.audio && (
           <div className="absolute bottom-0 left-1/2 flex -translate-x-1/2 translate-y-1/2 items-center gap-3">
             <button
@@ -217,11 +231,29 @@ function GlassBody({
  * the buttons and a swipe fly to the neighbours) so focus is managed and the rest of the stage is hidden from the
  * cursor and from assistive technology. It keeps the last memory on screen while it fades out.
  */
-export function GlassView({ memory, prev, next, container, reduced, viewport, onStep, onClose, onRestoreFocus }: GlassViewProps) {
+export function GlassView({
+  memory,
+  prev,
+  next,
+  container,
+  reduced,
+  viewport,
+  onStep,
+  onClose,
+  onRestoreFocus,
+  onWarm,
+}: GlassViewProps) {
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
   if (memory && memory !== held) setHeld(memory)
   const shown = memory ?? held
+
+  // The memories on either side are a step away: their photos are fetched and decoded now.
+  useEffect(() => {
+    if (!memory || !onWarm) return
+    if (prev) onWarm(prev)
+    if (next) onWarm(next)
+  }, [memory, prev, next, onWarm])
 
   // A swipe anywhere on the glass turns the page (the sphere, the caption or the empty stage); the camera cannot pan
   // while it is open, so the two never compete.

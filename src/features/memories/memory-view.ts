@@ -28,8 +28,26 @@ export interface MemoryView {
   /** Null when there is no photo. */
   thumbUrl: string | null
   fullUrl: string | null
+  /**
+   * The photo at the sizes it is shown at: signed, face-aware square crops (one per rung of the width ladder, never
+   * upscaled), so the canvas fetches what a diameter x DPR needs and the orb and the glass show the same crop.
+   * Additive: `thumbUrl` and `fullUrl` are unchanged. The server always sends it for a photo (null for a voice only);
+   * it is optional so older DTOs and fixtures stay valid, and clients fall back to `thumbUrl` and `fullUrl`.
+   */
+  photo?: MemoryPhoto | null
   /** The voice of the memory, or null when it has none. */
   audio: MemoryAudio | null
+}
+
+/** Signed square crops of a photo, ascending by width. */
+export interface MemoryPhoto {
+  sizes: readonly PhotoSize[]
+}
+
+/** One square crop: `width` px on each side, at a signed delivery URL. */
+export interface PhotoSize {
+  width: number
+  url: string
 }
 
 /** A playable audio: a signed URL of a transcode every browser plays (mp3), and how long it lasts. */

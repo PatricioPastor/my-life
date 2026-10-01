@@ -462,14 +462,48 @@
   .mem-stage[data-cut="out"] .mem-world {
     opacity: 0;
   }
-  /* The orb being approached shows its photo as it grows, and the glass takes over from it. */
-  .mem-point[data-focus="true"] .mem-thumb {
-    opacity: 1;
-    transform: none;
-  }
-  .mem-point[data-focus="true"]:has(.mem-thumb) .mem-dot,
-  .mem-point[data-focus="true"] .mem-pending {
+  /* The orb being approached hands over to its disc (laid out at the glass size, so it is never an enlarged
+     thumbnail), which grows as the camera comes in; the glass takes over from it on arrival. */
+  .mem-point[data-focus="true"] .mem-thumb,
+  .mem-point[data-focus="true"] .mem-dot,
+  .mem-point[data-focus="true"] .mem-pending,
+  .mem-point[data-focus="true"] .mem-drift::before {
     opacity: 0;
+  }
+  .mem-disc {
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    opacity: 0;
+    transform-origin: 50% 50%;
+    border-radius: 50%;
+    box-shadow: 0 0 calc(var(--d, 400px) * 0.09) color-mix(in oklab, var(--pc, #8ab4ff) 24%, transparent);
+    transition: opacity 180ms var(--ease);
+  }
+  .mem-disc[data-on="true"] {
+    opacity: 1;
+  }
+  .mem-disc > img,
+  .mem-disc-light {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+  }
+  .mem-disc > img {
+    object-fit: cover;
+  }
+  .mem-disc > img[data-enter] {
+    animation: fade 220ms var(--ease) both;
+  }
+  /* Under the photos, and all there is for a voice: the orb's own light in a dark glass. */
+  .mem-disc-light {
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--pc, #8ab4ff) 70%, white) 0%,
+      color-mix(in oklab, var(--pc, #8ab4ff) 46%, #05060c) 26%,
+      color-mix(in oklab, var(--pc, #8ab4ff) 10%, #05060c) 62%,
+      #05060c 100%
+    );
   }
   /* A memory with a voice sends a faint ring out of its orb now and then. */
   .mem-point[data-voice="true"] .mem-drift::before {

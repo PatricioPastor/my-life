@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { ensureGambarinoStylesheet } from "@/features/onboarding/font"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import type { MemoriesFailure, MemoryView } from "../memory-view"
+import { approachSizes, ladderOf } from "../photo-ladder"
 import { orderByDate } from "./approach"
 import { parallaxOffset, worldBounds } from "./camera"
 import { createCameraController } from "./camera-controller"
 import { DustCanvas } from "./dust-canvas"
+import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
 import { MemoryPoints, type PointsHandle } from "./memory-points"
+import { createPhotoCache } from "./photo-cache"
 import { useApproach } from "./use-approach"
 import { useViewport } from "./use-viewport"
 import { VOID_GLOWS } from "./void-glows"
@@ -61,6 +64,9 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   const bounds = useMemo(() => worldBounds(memories.length, aspect), [memories.length, aspect])
   const [controller] = useState(() => createCameraController({ reduced, viewport, bounds, pad: FIT_PAD }))
   const points = useRef<PointsHandle>(null)
+  // Every photo the space shows is fetched and decoded once, here, and shared by the orbs, the approach and the glass.
+  const [photos] = useState(() => createPhotoCache())
+  const lens = lensGeometry(viewport, viewport.dpr)
   const ordered = useMemo(() => orderByDate(memories), [memories])
   const approach = useApproach(controller, ordered, points)
   const current = approach.state
@@ -115,6 +121,13 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
 
   // The keyboard goes back to the orb that was opened, quietly: the overview must look exactly as it did before.
   const restoreFocus = useCallback((id: string) => points.current?.restoreFocus(id), [])
+  const warm = useCallback(
+    (memory: MemoryView) => {
+      const sizes = approachSizes(ladderOf(memory), lens.diameter, lens.dpr)
+      if (sizes.length > 0) photos.warm(sizes)
+    },
+    [photos, lens.diameter, lens.dpr],
+  )
 
   // Escape on the stage (focus on an orb, or the glass not open yet) turns the camera back, as it does from the glass.
   const onKeyDown = (event: KeyboardEvent) => {
@@ -166,6 +179,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
             reduced={reduced}
             approachId={approach.state.phase === "idle" ? null : approach.state.id}
             paused={current.phase === "open"}
+            cache={photos}
             onOpen={approach.open}
           />
         )}
@@ -212,6 +226,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         onStep={approach.step}
         onClose={approach.close}
         onRestoreFocus={restoreFocus}
+        onWarm={warm}
       />
     </div>
   )
