@@ -124,6 +124,13 @@ Make the memories dimension feel alive and personal. Memories float and interact
   - **Visual check.** Playwright (Chromium, software GL) on :3001 against a temporary `/zz-harness` page (deleted before the commits) with 30 fixture memories (a Palermo trip, a Bariloche trip, a Christmas week, five years of one cafe, ten unrelated) and generated SVG thumbnails, at 1440x900 and 390x844: the initial layout, after 9 s and 24 s (four clusters formed with edges), hover on a clustered orb (its links light, the rest dim), reduced motion (the settled layout with edges) and the void at two animation times. Shots in the session scratchpad `shots/c-b-*`. Software GL renders only a few frames per second, so motion is judged from the tests and stills.
   - **Open notes.** Orb color tints and the clusters were only seen on fixtures; the real data is T7's live check. The pointer proximity pin (56 px) is a stand-in for the magnetic cursor's capture, which does not reach the place. The unrelated-orbs glow flicker was left out on purpose (the personal-space nudge is the interaction).
 
+- 2026-10-01: RDD for T1–T5 (all medium, no findings). The writer A range (2,941 lines) was split for the lens budget.
+  - **Exact location** (`0110529..c867dad`): lineage `review-6753b97fb1286a31`, reviewed in a temporary worktree.
+  - **Orb color and dialog** (`c867dad..30e97b4`): lineage `review-3d6019b844ff6aa1`.
+  - **Summon with R**: lineage `review-cc5880da548ba84c`, reviewed in its own worktree, then cherry-picked as `6bb972c`. The only conflict was in this document; both entries were kept.
+  - **Constellation, dust and void** (`6bb972c..fc67ac9`): lineage `review-e362fdd380a641d2`.
+  - All approved and acknowledged. Integrated checks after the cherry-pick: lint, typecheck, 1665 tests, build `○`. Reviewed boundary: `fc67ac9`.
+
 ## Next step
 
 T6 (mobile pass), then T7. T3, T4 and T5 are done (T5 was cherry-picked from `feat/summon-orb`; reviewed there).
