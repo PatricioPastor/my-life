@@ -75,7 +75,7 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - The fly-to approach; the WebGL glass view (replacing the rectangular viewer); the talking orb, driven by `audio` from the DTO.
   - Built against the DTO contract with fixtures.
 - [x] **T3 — Integrate.** Merge `feat/memory-canvas`, run the full checks and RDD.
-- [ ] **T4 — Mobile pass** for the canvas gestures, the glass view and recording.
+- [x] **T4 — Mobile pass** for the canvas gestures, the glass view and recording.
 - [ ] **T5 — Deliver.** Apply the migration after authorization, run a live check (photo, audio-only, both), then fast-forward main.
 
 ## Progress
@@ -135,4 +135,4 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
 
 ## Next step
 
-T1, T2 and T3 are done. T4 (mobile pass) and T5 (deliver) are open.
+T1 to T4 are done. T5 (deliver): apply migration `20261003000000_memory_audio` after the user authorizes; a live check of photo, audio-only and both, including CORS on the signed photo and audio URLs for WebGL and Web Audio; then fast-forward main.
