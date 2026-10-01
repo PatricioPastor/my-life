@@ -1,7 +1,7 @@
 import {
   ALLOWED_FORMATS,
   AUDIO_DURATION_TOLERANCE_MS,
-  AUDIO_FORMATS,
+  AUDIO_STORED_FORMATS,
   MAX_AUDIO_BYTES,
   MAX_AUDIO_MS,
   MAX_UPLOAD_BYTES,
@@ -91,7 +91,7 @@ export function verifyAudio(
   if (info.resourceType !== "video" || info.type !== "authenticated" || !info.isAudio) {
     return { ok: false, problem: "audio_type" }
   }
-  if (!(AUDIO_FORMATS as readonly string[]).includes(format)) return { ok: false, problem: "audio_type" }
+  if (!(AUDIO_STORED_FORMATS as readonly string[]).includes(format)) return { ok: false, problem: "audio_type" }
   const seconds = info.durationSeconds
   if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return { ok: false, problem: "audio_type" }
   if (info.bytes > MAX_AUDIO_BYTES) return { ok: false, problem: "audio_too_large" }

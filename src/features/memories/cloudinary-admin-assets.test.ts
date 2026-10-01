@@ -147,6 +147,69 @@ describe("CloudinaryAdminAssets.describeAudio", () => {
     expect(info?.isAudio).toBe(false)
   })
 
+  // What the Admin API really answered for a 3 s webm recorded by Chrome's MediaRecorder (observed, trimmed): the
+  // container is reported as `mka` (Matroska audio) and the audio flags live in `video_metadata`, not at the top.
+  const recorded = {
+    public_id: AID,
+    resource_type: "video",
+    type: "authenticated",
+    format: "mka",
+    bytes: 40666,
+    width: 0,
+    height: 0,
+    audio_codec: "opus",
+    audio_frequency: 48000,
+    channels: 1,
+    has_audio: true,
+    duration: 2.94,
+    video_metadata: {
+      width: 0,
+      height: 0,
+      has_audio: true,
+      format: "mka",
+      duration: 2.94,
+      audio: { codec: "opus", frequency: 48000, channels: 1, channel_layout: "mono" },
+      video: {},
+      is_audio: true,
+    },
+  }
+
+  it("reads the audio flag Cloudinary nests in video_metadata (a recorded webm is reported as mka)", async () => {
+    const info = await new CloudinaryAdminAssets(config, (async () => json(200, recorded)) as never).describeAudio(AID)
+    expect(info).toEqual({
+      publicId: AID,
+      resourceType: "video",
+      type: "authenticated",
+      format: "mka",
+      bytes: 40666,
+      durationSeconds: 2.94,
+      isAudio: true,
+    })
+  })
+
+  it("does not call a video audio when video_metadata says it is not, or reports a video codec", async () => {
+    const notAudio = { ...recorded, video_metadata: { ...recorded.video_metadata, is_audio: false } }
+    expect(
+      (await new CloudinaryAdminAssets(config, (async () => json(200, notAudio)) as never).describeAudio(AID))?.isAudio,
+    ).toBe(false)
+    const { is_audio: _omit, ...noFlag } = recorded.video_metadata
+    void _omit
+    const withPictures = { ...recorded, video_codec: "vp8", video_metadata: noFlag }
+    expect(
+      (await new CloudinaryAdminAssets(config, (async () => json(200, withPictures)) as never).describeAudio(AID))?.isAudio,
+    ).toBe(false)
+  })
+
+  it("falls back to has_audio with no video stream when no is_audio flag is anywhere", async () => {
+    const { is_audio: _omit, ...noFlag } = recorded.video_metadata
+    void _omit
+    const info = await new CloudinaryAdminAssets(
+      config,
+      (async () => json(200, { ...recorded, video_metadata: noFlag })) as never,
+    ).describeAudio(AID)
+    expect(info?.isAudio).toBe(true)
+  })
+
   it("reads a missing duration as null", async () => {
     const { duration: _omit, ...noDuration } = body
     void _omit
