@@ -52,6 +52,7 @@ uniform vec4 uFocusArms;
 uniform vec4 uOrb;
 uniform vec3 uOrbColor;
 uniform float uOrbFringe;
+uniform vec4 uOrbLens;
 ${decl}
 out vec4 frag;
 
@@ -99,8 +100,13 @@ vec3 field(vec2 pos, vec2 resCss){
   vec2 uv = (pos - 0.5 * resCss) / minSide;
   vec2 p = uv * uScale + uLook * uParallax * 0.05;
 
+  // A peeking orb holds the cursor light back around itself: the pointer sits on the orb while it is
+  // captured, and that warm lamp would brighten the ember gas right behind it and dull its cool preview.
+  vec2 toO = pos - uOrb.xy;
+  float shield = uOrbLens.w * (1.0 - smoothstep(uOrbLens.y * 1.35, max(uOrbLens.z, uOrbLens.y * 1.35 + 1.0), length(toO)));
   vec2 toP = pos - uPointer;
   float lamp = exp(-dot(toP, toP) / (uLensRadius * uLensRadius)) * uPointerOn;
+  lamp *= 1.0 - shield;
   p += toP / minSide * lamp * uLensPush * uScale;
 
   float ring = 0.0;
@@ -130,7 +136,8 @@ vec3 field(vec2 pos, vec2 resCss){
   float d = smoothstep(uThreshold, uThreshold + uSoftness, raw);
   d = clamp(d + lamp * uLens * 0.45 + ring * 0.55, 0.0, 1.0);
   // Focusing a star dims the gas (not the stars) by up to 40%.
-  float gasDim = 1.0 - 0.4 * uFocusAmount;
+  // The gas also thins around a peeking orb, so the window reads against the dark.
+  float gasDim = (1.0 - 0.4 * uFocusAmount) * (1.0 - 0.8 * shield);
   d *= gasDim;
 
   for (int i = 0; i < 16; i++) {
@@ -295,11 +302,74 @@ void main(){
       float kc = od / (R * 0.38);
       float core = exp(-kc * kc);
       vec3 hot = mix(uOrbColor, uStarColor, 0.32);
-      col += halo * uOrbColor * (0.42 * uOrb.w);
+      // Once the lens opens, the soft glow steps back and the lens takes over the middle.
+      float pk = uOrbLens.x;
+      col += halo * uOrbColor * (0.42 * uOrb.w) * (1.0 - 0.45 * pk);
       col = mix(col, mix(uOrbColor, hot, core), oDot * clamp(halo.g * 1.5, 0.0, 1.0) * 0.5 * uOrb.w);
-      col += hot * core * (0.22 * uOrb.w);
+      col += hot * core * (0.22 * uOrb.w) * (1.0 - pk);
       vec3 q = (vec3(od) - R * vec3(0.82, 0.875, 0.93)) / (R * 0.08);
-      col += exp(-q * q) * mix(uOrbColor, vec3(1.0), 0.45) * (0.14 * uOrb.w);
+      col += exp(-q * q) * mix(uOrbColor, vec3(1.0), 0.45) * (0.14 * uOrb.w) * (1.0 - pk);
+    }
+
+    // The lens: a smooth glass sphere onto the memories dimension, drawn over the halftone. Inside it is
+    // the deep near-black void with a faint violet cast, a few round motes at three depths and two tiny
+    // orbs in the orb's own colors, all seen through the sphere (fresnel rim, specular, chromatic fringe).
+    // Nothing here is dithered: it reads as another, smoother world than the halftone around it.
+    float Rl = uOrbLens.y;
+    vec2 oc = css - uOrb.xy;
+    float lr = length(oc) / max(Rl, 1.0);
+    if (uOrbLens.x > 0.001 && Rl > 1.0 && lr < 1.1) {
+      vec2 n2 = oc / Rl;
+      float zz = sqrt(max(1.0 - dot(n2, n2), 0.0));
+      // The glass bends the view toward the rim, so the world inside looks curved.
+      vec2 view = n2 * (1.0 + 0.45 * (1.0 - zz));
+      vec3 lensCol = vec3(0.016, 0.012, 0.036);
+      lensCol += vec3(0.34, 0.29, 0.67) * 0.14 * (1.0 - smoothstep(0.0, 1.25, length(view - vec2(0.05, -0.12))));
+      // Round dust motes: three layers, deeper ones smaller, dimmer and slower, with a hint of parallax.
+      float motes = 0.0;
+      for (int k = 0; k < 3; k++) {
+        float fk = float(k);
+        float depth = 0.35 + 0.325 * fk;
+        vec2 pq = view * (2.3 + 1.2 * fk) + uLook * (0.35 * depth) + vec2(uTime * (0.05 + 0.035 * fk), -uTime * (0.03 + 0.02 * fk)) + fk * 7.3;
+        vec2 cellId = floor(pq);
+        vec2 fr = fract(pq);
+        float h0 = hash12(cellId + fk * 31.0);
+        float h1 = hash12(cellId * 1.3 + 4.7 + fk);
+        float h2 = hash12(cellId * 0.7 + 9.1 + fk);
+        vec2 mc = 0.3 + 0.4 * vec2(h1, h2) + 0.06 * vec2(sin(uTime * 0.6 + h0 * 6.283), cos(uTime * 0.5 + h1 * 6.283));
+        float mr = (0.05 + 0.05 * h2) * (0.55 + 0.75 * depth);
+        float md = length(fr - mc);
+        motes += step(0.42, h0) * exp(-(md * md) / (mr * mr)) * (0.2 + 0.55 * depth);
+      }
+      lensCol += vec3(0.78, 0.82, 1.0) * motes * 0.6;
+      // Two tiny orbs in the orb palette drift through the dimension.
+      vec3 tiny = vec3(0.0);
+      for (int k = 0; k < 2; k++) {
+        float fk = float(k);
+        float ang = uTime * (0.23 + 0.11 * fk) + fk * 3.1;
+        vec2 oc2 = vec2(cos(ang), sin(ang * 1.3 + fk)) * (0.36 + 0.14 * fk) + uLook * (0.05 * (1.0 + fk));
+        float r2 = 0.085 - 0.025 * fk;
+        vec2 dv = view - oc2;
+        float dd2 = dot(dv, dv);
+        vec3 tc = k == 0 ? uOrbColor : uOrbColor.gbr;
+        float body = 1.0 - smoothstep(r2 * 0.55, r2, sqrt(dd2));
+        tiny += tc * (body * 0.9 + exp(-dd2 / (r2 * r2 * 5.0)) * 0.35) + vec3(1.0) * exp(-dd2 / (r2 * r2 * 0.25)) * 0.22;
+      }
+      lensCol += tiny;
+      // Fresnel: the glass brightens toward its rim, in the orb's own light.
+      float fresnel = pow(1.0 - zz, 3.0);
+      lensCol += mix(uOrbColor, vec3(1.0), 0.3) * fresnel * 0.42;
+      // Chromatic fringe: the rim splits into three rings, one per channel, just like the glow's.
+      vec3 rc = vec3(0.975) - vec3(1.3, 0.65, 0.0) * uOrbFringe;
+      vec3 rq = (vec3(lr) - rc) / 0.055;
+      lensCol += exp(-rq * rq) * mix(uOrbColor, vec3(1.0), 0.4) * 0.3;
+      // Specular: a soft highlight up and to the left, and a faint bounce light opposite.
+      vec2 hv = n2 - vec2(-0.36, 0.4);
+      vec2 bv = n2 - vec2(0.44, -0.44);
+      lensCol += vec3(1.0) * (exp(-dot(hv, hv) / 0.01) * 0.55 + exp(-dot(hv, hv) / 0.14) * 0.07);
+      lensCol += uOrbColor * exp(-dot(bv, bv) / 0.03) * 0.14;
+      float lensMask = (1.0 - smoothstep(0.93, 1.0, lr)) * clamp(uOrbLens.x * uOrb.w, 0.0, 1.0);
+      col = mix(col, lensCol, lensMask);
     }
   }
 

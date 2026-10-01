@@ -129,6 +129,35 @@ describe("buildSkyFragment", () => {
     expect(main.indexOf("uOrb.w")).toBeLessThan(main.indexOf("uVignette"))
   })
 
+  it("declares the lens uniform: peek, lens radius, shield radius and shield amount", () => {
+    expect(src).toMatch(/uniform vec4 uOrbLens;/)
+  })
+
+  it("holds the cursor light and the gas back around a peeking orb, so no amber backdrop dulls it", () => {
+    const field = src.slice(src.indexOf("vec3 field("), src.indexOf("void main()"))
+    // The lamp is attenuated by the orb's shield before it lights or pushes the gas.
+    expect(field).toContain("uOrbLens.w")
+    expect(field.indexOf("uOrbLens.w")).toBeLessThan(field.indexOf("float lamp"))
+    expect(field).toMatch(/lamp \*= 1\.0 - /)
+    // The shield never touches the star halos or the focus dim: those are added separately.
+    expect(field.indexOf("lamp *=")).toBeLessThan(field.indexOf("gasDim"))
+  })
+
+  it("draws the lens as a smooth sphere of its own: void, round motes, two tiny orbs, a fresnel rim and a specular", () => {
+    const main = src.slice(src.indexOf("void main()"))
+    const lens = main.slice(main.indexOf("uOrbLens.x"), main.indexOf("vec2 vu ="))
+    for (const part of ["fresnel", "specular", "motes", "tiny orbs", "uOrbFringe", "uOrbColor"]) {
+      expect(lens, part).toContain(part)
+    }
+    // The preview is blended by the peek and clipped to the lens disc.
+    expect(lens).toContain("uOrbLens.y")
+    expect(lens).toMatch(/mix\(col, lensCol/)
+    // The dimension inside is not halftoned: no ordered dither or dot mask in the lens block.
+    const inside = lens.slice(lens.indexOf("lensCol"))
+    expect(inside).not.toContain("dith")
+    expect(inside).not.toContain("dotMask")
+  })
+
   it("costs nothing when the orb is hidden", () => {
     expect(src).toMatch(/if \(uOrb\.w > 0\.001\)/)
   })

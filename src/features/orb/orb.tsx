@@ -27,6 +27,10 @@ export interface OrbGlow {
   energy: number
   color: readonly [number, number, number]
   fringe: number
+  /** 0 floating as a glow, 1 fully grown into the window onto the memories dimension. */
+  peek: number
+  /** The lens sphere's radius in CSS px. */
+  lens: number
 }
 
 /** The slice of the sky the orb talks to; the halftone sky's handle satisfies it. */
@@ -41,8 +45,10 @@ export interface OrbProps {
   active: boolean
   /** Whether the real button exists. Off while the portal opens, so nothing can be pressed twice. */
   interactive: boolean
-  /** The magnetic cursor has captured it: it eases to a stop so it is easy to click. */
+  /** The magnetic cursor has captured it: it eases to a stop so it is easy to click, and it peeks. */
   held: boolean
+  /** A trip is under way: it waits where it is, without peeking. */
+  parked?: boolean
   sky: RefObject<OrbSky | null>
   /** The boxes it must float clear of, for a viewport of this size. Keep it referentially stable. */
   keepOut: (width: number, height: number) => readonly Rect[]
@@ -55,25 +61,34 @@ export interface OrbProps {
 function place(mover: HTMLElement, frame: OrbFrame) {
   mover.style.transform = `translate3d(${frame.x.toFixed(2)}px, ${frame.y.toFixed(2)}px, 0)`
   mover.style.setProperty("--orb", frame.hex)
+  // The button is the lens at rest and grows with it, so the cursor's frame hugs the window.
+  mover.style.setProperty("--orb-d", `${((2 * frame.lens) / frame.zoom).toFixed(1)}px`)
+  mover.style.setProperty("--orb-zoom", frame.zoom.toFixed(3))
 }
 
 /**
  * The memory orb: a color-shifting glow that wanders the whole sky, with a real button riding on it.
  * The sky paints the glow (so it shares the halftone texture); this owns the motion and the hit target.
  */
-export function Orb({ active, interactive, held, sky, keepOut, onOpen, fallbackGlow = false }: OrbProps) {
+export function Orb({ active, interactive, held, parked = false, sky, keepOut, onOpen, fallbackGlow = false }: OrbProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const moverRef = useRef<HTMLDivElement | null>(null)
   const frameRef = useRef<OrbFrame | null>(null)
   const sizeRef = useRef({ width: 1, height: 1 })
   const touchRef = useRef({ hover: false, focus: false })
   const wakeRef = useRef<(() => void) | null>(null)
-  const live = useRef({ active, held, keepOut })
+  const live = useRef({ active, held, parked, keepOut })
 
   useEffect(() => {
-    live.current = { active, held, keepOut }
+    live.current = { active, held, parked, keepOut }
     wakeRef.current?.()
   })
+
+  // The button is removed while the portal opens, with no mouseleave or blur to say the pointer or focus left it;
+  // forget them, or a stale hover would keep the orb stopped and peeking when it comes back.
+  useEffect(() => {
+    if (!interactive) touchRef.current = { hover: false, focus: false }
+  }, [interactive])
 
   useEffect(() => {
     const root = rootRef.current
@@ -103,9 +118,9 @@ export function Orb({ active, interactive, held, sky, keepOut, onOpen, fallbackG
       const dt = (now - last) / 1000
       last = now
       const startedAt = now
-      const { active: on, held: isHeld } = live.current
+      const { active: on, held: isHeld, parked: isParked } = live.current
       const touch = touchRef.current
-      const frame = motion.step(dt, { held: isHeld || touch.hover || touch.focus, active: on })
+      const frame = motion.step(dt, { held: isHeld || touch.hover || touch.focus, active: on, parked: isParked })
       frameRef.current = frame
       if (moverRef.current) place(moverRef.current, frame)
       if (frame.energy > 0) {
@@ -117,6 +132,8 @@ export function Orb({ active, interactive, held, sky, keepOut, onOpen, fallbackG
           energy: frame.energy,
           color: frame.rgb,
           fringe: FRINGE,
+          peek: frame.peek,
+          lens: frame.lens,
         })
       } else if (shown) {
         shown = false
@@ -199,12 +216,16 @@ export function Orb({ active, interactive, held, sky, keepOut, onOpen, fallbackG
             data-cursor-id={ORB_CURSOR_ID}
             data-cursor-label={LABEL}
             data-cursor-context={CONTEXT}
-            className="press pointer-events-auto absolute -mt-7 -ml-7 size-14 rounded-full text-ink"
-            style={
-              fallbackGlow
+            className="press pointer-events-auto absolute top-0 left-0 rounded-full text-ink"
+            style={{
+              width: "var(--orb-d, 56px)",
+              height: "var(--orb-d, 56px)",
+              translate: "-50% -50%",
+              scale: "var(--orb-zoom, 1)",
+              ...(fallbackGlow
                 ? { background: "radial-gradient(closest-side, color-mix(in srgb, var(--orb) 55%, transparent), transparent)" }
-                : undefined
-            }
+                : null),
+            }}
             onClick={open}
             onMouseEnter={() => {
               touchRef.current.hover = true

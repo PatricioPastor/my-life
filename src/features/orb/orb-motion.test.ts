@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { createOrbMotion, orbMetrics, stepRate } from "./orb-motion"
+import { LENS_SHARE, PEEK_MAX_SCALE } from "./orb-peek"
 import type { Rect } from "./orb-path"
 
 const DT = 1 / 60
@@ -159,5 +160,100 @@ describe("orbMetrics", () => {
       const m = orbMetrics(w, h)
       expect(m.clearance).toBeGreaterThanOrEqual(m.radius * 1.2)
     }
+  })
+})
+
+describe("the peek", () => {
+  const settle = (m: ReturnType<typeof make>, input: { held: boolean; active: boolean; parked?: boolean }, frames: number) => {
+    let f = m.step(DT, input)
+    for (let i = 1; i < frames; i++) f = m.step(DT, input)
+    return f
+  }
+
+  it("is 0 while it floats, and the lens is just the glow's own size", () => {
+    const m = make()
+    const f = settle(m, FREE, 120)
+    expect(f.peek).toBe(0)
+    expect(f.zoom).toBe(1)
+    expect(f.lens).toBeCloseTo(f.radius * LENS_SHARE, 6)
+  })
+
+  it("rises to 1 within half a second of being held, and the lens grows by the scale", () => {
+    const m = make()
+    settle(m, FREE, 120)
+    const f = settle(m, HELD, 30)
+    expect(f.peek).toBeGreaterThan(0.97)
+    expect(f.zoom).toBeGreaterThan(1.5)
+    expect(f.zoom).toBeLessThanOrEqual(PEEK_MAX_SCALE)
+    expect(f.lens).toBeGreaterThan(f.radius * LENS_SHARE * 1.5)
+  })
+
+  it("never zooms the glow itself: the lens grows, the radius only keeps its small lift", () => {
+    const m = make()
+    settle(m, FREE, 120)
+    const free = m.step(DT, FREE)
+    const held = settle(m, HELD, 120)
+    expect(held.radius).toBeLessThan(free.radius * 1.2)
+  })
+
+  it("follows the target monotonically, in both directions", () => {
+    const m = make()
+    settle(m, FREE, 60)
+    let prev = 0
+    for (let i = 0; i < 60; i++) {
+      const f = m.step(DT, HELD)
+      expect(f.peek).toBeGreaterThanOrEqual(prev)
+      prev = f.peek
+    }
+    for (let i = 0; i < 60; i++) {
+      const f = m.step(DT, FREE)
+      expect(f.peek).toBeLessThanOrEqual(prev)
+      prev = f.peek
+    }
+    expect(prev).toBe(0)
+  })
+
+  it("is interruptible: holding again mid-release continues from the current value", () => {
+    const m = make()
+    settle(m, HELD, 60)
+    const mid = settle(m, FREE, 8)
+    expect(mid.peek).toBeGreaterThan(0.1)
+    expect(mid.peek).toBeLessThan(0.95)
+    const again = m.step(DT, HELD)
+    expect(again.peek).toBeGreaterThan(mid.peek)
+    expect(again.peek - mid.peek).toBeLessThan(0.15)
+    expect(Math.abs(again.lens - mid.lens)).toBeLessThan(6)
+  })
+
+  it("keeps the lens off the keep-out boxes and the screen edge all along the path", () => {
+    const m = make()
+    for (let i = 0; i < 60 * 90; i++) {
+      const f = settle(m, i % 400 < 200 ? HELD : FREE, 1)
+      const edge = Math.min(f.x, f.y, 1440 - f.x, 900 - f.y)
+      expect(f.lens).toBeLessThanOrEqual(Math.max(edge, f.radius * LENS_SHARE) + 1e-6)
+      for (const b of keepOut) {
+        const gap = Math.hypot(Math.max(b.left - f.x, 0, f.x - b.right), Math.max(b.top - f.y, 0, f.y - b.bottom))
+        expect(f.lens).toBeLessThanOrEqual(Math.max(gap, f.radius * LENS_SHARE) + 1e-6)
+      }
+    }
+  })
+
+  it("under reduced motion crossfades to the preview without growing", () => {
+    const m = make(true)
+    const rest = settle(m, FREE, 60)
+    const f = settle(m, HELD, 30)
+    expect(f.peek).toBe(1)
+    expect(f.zoom).toBe(1)
+    expect(f.lens).toBeCloseTo(rest.lens, 6)
+  })
+
+  it("parks the orb on a trip without peeking", () => {
+    const m = make()
+    settle(m, FREE, 120)
+    const before = m.step(DT, FREE)
+    const parked = settle(m, { held: false, active: true, parked: true }, 240)
+    expect(parked.peek).toBe(0)
+    expect(Math.hypot(parked.x - before.x, parked.y - before.y)).toBeLessThan(20)
+    expect(parked.rate).toBeLessThan(0.01)
   })
 })

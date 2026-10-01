@@ -1,6 +1,7 @@
 import { orbColor } from "./orb-color"
 import type { Rgb } from "./oklch"
 import { createOrbPath, type Point, type Rect } from "./orb-path"
+import { lensRadius, peekScale, stepPeek } from "./orb-peek"
 
 export interface OrbMetrics {
   /** The glow's radius in CSS px: smaller on a phone, where there is little room to float. */
@@ -49,11 +50,21 @@ export interface OrbFrame {
   hue: number
   /** Travel speed as a share of full speed, for tests and debugging. */
   rate: number
+  /** 0 floating as a glow, 1 fully grown into the window onto the memories dimension. */
+  peek: number
+  /** How much the lens is enlarged right now: 1 at rest up to the scale the surroundings allow. */
+  zoom: number
+  /** The lens sphere's radius in CSS px. */
+  lens: number
 }
 
 export interface OrbMotion {
   setViewport: (width: number, height: number, keepOut: readonly Rect[]) => void
-  step: (dt: number, input: { held: boolean; active: boolean }) => OrbFrame
+  /**
+   * `held` is the cursor, the pointer or the keyboard being on the orb: it stops and peeks. `parked` stops it
+   * without the peek (a trip is under way and the orb waits where it was).
+   */
+  step: (dt: number, input: { held: boolean; active: boolean; parked?: boolean }) => OrbFrame
 }
 
 export function createOrbMotion({ seed, reduced }: { seed: number; reduced: boolean }): OrbMotion {
@@ -64,16 +75,20 @@ export function createOrbMotion({ seed, reduced }: { seed: number; reduced: bool
   let rate = 1
   let presence = 0
   let lift = 0
+  let peek = 0
+  let space = { width: 1, height: 1, keepOut: [] as readonly Rect[] }
 
   return {
     setViewport(width, height, keepOut) {
+      space = { width, height, keepOut }
       const m = orbMetrics(width, height)
       path = createOrbPath({ seed, width, height, keepOut, clearance: m.clearance, margin: m.margin })
       baseRadius = m.radius
     },
-    step(rawDt, { held, active }) {
+    step(rawDt, { held, active, parked = false }) {
       const dt = Math.min(Math.max(rawDt, 0), MAX_DT)
-      rate = stepRate(rate, held, dt)
+      rate = stepRate(rate, held || parked, dt)
+      peek = stepPeek(peek, held ? 1 : 0, dt, reduced)
       presence = ease(presence, active ? 1 : 0, active ? FADE_IN_TAU : FADE_OUT_TAU, dt)
       if (presence < 1e-3 && !active) presence = 0
       lift = ease(lift, held ? 1 : 0, LIFT_TAU, dt)
@@ -83,6 +98,8 @@ export function createOrbMotion({ seed, reduced }: { seed: number; reduced: bool
       const color = orbColor(colorClock)
       // A slow breath, so a held orb still reads as alive.
       const breath = 0.96 + 0.04 * Math.sin((2 * Math.PI * colorClock) / 7)
+      // The lens may grow only as far as the room around the orb allows; it is continuous in position.
+      const scale = peekScale({ x: at.x, y: at.y, radius: baseRadius, ...space, reduced })
       return {
         x: at.x,
         y: at.y,
@@ -92,6 +109,9 @@ export function createOrbMotion({ seed, reduced }: { seed: number; reduced: bool
         hex: color.hex,
         hue: color.hue,
         rate,
+        peek,
+        zoom: 1 + (scale - 1) * peek,
+        lens: lensRadius(baseRadius, scale, peek),
       }
     },
   }

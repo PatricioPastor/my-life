@@ -117,4 +117,96 @@ describe("Orb", () => {
     expect(calls).toBeGreaterThan(2)
     expect(calls).toBeLessThan(25)
   })
+
+  describe("the peek", () => {
+    const rerender = (view: ReturnType<typeof setup>["view"], sky: ReturnType<typeof setup>["sky"], over: Partial<OrbProps>) =>
+      view.rerender(
+        <div style={{ width: 1024, height: 768 }}>
+          <Orb active interactive held={false} sky={sky} keepOut={keepOut} onOpen={vi.fn()} {...over} />
+        </div>,
+      )
+    const last = (orb: ReturnType<typeof setup>["orb"]) => orb.mock.calls.at(-1)![0]
+    const mover = () => screen.getByRole("button", { name: "Agregar recuerdo" }).parentElement as HTMLElement
+
+    it("floats as a plain glow: no peek, the lens is the glow's own size, the button unscaled", async () => {
+      const { orb } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const glow = last(orb)
+      expect(glow.peek).toBe(0)
+      expect(glow.lens).toBeGreaterThan(20)
+      expect(glow.lens).toBeLessThan(glow.radius)
+      expect(mover().style.getPropertyValue("--orb-zoom")).toBe("1.000")
+    })
+
+    it("grows into the window while the cursor holds it, and the button grows with it", async () => {
+      const { orb, view, sky } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const rest = last(orb)
+      rerender(view, sky, { held: true })
+      await act(() => vi.advanceTimersByTimeAsync(600))
+      const glow = last(orb)
+      expect(glow.peek).toBeGreaterThan(0.97)
+      expect(glow.lens).toBeGreaterThan(rest.lens * 1.5)
+      expect(Number(mover().style.getPropertyValue("--orb-zoom"))).toBeGreaterThan(1.5)
+    })
+
+    it("also peeks on pointer hover and on keyboard focus, and goes back on leave and blur", async () => {
+      const { orb } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const button = screen.getByRole("button", { name: "Agregar recuerdo" })
+      fireEvent.mouseEnter(button)
+      await act(() => vi.advanceTimersByTimeAsync(600))
+      expect(last(orb).peek).toBeGreaterThan(0.97)
+      fireEvent.mouseLeave(button)
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      expect(last(orb).peek).toBe(0)
+      fireEvent.focus(button)
+      await act(() => vi.advanceTimersByTimeAsync(600))
+      expect(last(orb).peek).toBeGreaterThan(0.97)
+      fireEvent.blur(button)
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      expect(last(orb).peek).toBe(0)
+    })
+
+    it("forgets a hover or focus that ended while the button was gone (the trip through the portal)", async () => {
+      const { orb, view, sky } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const button = screen.getByRole("button", { name: "Agregar recuerdo" })
+      fireEvent.mouseEnter(button)
+      fireEvent.focus(button)
+      await act(() => vi.advanceTimersByTimeAsync(600))
+      expect(last(orb).peek).toBeGreaterThan(0.97)
+      // The portal opens: the button is removed with no mouseleave or blur, then it comes back on the sky.
+      rerender(view, sky, { interactive: false })
+      await act(() => vi.advanceTimersByTimeAsync(100))
+      rerender(view, sky, { interactive: true })
+      await act(() => vi.advanceTimersByTimeAsync(1200))
+      expect(last(orb).peek).toBe(0)
+      expect(last(orb).rate ?? 1).toBeGreaterThan(0)
+    })
+
+    it("does not peek when it is only parked for a trip", async () => {
+      const { orb, view, sky } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      rerender(view, sky, { parked: true })
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      expect(last(orb).peek).toBe(0)
+    })
+
+    it("under reduced motion crossfades to the preview without scaling the button", async () => {
+      vi.stubGlobal(
+        "matchMedia",
+        (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }),
+      )
+      const { orb, view, sky } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const rest = last(orb)
+      rerender(view, sky, { held: true })
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const glow = last(orb)
+      expect(glow.peek).toBe(1)
+      expect(glow.lens).toBeCloseTo(rest.lens, 3)
+      expect(mover().style.getPropertyValue("--orb-zoom")).toBe("1.000")
+    })
+  })
 })
