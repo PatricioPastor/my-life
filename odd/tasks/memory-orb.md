@@ -209,6 +209,10 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (1409 tests) and `pnpm build` pass; `/` stays static.
   - Open notes: nothing here has run against the real services (Nominatim, Google short links, `exifr` on real phone files, HEIC in a browser): that is T6's smoke test. Google short links may redirect through a consent or other host (for example `consent.google.com`); it is not on the allowlist, so such a link shows "No pudimos leer la ubicación de ese link.". Consent is per photo and resets when another photo is picked. No visual (Playwright) pass was done for the new section.
   - Commits `7bf344c` (suggestion from the GPS, schema and migration) and `d29475d` (Google Maps link).
+  - RDD: the whole T5c range (2884 lines, high risk because `security-txt.ts` changed) stopped with `lens_context_budget_exceeded`, so it was reviewed as two candidates.
+    - **Slice A** (`0be05e6..7bf344c`, high): reviewed in a temporary worktree at `7bf344c`. All four lenses (risk, resilience, readability, reliability) approved with no findings; lineage `review-5c52d63899c0d779` acknowledged. The worktree was removed afterwards.
+    - **Slice B** (`7bf344c..94d97dd`, medium): approved with no findings; lineage `review-ad38ee13153a9fe8` acknowledged.
+    - Reviewed boundary: `94d97dd`.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
