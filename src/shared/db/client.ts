@@ -20,8 +20,8 @@ export function getPrisma(): PrismaClient {
   if (!connectionString) throw new Error("DATABASE_URL is not set.")
   assertRuntimeRole(connectionString, process.env.DIRECT_URL)
 
-  const client = new PrismaClient({ adapter: new PrismaNeon({ connectionString }) })
-  // Keep one client across dev hot reloads; in production each instance builds its own once.
-  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client
-  return client
+  // Cached in every environment: one client and one pool per server instance (and across dev
+  // hot reloads, which re-evaluate this module but keep globalThis).
+  globalForPrisma.prisma = new PrismaClient({ adapter: new PrismaNeon({ connectionString }) })
+  return globalForPrisma.prisma
 }
