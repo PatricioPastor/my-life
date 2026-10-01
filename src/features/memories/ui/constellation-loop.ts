@@ -1,3 +1,4 @@
+import { orbScale, worldToScreen, type Camera } from "./camera"
 import { SIM_DT, type ConstellationSim } from "./constellation-sim"
 import { hash } from "./point-layout"
 import type { Edge } from "./similarity"
@@ -19,32 +20,50 @@ const HIGHLIGHT_EASE_PER_S = 7
 const PULSE_TRAVEL_S = 2.6
 const PULSE_PERIOD_S: readonly [number, number] = [18, 46]
 const PULSE_ALPHA = 0.42
+/** The orb's photo disc, in CSS px at scale 1 (the `.mem-thumb` size). */
+const THUMB_PX = 40
 
 /** How an orb relates to the one being held: itself, a linked neighbour, or the rest. */
 export type LinkState = "idle" | "self" | "near" | "far"
 
 interface LoopOptions {
+  /** The simulation, in world px. */
   sim: ConstellationSim
   edges: readonly Edge[]
   /** `#rrggbb` per orb, in sim order. */
   colors: readonly string[]
   /** One element per orb, in sim order: moved with `transform`. */
   items: readonly HTMLElement[]
-  /** The edges' canvas, in stage px at `width` x `height`. */
+  /** The edges' canvas, in screen px at `width` x `height` (the viewport). */
   canvas: HTMLCanvasElement | null
   width: number
   height: number
+  /** The camera, read every frame: the simulation runs in world space and is drawn through it. */
+  camera: () => Camera
+  /** Called at the start of every frame with its length in seconds, before anything is drawn (the camera advances here). */
+  onFrame?: (dt: number) => void
   /** One settled, still frame; nothing is scheduled. */
   reduced: boolean
 }
 
 export interface ConstellationLoop {
-  /** Where an orb is drawn right now, in stage px. */
+  /** Where an orb is in the world right now. */
   positionOf: (index: number) => { x: number; y: number }
-  /** The orb under the pointer or holding focus (or null): it is held still, with its links brightened. */
-  hold: (source: "hover" | "focus", index: number | null) => void
-  /** The pointer in stage px (or null when it left): an orb within `PIN_RADIUS` is held too, like a magnet capture. */
+  /** Where an orb is drawn right now, in screen px. */
+  screenOf: (index: number) => { x: number; y: number }
+  /**
+   * The orb under the pointer or holding focus (or null): it is held still, with its links brightened. The approach
+   * holds the orb being opened, so it does not drift away while the camera flies to it.
+   */
+  hold: (source: "hover" | "focus" | "approach", index: number | null) => void
+  /** The pointer in screen px (or null when it left): an orb within `PIN_RADIUS` is held too, like a magnet capture. */
   pointer: (point: { x: number; y: number } | null) => void
+  /** Grows one orb toward `diameter` px as `amount` goes 0..1 (the approach): its photo shows, and the glass takes over. */
+  emphasize: (index: number | null, amount: number, diameter: number) => void
+  /** The viewport changed size. */
+  resize: (width: number, height: number) => void
+  /** Draws the current frame again without stepping the simulation (the camera moved while nothing else did). */
+  redraw: () => void
   dispose: () => void
 }
 
@@ -55,20 +74,24 @@ const hexToRgb = (hex: string): [number, number, number] => {
 
 /**
  * Drives the orbs and their edges. Orbs stay real DOM elements, moved by `style.transform` from one rAF loop; there
- * is no React state per frame. The simulation runs on a fixed timestep and is drawn extrapolated by the leftover
- * time, so it is smooth on any refresh rate. Each frame costs O(n + edges). It stops while the tab is hidden.
- * Under reduced motion it settles once, synchronously, draws a still frame, and never schedules anything.
+ * is no React state per frame. The simulation runs in world space on a fixed timestep and is drawn extrapolated by the
+ * leftover time, through the camera, so it is smooth on any refresh rate. Each frame costs O(n + edges). It stops
+ * while the tab is hidden. Under reduced motion it settles once, synchronously, draws a still frame, and never
+ * schedules anything: the camera asks it to `redraw` when it moves.
  */
 export function startConstellation(options: LoopOptions): ConstellationLoop {
-  const { sim, edges, colors, items, canvas, width, height, reduced } = options
+  const { sim, edges, colors, items, canvas, reduced, camera, onFrame } = options
+  let { width, height } = options
   const n = sim.count
   const ctx = canvas?.getContext("2d") ?? null
   const dpr = Math.min(typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, MAX_DPR)
-  if (canvas && ctx) {
+  const sizeCanvas = () => {
+    if (!canvas || !ctx) return
     canvas.width = Math.max(Math.round(width * dpr), 1)
     canvas.height = Math.max(Math.round(height * dpr), 1)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
+  sizeCanvas()
 
   const rgb = colors.map(hexToRgb)
   const pulsePeriod = new Float64Array(edges.length)
@@ -84,11 +107,21 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     adjacency[e.b].push(k)
   })
 
+  // Where each orb is drawn, in screen px, and where it is in the world.
   const drawX = new Float64Array(n)
   const drawY = new Float64Array(n)
+  const worldX = new Float64Array(n)
+  const worldY = new Float64Array(n)
   const state: LinkState[] = new Array<LinkState>(n).fill("idle")
   const hot = new Uint8Array(edges.length)
-  const held: { hover: number | null; focus: number | null; magnet: number | null } = { hover: null, focus: null, magnet: null }
+  const held: { hover: number | null; focus: number | null; magnet: number | null; approach: number | null } = {
+    hover: null,
+    focus: null,
+    magnet: null,
+    approach: null,
+  }
+  let emphasis: { index: number; amount: number; diameter: number } | null = null
+  let focused: number | null = null
   let pointerAt: { x: number; y: number } | null = null
   let pinned: number | null = null
   let highlight = 0
@@ -97,7 +130,7 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
   let last = 0
   let alive = true
 
-  const currentPin = () => held.hover ?? held.focus ?? held.magnet
+  const currentPin = () => held.approach ?? held.hover ?? held.focus ?? held.magnet
 
   const applyPin = () => {
     const next = currentPin()
@@ -126,7 +159,7 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     let best: number | null = null
     let bestD = PIN_RADIUS
     for (let i = 0; i < n; i++) {
-      const d = Math.hypot(sim.x[i] - pointerAt.x, sim.y[i] - pointerAt.y)
+      const d = Math.hypot(drawX[i] - pointerAt.x, drawY[i] - pointerAt.y)
       if (d < bestD) {
         bestD = d
         best = i
@@ -136,13 +169,35 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
   }
 
   const place = (lead: number) => {
+    const cam = camera()
+    const viewport = { width, height }
+    const scale = orbScale(cam.zoom)
     for (let i = 0; i < n; i++) {
       // Extrapolate by the leftover time: pinned orbs have zero velocity, so they never slide.
-      drawX[i] = sim.x[i] + sim.vx[i] * lead
-      drawY[i] = sim.y[i] + sim.vy[i] * lead
+      worldX[i] = sim.x[i] + sim.vx[i] * lead
+      worldY[i] = sim.y[i] + sim.vy[i] * lead
+      const at = worldToScreen(cam, viewport, { x: worldX[i], y: worldY[i] })
+      drawX[i] = at.x
+      drawY[i] = at.y
+      let s = scale
+      if (emphasis && emphasis.index === i && emphasis.amount > 0) {
+        s *= 1 + (Math.max(emphasis.diameter / (THUMB_PX * scale), 1) - 1) * emphasis.amount
+      }
       const el = items[i]
-      if (el) el.style.transform = `translate3d(${drawX[i].toFixed(2)}px, ${drawY[i].toFixed(2)}px, 0)`
+      if (el) el.style.transform = `translate3d(${at.x.toFixed(2)}px, ${at.y.toFixed(2)}px, 0) scale(${s.toFixed(3)})`
     }
+    const now = emphasis && emphasis.amount > 0.02 ? emphasis.index : null
+    if (now !== focused) {
+      const before = focused !== null ? items[focused]?.firstElementChild : null
+      if (before) {
+        before.removeAttribute("data-focus")
+        ;(before as HTMLElement).style.setProperty("--focus", "0")
+      }
+      if (now !== null) items[now]?.firstElementChild?.setAttribute("data-focus", "true")
+      focused = now
+    }
+    // How far the orb has come in (0..1): it stops breathing, since its drift would be scaled up with it.
+    if (focused !== null && emphasis) (items[focused]?.firstElementChild as HTMLElement | undefined)?.style.setProperty("--focus", emphasis.amount.toFixed(3))
   }
 
   const drawEdges = (dt: number) => {
@@ -157,7 +212,10 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
       const ay = drawY[a]
       const bx = drawX[b]
       const by = drawY[b]
-      const length = Math.hypot(bx - ax, by - ay)
+      // Both ends past the same side of the screen: nothing to draw.
+      if ((ax < 0 && bx < 0) || (ay < 0 && by < 0) || (ax > width && bx > width) || (ay > height && by > height)) continue
+      // The fade follows the length in the world, so a tie looks the same however far the camera is.
+      const length = Math.hypot(worldX[b] - worldX[a], worldY[b] - worldY[a])
       const fade = Math.max(0, 1 - length / EDGE_FADE_LENGTH)
       let alpha = EDGE_ALPHA * weight * fade * fade
       alpha *= hot[k] ? 1 + (HIGHLIGHT_BOOST - 1) * highlight : 1 - (1 - DIM_FACTOR) * highlight
@@ -194,6 +252,7 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     if (!alive) return
     const dt = Math.min(Math.max((now - last) / 1000, 0), MAX_FRAME_S)
     last = now
+    onFrame?.(dt)
     held.magnet = findMagnet()
     applyPin()
     acc += dt
@@ -234,7 +293,19 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
   }
 
   return {
-    positionOf: (index) => ({ x: drawX[index] ?? sim.x[index], y: drawY[index] ?? sim.y[index] }),
+    positionOf: (index) => ({ x: worldX[index] ?? sim.x[index], y: worldY[index] ?? sim.y[index] }),
+    screenOf: (index) => ({ x: drawX[index] ?? 0, y: drawY[index] ?? 0 }),
+    emphasize: (index, amount, diameter) => {
+      emphasis = index === null ? null : { index, amount, diameter }
+      if (reduced) place(0)
+    },
+    resize: (nextWidth, nextHeight) => {
+      width = nextWidth
+      height = nextHeight
+      sizeCanvas()
+      render(reduced ? 0 : acc, 1)
+    },
+    redraw: () => render(reduced ? 0 : acc, 1),
     hold: (source, index) => {
       held[source] = index
       applyPin()

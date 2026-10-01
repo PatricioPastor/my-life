@@ -1,7 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
-import { MemoryPoints } from "./memory-points"
+import { worldBounds, type Camera } from "./camera"
+import { createCameraController, type CameraController } from "./camera-controller"
+import { MemoryPoints, type PointsHandle } from "./memory-points"
+import { OPEN_ZOOM } from "./glass-layout"
 
 const view = (id: string, caption: string, over: Partial<MemoryView> = {}): MemoryView => ({
   id,
@@ -28,6 +31,42 @@ const trip = [
   view("c", "Tres", { happenedOn: "2024-03-13" }),
   view("z", "Lejos", { happenedOn: "2019-11-02" }),
 ]
+
+const PAD = { top: 96, right: 28, bottom: 168, left: 28 }
+let controller: CameraController
+let handle: { current: PointsHandle | null }
+
+/** Mounts the orbs with a camera and a world, the way the place builds them. */
+function mount(
+  memories: readonly MemoryView[],
+  reduced = false,
+  onOpen: (id: string, world: { x: number; y: number }) => void = () => {},
+  extra: { approachId?: string | null } = {},
+) {
+  const aspect = window.innerWidth / window.innerHeight
+  controller = createCameraController({
+    reduced,
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    bounds: worldBounds(memories.length, aspect),
+    pad: PAD,
+  })
+  handle = { current: null }
+  const props = (list: readonly MemoryView[], approachId: string | null) => ({
+    memories: list,
+    bounds: worldBounds(list.length, aspect),
+    controller,
+    reduced,
+    approachId,
+    onOpen,
+    ref: handle,
+  })
+  const utils = render(<MemoryPoints {...props(memories, extra.approachId ?? null)} />)
+  return {
+    ...utils,
+    again: (list: readonly MemoryView[], next: { approachId?: string | null } = {}) =>
+      utils.rerender(<MemoryPoints {...props(list, next.approachId ?? null)} />),
+  }
+}
 
 let frames: Array<(now: number) => void> = []
 let cancelled = 0
@@ -86,7 +125,7 @@ const orb = (name: RegExp) => screen.getByRole("button", { name }) as HTMLElemen
 
 describe("MemoryPoints markup", () => {
   it("keeps one real button per memory, in list (date) order, named by caption and date", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     const list = screen.getByRole("list", { name: "Recuerdos" })
     expect(Array.from(list.querySelectorAll("button")).map((b) => b.getAttribute("aria-label"))).toEqual([
       "Uno, 12 de marzo de 2024",
@@ -97,7 +136,7 @@ describe("MemoryPoints markup", () => {
   })
 
   it("draws the links on a canvas behind the orbs that no assistive tech or pointer can reach", () => {
-    const { container } = render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    const { container } = mount(trip)
     const canvas = container.querySelector("canvas[data-edges]") as HTMLCanvasElement
     expect(canvas.getAttribute("aria-hidden")).toBe("true")
     expect(canvas.className).toContain("pointer-events-none")
@@ -107,14 +146,14 @@ describe("MemoryPoints markup", () => {
   })
 
   it("places every orb at its seeded spot on the first paint, so nothing jumps on mount", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     for (const b of screen.getAllByRole("button")) expect(at(b as HTMLElement)).not.toBeNull()
   })
 })
 
 describe("MemoryPoints in motion", () => {
   it("runs one rAF loop, moves the orbs by transform and gathers the linked ones", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     expect(frames.length).toBe(1)
     const [a, b] = [orb(/Uno/), orb(/Dos/)]
     const before = at(a)!
@@ -127,14 +166,14 @@ describe("MemoryPoints in motion", () => {
   })
 
   it("never writes React state per frame: the buttons keep the very same elements", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     const before = screen.getAllByRole("button")
     play(30)
     expect(screen.getAllByRole("button")).toEqual(before)
   })
 
   it("draws edges for the linked orbs and none for the stranger", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     play(2)
     // a-b, a-c, b-c are linked; "Lejos" is not.
     expect(context.strokes).toBeGreaterThan(0)
@@ -142,7 +181,7 @@ describe("MemoryPoints in motion", () => {
   })
 
   it("pauses while the tab is hidden and resumes when it is back", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     play(1)
     const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true)
     document.dispatchEvent(new Event("visibilitychange"))
@@ -154,14 +193,14 @@ describe("MemoryPoints in motion", () => {
   })
 
   it("stops its loop when it unmounts", () => {
-    const { unmount } = render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    const { unmount } = mount(trip)
     const pending = frames.length
     unmount()
     expect(cancelled).toBeGreaterThanOrEqual(pending)
   })
 
   it("holds a hovered orb still, lights its links and dims the rest, then lets go", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     play(60)
     const a = orb(/Uno/)
     fireEvent.pointerOver(a, { pointerType: "mouse" })
@@ -170,6 +209,8 @@ describe("MemoryPoints in motion", () => {
     expect(orb(/Tres/).getAttribute("data-link")).toBe("near")
     expect(orb(/Lejos/).getAttribute("data-link")).toBe("far")
 
+    // The first steps after the hold zero the orb's velocity; from then on it does not move at all.
+    play(3)
     const held = at(a)!
     const other = at(orb(/Lejos/))!
     play(120)
@@ -183,7 +224,7 @@ describe("MemoryPoints in motion", () => {
   })
 
   it("holds the orb that has keyboard focus too", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     play(30)
     const b = orb(/Dos/)
     act(() => b.focus())
@@ -196,7 +237,7 @@ describe("MemoryPoints in motion", () => {
   })
 
   it("holds an orb the pointer is about to be captured by, before it is over it", () => {
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    mount(trip)
     play(30)
     const a = orb(/Uno/)
     const p = at(a)!
@@ -208,25 +249,24 @@ describe("MemoryPoints in motion", () => {
     expect(a.getAttribute("data-link")).toBe("idle")
   })
 
-  it("opens the viewer from where the orb is now", () => {
+  it("hands over where the orb is in the world when it is opened", () => {
     const onOpen = vi.fn()
-    render(<MemoryPoints memories={trip} reduced={false} onOpen={onOpen} />)
+    mount(trip, false, onOpen)
     play(180)
-    const a = orb(/Uno/)
-    fireEvent.click(a)
-    const [id, origin] = onOpen.mock.calls[0]
+    fireEvent.click(orb(/Uno/))
+    const [id, world] = onOpen.mock.calls[0]
     expect(id).toBe("a")
-    const now = at(a)!
-    expect(Math.abs(origin.x - now.x)).toBeLessThan(0.1)
-    expect(Math.abs(origin.y - now.y)).toBeLessThan(0.1)
+    const now = handle.current!.worldOf("a")!
+    expect(world.x).toBeCloseTo(now.x, 6)
+    expect(world.y).toBeCloseTo(now.y, 6)
   })
 
   it("keeps the others where they are when a memory is added", () => {
-    const { rerender } = render(<MemoryPoints memories={trip} reduced={false} onOpen={() => {}} />)
+    const { again } = mount(trip)
     play(120)
     const a = orb(/Uno/)
     const before = at(a)!
-    rerender(<MemoryPoints memories={[...trip, view("n", "Nuevo", { happenedOn: "2023-05-05" })]} reduced={false} onOpen={() => {}} />)
+    again([...trip, view("n", "Nuevo", { happenedOn: "2023-05-05" })])
     const after = at(orb(/Uno/))!
     expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThan(1)
     expect(screen.getAllByRole("button")).toHaveLength(5)
@@ -235,25 +275,182 @@ describe("MemoryPoints in motion", () => {
 
 describe("MemoryPoints with reduced motion", () => {
   it("settles once, synchronously, draws the links and never schedules a frame", () => {
-    const { container } = render(<MemoryPoints memories={trip} reduced onOpen={() => {}} />)
+    const { container } = mount(trip, true)
     expect(frames).toHaveLength(0)
     expect(context.strokes).toBeGreaterThan(0)
     for (const b of Array.from(container.querySelectorAll("button"))) expect(at(b)).not.toBeNull()
   })
 
   it("renders the settled layout: linked memories end up closer than the stranger", () => {
-    render(<MemoryPoints memories={trip} reduced onOpen={() => {}} />)
+    mount(trip, true)
     const near = gap(orb(/Uno/), orb(/Dos/))
     expect(near).toBeLessThan(gap(orb(/Uno/), orb(/Lejos/)))
     expect(near).toBeLessThan(gap(orb(/Dos/), orb(/Lejos/)))
   })
 
   it("still answers hover and focus, without a loop", () => {
-    render(<MemoryPoints memories={trip} reduced onOpen={() => {}} />)
+    mount(trip, true)
     const a = orb(/Uno/)
     fireEvent.pointerOver(a, { pointerType: "mouse" })
     expect(a.getAttribute("data-link")).toBe("self")
     expect(orb(/Lejos/).getAttribute("data-link")).toBe("far")
     expect(frames).toHaveLength(0)
+  })
+})
+
+const screenOf = (el: HTMLElement) => at(el)!
+const scaleOf = (el: HTMLElement) => Number(/scale\(([\d.]+)\)/.exec(el.parentElement?.style.transform ?? "")?.[1])
+
+describe("MemoryPoints on the canvas", () => {
+  it("fits the whole constellation inside the viewport on first entry", () => {
+    mount(trip, true)
+    for (const b of screen.getAllByRole("button")) {
+      const p = screenOf(b as HTMLElement)
+      expect(p.x).toBeGreaterThanOrEqual(0)
+      expect(p.x).toBeLessThanOrEqual(window.innerWidth)
+      expect(p.y).toBeGreaterThanOrEqual(0)
+      expect(p.y).toBeLessThanOrEqual(window.innerHeight)
+    }
+  })
+
+  it("keeps the orbs inside the world, whose bounds grow with the number of memories", () => {
+    mount(trip, true)
+    const bounds = worldBounds(trip.length, window.innerWidth / window.innerHeight)
+    for (const m of trip) {
+      const w = handle.current!.worldOf(m.id)!
+      expect(w.x).toBeGreaterThanOrEqual(bounds.left)
+      expect(w.x).toBeLessThanOrEqual(bounds.right)
+      expect(w.y).toBeGreaterThanOrEqual(bounds.top)
+      expect(w.y).toBeLessThanOrEqual(bounds.bottom)
+    }
+  })
+
+  it("places the orbs through the camera: panning moves them, with no React state", () => {
+    mount(trip, true)
+    const a = orb(/Uno/)
+    const before = screenOf(a)
+    const before2 = screenOf(orb(/Dos/))
+    const cam = controller.camera()
+    controller.jump({ ...cam, x: cam.x + 100 })
+    const after = screenOf(a)
+    // The camera moved right by 100 world px: everything slides left by 100 * zoom.
+    expect(before.x - after.x).toBeCloseTo(100 * cam.zoom, 1)
+    expect(after.y).toBeCloseTo(before.y, 1)
+    expect(before2.x - screenOf(orb(/Dos/)).x).toBeCloseTo(100 * cam.zoom, 1)
+  })
+
+  it("draws orbs bigger as the camera zooms in", () => {
+    mount(trip, true)
+    const a = orb(/Uno/)
+    const far = scaleOf(a)
+    controller.jump({ ...controller.camera(), zoom: 2 })
+    expect(scaleOf(a)).toBeGreaterThan(far)
+  })
+
+  it("redraws the links through the camera too, in the same frame as the orbs", () => {
+    mount(trip)
+    play(2)
+    const strokes = context.strokes
+    controller.jump({ ...controller.camera(), x: controller.camera().x + 40 })
+    play(2)
+    expect(context.strokes).toBeGreaterThan(strokes)
+  })
+
+  it("advances the camera from the loop, so a flight needs no loop of its own", () => {
+    mount(trip)
+    const target: Camera = { x: 900, y: 500, zoom: 2 }
+    controller.flyTo(target)
+    play(40, 50)
+    expect(controller.camera()).toEqual(target)
+  })
+
+  it("does not reseed the orbs when the window is resized", () => {
+    mount(trip, true)
+    const before = handle.current!.worldOf("a")!
+    const width = window.innerWidth
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 600 })
+    act(() => {
+      window.dispatchEvent(new Event("resize"))
+    })
+    const after = handle.current!.worldOf("a")!
+    expect(after.x).toBeCloseTo(before.x, 6)
+    expect(after.y).toBeCloseTo(before.y, 6)
+    expect(controller.viewport().width).toBe(600)
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width })
+  })
+
+  it("brings an orb that takes keyboard focus into view when it is off screen", () => {
+    mount(trip, true)
+    const far = handle.current!.worldOf("z")!
+    controller.jump({ x: far.x + 4000, y: far.y, zoom: 1 })
+    act(() => orb(/Lejos/).focus())
+    for (let i = 0; i < 40; i++) controller.step(1 / 30)
+    const cam = controller.camera()
+    expect(Math.abs(cam.x - far.x)).toBeLessThan(2)
+  })
+})
+
+describe("MemoryPoints approach", () => {
+  it("holds the approached orb still while the others keep moving", () => {
+    const { again } = mount(trip)
+    play(30)
+    again(trip, { approachId: "a" })
+    const a = orb(/Uno/)
+    expect(a.getAttribute("data-link")).toBe("self")
+    const held = handle.current!.worldOf("a")!
+    const other = handle.current!.worldOf("z")!
+    play(150)
+    expect(handle.current!.worldOf("a")).toEqual(held)
+    expect(handle.current!.worldOf("z")).not.toEqual(other)
+  })
+
+  it("lets it go again when the approach ends", () => {
+    const { again } = mount(trip)
+    play(10)
+    again(trip, { approachId: "a" })
+    again(trip, { approachId: null })
+    expect(orb(/Uno/).getAttribute("data-link")).toBe("idle")
+  })
+
+  it("grows the orb toward the glass as the camera comes in, and shows its photo", () => {
+    const { again } = mount(trip, true)
+    again(trip, { approachId: "a" })
+    const a = orb(/Uno/)
+    const small = scaleOf(a)
+    const world = handle.current!.worldOf("a")!
+    controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM })
+    expect(scaleOf(a)).toBeGreaterThan(small * 3)
+    expect(a.getAttribute("data-focus")).toBe("true")
+    // The orb stops breathing as it fills the screen (the breath would be scaled up with it).
+    expect(Number(a.style.getPropertyValue("--focus"))).toBeCloseTo(1, 2)
+    controller.jump({ ...controller.camera(), zoom: 0.5 })
+    expect(a.hasAttribute("data-focus")).toBe(false)
+    expect(Number(a.style.getPropertyValue("--focus"))).toBe(0)
+  })
+})
+
+describe("MemoryPoints with and without a photo", () => {
+  const voice = view("v", "Mamá cantando", {
+    thumbUrl: null,
+    fullUrl: null,
+    width: null,
+    height: null,
+    audio: { url: "https://res.cloudinary.com/demo/video/v.mp3", durationMs: 4000 },
+  })
+
+  it("shows an audio-only memory as an orb with no photo, ready at once and marked as a voice", () => {
+    const { container } = mount([voice, view("a", "Foto")], true)
+    const b = orb(/Mamá cantando/)
+    expect(b.querySelector("img")).toBeNull()
+    expect(b.getAttribute("data-ready")).toBe("true")
+    expect(b.getAttribute("data-voice")).toBe("true")
+    expect(orb(/Foto/).getAttribute("data-voice")).toBe("false")
+    expect(orb(/Foto/).getAttribute("data-ready")).toBe("false")
+    expect(container.querySelectorAll("img")).toHaveLength(1)
+  })
+
+  it("marks a photo with a voice as a voice too", () => {
+    mount([view("p", "Con voz", { audio: voice.audio })], true)
+    expect(orb(/Con voz/).getAttribute("data-voice")).toBe("true")
   })
 })

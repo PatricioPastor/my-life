@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DUST_LAYERS, dustCount, dustPositionAt, dustReach, makeDust, spriteCoreStop } from "./dust-field"
+import { DUST_LAYERS, dustCount, dustPositionAt, dustReach, makeDust, spriteCoreStop, DUST_DEPTH, wrapAround } from "./dust-field"
 
 const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length
 
@@ -131,5 +131,24 @@ describe("crisp dust", () => {
     expect(spriteCoreStop(0)).toBeGreaterThanOrEqual(0.85)
     expect(spriteCoreStop(0.4)).toBeLessThan(spriteCoreStop(0))
     for (const layer of DUST_LAYERS) expect(spriteCoreStop(layer.softness)).toBeGreaterThanOrEqual(0.6)
+  })
+})
+
+describe("depth parallax", () => {
+  it("moves far dust less than near dust with the camera, and none of it as much as the world", () => {
+    expect(DUST_DEPTH).toHaveLength(DUST_LAYERS.length)
+    for (let i = 1; i < DUST_DEPTH.length; i++) expect(DUST_DEPTH[i]).toBeGreaterThan(DUST_DEPTH[i - 1])
+    for (const depth of DUST_DEPTH) {
+      expect(depth).toBeGreaterThan(0)
+      expect(depth).toBeLessThan(1)
+    }
+  })
+
+  it("wraps a position around the stage, so the dust is endless wherever the camera goes", () => {
+    expect(wrapAround(10, 100)).toBe(10)
+    expect(wrapAround(110, 100)).toBeCloseTo(10, 9)
+    expect(wrapAround(-10, 100)).toBeCloseTo(90, 9)
+    expect(wrapAround(-250, 100)).toBeCloseTo(50, 9)
+    expect(wrapAround(5, 0)).toBe(0)
   })
 })
