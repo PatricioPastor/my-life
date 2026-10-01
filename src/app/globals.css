@@ -270,6 +270,10 @@
   .portal-in {
     animation: portal-in 760ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
+  /* The way back opens at about half the pace, out of the memories space and toward the orb's place in the sky. */
+  .portal-in-back {
+    animation-duration: 380ms;
+  }
   /* The memories space: its own deep void, round orbs that drift, and a viewer that opens out of a point. */
   .mem-void {
     background:

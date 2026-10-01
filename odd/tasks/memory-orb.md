@@ -75,7 +75,7 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - Opening an orb shows the photo, the text and the date.
   - Empty, loading and error states.
   - A deep, opaque "other dimension" with round dust, a serif title and the way back renamed "Universo" (user art direction).
-- [ ] **T3b — Orb and portal polish (user feedback, 2026-10-01).**
+- [x] **T3b — Orb and portal polish (user feedback, 2026-10-01).**
   - Hover: remove the amber backdrop the sky paints around a captured target, because it dulls the orb.
   - A better hover animation: the orb zooms in and turns into a more realistic window onto the memories dimension (dark void, dust and round orbs inside, a lens-like rim).
   - The way back from the memories place runs through the portal too, faster (about half the trip).
@@ -150,6 +150,16 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - Commit `64ebc6c`. RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-ac1140047005f1ef` acknowledged. Reviewed boundary: `64ebc6c`.
   - User feedback after T4 opened T3b (orb hover and the return portal), which runs before T5.
 
+- 2026-10-01: T3b done (route: delegated writer, 2+ non-trivial files; strict TDD, RED observed first on every new behavior).
+  - **The amber source.** It was not the focus FX (`uFocus*`): the orb's cursor id maps to no anchor, so `focusIndexFor` is -1 and the dim never starts. It was the sky's cursor light, the "lamp" (`uPointerOn`): while the reticle holds the orb the real pointer sits on it, and the lamp brightens and pushes the ember gas right behind the orb. Proved by pixel crops: with `uPointerOn` forced to 0 the amber backdrop vanished. Fix: a peeking orb shields its surroundings (`uOrbLens.zw`, from the pure `orbUniforms`): the lamp is attenuated (`lamp *= 1 - shield`) and the gas thins by up to 80% within about 1.35 lens radii, fading out by 2.6. Facet stars are untouched (their focus path and halos are unchanged).
+  - **Peek.** One 0..1 value (`stepPeek`, pure): an exponential approach, tau 0.10 s in and 0.14 s out (about 90% at 250 ms, settled in about 450 ms), snap on the last 0.2%, always continuing from the current value, so re-hovering mid-reverse never jumps. Reduced motion: an even 0.2 s linear crossfade and no zoom. The zoom scale is `peekScale`: 2.0 at most, shrunk so the lens plus 8 px of air never reaches a keep-out box or the screen edge, never below 1, continuous in position. The orb button grows with the lens (`--orb-d`, `--orb-zoom`), so the cursor's frame hugs the window.
+  - **The window.** Drawn in the sky shader inside a smooth sphere (radius 0.9 R, up to 1.8 R): the near-black void with a faint violet cast, three layers of round motes with pointer parallax and a refraction toward the rim, two tiny orbs in the orb palette, a fresnel rim, a chromatic fringe (the existing `uOrbFringe`, kept subtle), a specular and a faint bounce light. Not dithered, so it reads smoother than the halftone around it; the cost applies only to the lens pixels. A stale hover or focus (the button is removed with no mouseleave while the portal opens) used to survive the round trip; it is now cleared when the button goes away.
+  - **Return portal.** New screen `orbReturn` and event `orbReturned`: `memories` + `back` runs the same tunnel (orb palette) at about half the trip: 850 ms plus a 550 ms linger (500 ms fade), against 1700 plus 1300 outbound (constants in `portal-timing.ts`). It opens out of the orb's spot over the still-mounted memories (380 ms), the sky is unpaused the moment the return starts so it is already painting when the tunnel fades, the orb is parked (no peek) and fades back in, and the way back cannot be pressed twice. The facet back control is unchanged. Reduced motion: no tunnel; the memories fade out over the sky in 300 ms.
+  - **Viewer bug.** The cursor now skips targets under an `inert` or `aria-hidden="true"` ancestor (it also watches those attributes), so the orbs and the way back that Radix hides behind the modal can neither capture nor label; they come back on close. Verified live: with the viewer open the reticle stays free and no label shows.
+  - **Visual check.** Playwright (Chromium, software WebGL) on :3001 at 1440x900 and 390x844, a test handle through the process env; the temporary harness page for the viewer was deleted. Shots in the session scratchpad `shots/t3b-*`: `before` and `after` hover crops, return frames, the viewer open. Software GL renders about 2 frames per second and a screenshot takes seconds, so the mid-peek and mid-tunnel frames could not be sampled at known times: timing is judged from the tests and the constants, and the look from stills.
+  - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (942 tests) and `pnpm build` pass; `/` stays static.
+  - Open notes: the peek and return timings are tuned by constants, not by eye on a real GPU; the lens is dim on small phones; the Radix `aria-hidden` the cursor relies on is a library behavior, covered by a `MemoriesPlace` test.
+
 ## T6 checklist (run only after the user authorizes remote operations)
 
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
@@ -160,4 +170,4 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
 
 ## Next step
 
-T3b: orb and portal polish. Then T5: upload. A form with photo, text and date, opened from the `action` slot of `MemoriesPlace` (bottom-right, already kept clear by the layout); a server-signed Cloudinary upload, then a `pending` row inserted under RLS as the visitor, with size, type and per-handle rate limits and a "pending approval" confirmation. Append the new memory to the client list so existing orbs stay put.
+T5: upload. A form with photo, text and date, opened from the `action` slot of `MemoriesPlace` (bottom-right, already kept clear by the layout); a server-signed Cloudinary upload, then a `pending` row inserted under RLS as the visitor, with size, type and per-handle rate limits and a "pending approval" confirmation. Append the new memory to the client list so existing orbs stay put.

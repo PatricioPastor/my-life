@@ -1,5 +1,8 @@
-/** `orbWarp` is the portal trip from the sky to the memories space, `memories` where it lands. */
-export type Screen = "gate" | "sky" | "place" | "entry" | "orbWarp" | "memories"
+/**
+ * `orbWarp` is the portal trip from the sky to the memories space, `memories` where it lands, and `orbReturn`
+ * the (faster) trip back to the sky.
+ */
+export type Screen = "gate" | "sky" | "place" | "entry" | "orbWarp" | "memories" | "orbReturn"
 
 /** A point of the sky in 0..1 stage fractions, y up (the same space as the facet stars). */
 export interface SkyPoint {
@@ -23,6 +26,7 @@ export type JourneyEvent =
   | { type: "entryOpened"; index: number }
   | ({ type: "orbOpened" } & SkyPoint)
   | { type: "orbArrived" }
+  | { type: "orbReturned" }
   | { type: "back" }
   | { type: "nextPage"; pageCount: number }
   | { type: "prevPage" }
@@ -51,11 +55,15 @@ export function journeyReducer(state: JourneyState, event: JourneyEvent): Journe
         : state
     case "orbArrived":
       return state.screen === "orbWarp" ? { ...state, screen: "memories" } : state
+    case "orbReturned":
+      return state.screen === "orbReturn" ? { ...state, screen: "sky" } : state
     case "entryOpened":
       return state.screen === "place" ? { ...state, screen: "entry", entryIndex: event.index, page: 0 } : state
     case "back":
       if (state.screen === "entry") return { ...state, screen: "place" }
-      if (state.screen === "place" || state.screen === "memories") return { ...state, screen: "sky" }
+      // The memories space leaves through the portal; a facet's place goes straight back to the sky.
+      if (state.screen === "memories") return { ...state, screen: "orbReturn" }
+      if (state.screen === "place") return { ...state, screen: "sky" }
       return state
     case "nextPage":
       return { ...state, page: Math.min(event.pageCount - 1, state.page + 1) }
@@ -67,12 +75,17 @@ export function journeyReducer(state: JourneyState, event: JourneyEvent): Journe
 }
 
 // Behind the gate the sky waits zoomed in; arriving eases it back to rest.
-const ZOOM: Record<Screen, number> = { gate: 1.35, sky: 1, place: 1.45, entry: 2.1, orbWarp: 1.3, memories: 1.7 }
-const VEIL: Record<Screen, number> = { gate: 0, sky: 0, place: 0.5, entry: 0.86, orbWarp: 0.3, memories: 0.72 }
+const ZOOM: Record<Screen, number> = {
+  gate: 1.35, sky: 1, place: 1.45, entry: 2.1, orbWarp: 1.3, memories: 1.7, orbReturn: 1.3,
+}
+const VEIL: Record<Screen, number> = {
+  gate: 0, sky: 0, place: 0.5, entry: 0.86, orbWarp: 0.3, memories: 0.72, orbReturn: 0.3,
+}
 
 /**
  * Whether the sky can idle (skip painting): behind the gate, and while the memories void fully covers it.
- * Under the orb's portal it keeps painting, because that is what the trip flies out of.
+ * Under the orb's portals it keeps painting: the way in flies out of it, and the way back must find it already
+ * painting when the tunnel fades, so it wakes the moment the way back starts.
  */
 export const skyPausedFor = (screen: Screen): boolean => screen === "gate" || screen === "memories"
 
@@ -85,7 +98,7 @@ export function originFor(facet: { x: number; y: number } | undefined): { x: num
   return { x: Number((facet.x * 100).toFixed(2)), y: Number(((1 - facet.y) * 100).toFixed(2)) }
 }
 
-/** Where the sky dives: toward the orb after its portal, otherwise toward the facet last opened. */
+/** Where the sky dives: toward the orb after its portal (and back out of it), otherwise toward the facet last opened. */
 export function journeyOriginFor(
   state: Pick<JourneyState, "orbOrigin">,
   facet: { x: number; y: number } | undefined,

@@ -9,6 +9,7 @@ const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 
 import { Journey } from "./journey"
+import { ORB_EXIT_MS, ORB_RETURN_EXIT_MS, ORB_RETURN_MS, ORB_RETURN_REDUCED_MS, ORB_WARP_MS } from "./portal-timing"
 
 beforeEach(() => {
   listMemories.mockResolvedValue({ ok: true, memories: [] })
@@ -225,9 +226,89 @@ describe("Journey memory orb", () => {
     expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
 
     fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    // The way back runs the tunnel too: the sky is not here yet, and the trip is faster than the way in.
+    expect(screen.queryByRole("button", { name: "Historias" })).toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_MS + 50))
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
     expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+  })
+
+  it("returns through the portal: the tunnel opens over the memories, then fades into the sky", async () => {
+    await toSky({ onReplayIntro: vi.fn() })
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_WARP_MS + 100))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_EXIT_MS + 100))
+    expect(document.querySelector("[data-portal]")).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    // The tunnel is up and the memories are still beneath it; the way back cannot be pressed twice.
+    expect(document.querySelector("[data-portal]")).not.toBeNull()
+    expect(screen.getByRole("heading", { name: "Recuerdos" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Universo" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_MS - 50))
+    expect(screen.queryByRole("button", { name: "Historias" })).toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(100))
+    // Arrived: the sky is back, the tunnel lingers over it for its half-second fade, then goes.
+    expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Ver intro" })).toBeTruthy()
+    expect(document.querySelector("[data-portal]")).not.toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_EXIT_MS + 50))
+    expect(document.querySelector("[data-portal]")).toBeNull()
+    cleanup()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("takes the whole return in about half the time of the way in", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_WARP_MS + ORB_EXIT_MS + 100))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_MS + ORB_RETURN_EXIT_MS + 100))
+    expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
+    expect(document.querySelector("[data-portal]")).toBeNull()
+    expect(ORB_RETURN_MS + ORB_RETURN_EXIT_MS).toBeLessThan((ORB_WARP_MS + ORB_EXIT_MS) / 1.6)
+  })
+
+  it("clears its timers if the visitor leaves in the middle of the way back", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_WARP_MS + ORB_EXIT_MS + 100))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_MS / 2))
+    cleanup()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  describe("under reduced motion", () => {
+    beforeEach(() => {
+      vi.stubGlobal(
+        "matchMedia",
+        (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }),
+      )
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it("crossfades back to the sky in a moment, with no tunnel", async () => {
+      await toSky()
+      fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+      await act(() => vi.advanceTimersByTimeAsync(ORB_WARP_MS + ORB_EXIT_MS + 100))
+      fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+      expect(document.querySelector("[data-portal]")).toBeNull()
+      expect(screen.getByRole("heading", { name: "Recuerdos" })).toBeTruthy()
+      // The memories fade out over the sky instead of being cut.
+      const place = screen.getByRole("heading", { name: "Recuerdos" }).closest("[data-memories-layer]") as HTMLElement
+      expect(place.style.opacity).toBe("0")
+      await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_REDUCED_MS + 50))
+      expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
+      expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+      expect(document.querySelector("[data-portal]")).toBeNull()
+      cleanup()
+      expect(vi.getTimerCount()).toBe(0)
+    })
   })
 
   it("tracks the orb once, with no props", async () => {
@@ -242,6 +323,7 @@ describe("Journey memory orb", () => {
     fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
     await act(() => vi.advanceTimersByTimeAsync(1800))
     fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    await act(() => vi.advanceTimersByTimeAsync(ORB_RETURN_MS + 50))
     fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
     expect(screen.getByRole("heading", { name: "Ahora" })).toBeTruthy()
   })

@@ -6,6 +6,7 @@ import { checkHandle } from "@/features/gate/actions"
 import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
 import { AsciiTunnel, GateScreen, gateReducer, initialGateState } from "@/features/gate"
 import { MemoriesSpace } from "@/features/memories"
+import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import { ORB_CURSOR_ID, ORB_PORTAL, Orb } from "@/features/orb"
 import { READER_PAGES, Reader } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
@@ -23,6 +24,14 @@ import {
   zoomFor,
 } from "./journey-machine"
 import { PARALLAX_REST, stepParallax, type ParallaxState } from "./parallax"
+import {
+  ORB_EXIT_MS,
+  ORB_RETURN_EXIT_MS,
+  ORB_RETURN_FADE_MS,
+  ORB_RETURN_MS,
+  ORB_RETURN_REDUCED_MS,
+  ORB_WARP_MS,
+} from "./portal-timing"
 import { skyKeepOut } from "./sky-keep-out"
 import { themeVars } from "./theme"
 
@@ -31,9 +40,6 @@ const CHECK_MIN_MS = 1100
 // The warp before the tunnel's mouth opens onto the sky, and how long the gate layer lingers after.
 const WARP_MS = 1500
 const GATE_EXIT_MS = 1300
-// The orb's portal runs the same tunnel: the trip, then how long the tunnel lingers over the memories space.
-const ORB_WARP_MS = 1700
-const ORB_EXIT_MS = 1300
 
 const FACET_IDS = FACETS.map((f) => f.id)
 
@@ -49,7 +55,9 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
   const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
   const [gateMounted, setGateMounted] = useState(true)
-  const [portalLinger, setPortalLinger] = useState(false)
+  // The tunnel lingers over what it opened onto while it fades: the memories space on the way in, the sky on the way back.
+  const [portalLinger, setPortalLinger] = useState<"out" | "back" | null>(null)
+  const reduced = useReducedMotion()
   const [skyFailed, setSkyFailed] = useState(false)
   const portalExit = useRef<ReturnType<typeof setTimeout>>(undefined)
   const skyRef = useRef<HalftoneSkyHandle>(null)
@@ -133,11 +141,29 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
     if (screen !== "orbWarp") return
     const warp = setTimeout(() => {
       dispatch({ type: "orbArrived" })
-      setPortalLinger(true)
-      portalExit.current = setTimeout(() => setPortalLinger(false), ORB_EXIT_MS)
+      setPortalLinger("out")
+      clearTimeout(portalExit.current)
+      portalExit.current = setTimeout(() => setPortalLinger(null), ORB_EXIT_MS)
     }, ORB_WARP_MS)
     return () => clearTimeout(warp)
   }, [screen])
+
+  // The way back: the same tunnel at about half the trip, opening over the memories and fading into the sky, which
+  // is already painting. Under reduced motion there is no tunnel: the memories just fade out over the sky.
+  useEffect(() => {
+    if (screen !== "orbReturn") return
+    const back = setTimeout(
+      () => {
+        dispatch({ type: "orbReturned" })
+        if (reduced) return
+        setPortalLinger("back")
+        clearTimeout(portalExit.current)
+        portalExit.current = setTimeout(() => setPortalLinger(null), ORB_RETURN_EXIT_MS)
+      },
+      reduced ? ORB_RETURN_REDUCED_MS : ORB_RETURN_MS,
+    )
+    return () => clearTimeout(back)
+  }, [screen, reduced])
   useEffect(() => () => clearTimeout(portalExit.current), [])
 
   // The captured star (cursor) or the hovered/keyboard-focused one lights up in the sky.
@@ -147,7 +173,9 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   }, [focusIndex])
 
   const origin = journeyOriginFor(journey, facet)
-  const orbShown = screen === "sky" || screen === "orbWarp" || screen === "memories"
+  const orbShown = screen === "sky" || screen === "orbWarp" || screen === "memories" || screen === "orbReturn"
+  const tunnelUp = screen === "orbWarp" || (screen === "orbReturn" && !reduced)
+  const tunnelBack = screen === "orbReturn" || portalLinger === "back"
   const listSide = listSideFor((facet ?? FACETS[0]).x)
   const entry = (facet ?? FACETS[0]).entries[journey.entryIndex] ?? (facet ?? FACETS[0]).entries[0]
 
@@ -188,6 +216,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
               active={screen !== "memories"}
               interactive={screen === "sky"}
               held={cursorTarget?.id === ORB_CURSOR_ID || screen === "orbWarp"}
+              parked={screen === "orbReturn"}
               sky={skyRef}
               keepOut={keepOut}
               fallbackGlow={skyFailed}
@@ -242,26 +271,45 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
         </div>
       )}
 
-      {screen === "memories" && (
-        <div className="absolute inset-0">
+      {(screen === "memories" || screen === "orbReturn") && (
+        <div
+          data-memories-layer
+          className="absolute inset-0"
+          style={{
+            // Reduced motion: no tunnel on the way back, so the memories fade out over the sky instead of being cut.
+            opacity: reduced && screen === "orbReturn" ? 0 : 1,
+            transition: reduced ? `opacity ${ORB_RETURN_REDUCED_MS}ms ease` : undefined,
+          }}
+        >
           {/* The place paints its own opaque void, so the way back sits above it. */}
           <MemoriesSpace accent={ORB_PORTAL.rings[1]} palette={ORB_PORTAL.rings} />
-          <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
+          {screen === "memories" && (
+            <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
+          )}
         </div>
       )}
 
-      {(screen === "orbWarp" || portalLinger) && (
+      {(tunnelUp || portalLinger) && (
         <div
           data-portal
           aria-hidden="true"
           className="gate pointer-events-none absolute inset-0"
           style={{
-            opacity: screen === "orbWarp" ? 1 : 0,
-            transform: `scale(${screen === "orbWarp" ? 1 : 1.5})`,
+            opacity: tunnelUp ? 1 : 0,
+            transform: `scale(${tunnelUp ? 1 : 1.5})`,
             transformOrigin: `${origin.x}% ${origin.y}%`,
+            // The way back lets go faster, and finishes fading before the layer is removed.
+            ...(tunnelBack
+              ? {
+                  transition: `opacity ${ORB_RETURN_FADE_MS}ms cubic-bezier(0.23, 1, 0.32, 1), transform ${ORB_RETURN_EXIT_MS}ms cubic-bezier(0.23, 1, 0.32, 1)`,
+                }
+              : null),
           }}
         >
-          <div className="portal-in absolute inset-0" style={{ transformOrigin: `${origin.x}% ${origin.y}%` }}>
+          <div
+            className={tunnelBack ? "portal-in portal-in-back absolute inset-0" : "portal-in absolute inset-0"}
+            style={{ transformOrigin: `${origin.x}% ${origin.y}%` }}
+          >
             <AsciiTunnel gate="granted" palette={ORB_PORTAL} />
           </div>
         </div>
