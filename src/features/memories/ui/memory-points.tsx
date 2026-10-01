@@ -172,7 +172,7 @@ export function MemoryPoints({ memories, reduced, onOpen }: MemoryPointsProps) {
                 data-cursor-label={truncateCaption(memory.caption, LABEL_MAX)}
                 data-cursor-context={date}
                 data-memory-id={memory.id}
-                data-ready={ready.has(memory.id)}
+                data-ready={ready.has(memory.id) || !memory.thumbUrl}
                 data-pending={pending}
                 data-reduced={reduced}
                 data-link="idle"
@@ -181,22 +181,25 @@ export function MemoryPoints({ memories, reduced, onOpen }: MemoryPointsProps) {
               >
                 <span className="mem-drift" aria-hidden="true">
                   <span className="mem-dot" />
-                  <span className="mem-thumb">
-                    {/* A Cloudinary URL that is already sized and optimized (f_auto, q_auto, 160 px); next/image would only re-proxy it. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={memory.thumbUrl}
-                      alt=""
-                      // A cached or server-rendered image can finish before React attaches onLoad.
-                      ref={(img) => {
-                        if (img?.complete) markReady(memory.id)
-                      }}
-                      decoding="async"
-                      draggable={false}
-                      onLoad={() => markReady(memory.id)}
-                      onError={() => markReady(memory.id)}
-                    />
-                  </span>
+                  {/* An audio-only memory has no photo: its orb is just the glow. */}
+                  {memory.thumbUrl && (
+                    <span className="mem-thumb">
+                      {/* A Cloudinary URL that is already sized and optimized (f_auto, q_auto, 160 px); next/image would only re-proxy it. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={memory.thumbUrl}
+                        alt=""
+                        // A cached or server-rendered image can finish before React attaches onLoad.
+                        ref={(img) => {
+                          if (img?.complete) markReady(memory.id)
+                        }}
+                        decoding="async"
+                        draggable={false}
+                        onLoad={() => markReady(memory.id)}
+                        onError={() => markReady(memory.id)}
+                      />
+                    </span>
+                  )}
                   {pending && <span className="mem-pending">Pendiente</span>}
                 </span>
               </button>

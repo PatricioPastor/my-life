@@ -28,6 +28,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   orbColor: "#8ab4ff",
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
+  audio: null,
   ...over,
 })
 
@@ -209,6 +210,14 @@ describe("MemoriesPlace points", () => {
     expect(screen.getByRole("button").getAttribute("data-ready")).toBe("true")
   })
 
+  it("draws an audio-only orb as just its glow: no thumbnail to wait for", () => {
+    const only = view("a", "Mi voz", { thumbUrl: null, fullUrl: null, width: null, height: null, audio: { url: "https://x/a.mp3", durationMs: 1000 } })
+    const { container } = render(<MemoriesPlace state={ready(only)} />)
+    expect(container.querySelector("img")).toBeNull()
+    expect(container.querySelector(".mem-thumb")).toBeNull()
+    expect(screen.getByRole("button").getAttribute("data-ready")).toBe("true")
+  })
+
   it("holds the drift under reduced motion", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
     render(<MemoriesPlace state={three} />)
@@ -232,6 +241,31 @@ describe("MemoriesPlace viewer", () => {
     const img = within(dialog).getByRole("img") as HTMLImageElement
     expect(img.src).toBe("https://res.cloudinary.com/demo/image/upload/f/b")
     expect(img.alt).toBe("Una tarde de lluvia")
+  })
+
+  it("shows a memory that is only an audio: no photo, a player with the signed mp3 URL", () => {
+    const audio = { url: "https://res.cloudinary.com/demo/video/authenticated/s--x--/f_mp3/a", durationMs: 4000 }
+    render(
+      <MemoriesPlace
+        state={ready(view("a", "Mi voz", { width: null, height: null, thumbUrl: null, fullUrl: null, audio }))}
+      />,
+    )
+    open(/Mi voz/)
+    const dialog = screen.getByRole("dialog", { name: "Mi voz" })
+    expect(within(dialog).queryByRole("img")).toBeNull()
+    expect(dialog.querySelector("[data-photo-frame]")).toBeNull()
+    const player = dialog.querySelector("audio") as HTMLAudioElement
+    expect(player.getAttribute("src")).toBe(audio.url)
+    expect(player.controls).toBe(true)
+  })
+
+  it("plays the voice of a memory that also has a photo", () => {
+    const audio = { url: "https://res.cloudinary.com/demo/video/authenticated/s--x--/f_mp3/a", durationMs: 4000 }
+    render(<MemoriesPlace state={ready(view("a", "Uno", { audio }))} />)
+    open(/Uno/)
+    const dialog = screen.getByRole("dialog")
+    expect(within(dialog).getByRole("img")).toBeTruthy()
+    expect(dialog.querySelector("audio")?.getAttribute("src")).toBe(audio.url)
   })
 
   it("reserves the photo's aspect ratio so nothing jumps when it loads", () => {

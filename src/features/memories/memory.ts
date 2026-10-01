@@ -2,18 +2,29 @@ import type { LocationSource, MediaKind, MetadataValue, PaletteColor, PhotoDetai
 
 export type MemoryStatus = "pending" | "approved" | "rejected"
 
-/** A photo, a short caption and the date it happened, uploaded by an admitted visitor. */
+/** The audio of a memory, as stored: what Cloudinary reported about it (never what the browser said). */
+export interface StoredAudio {
+  /** Cloudinary public id of the audio (a `video` resource). */
+  publicId: string
+  /** Lowercase Cloudinary format name of the original (`webm`, `m4a`...). */
+  format: string
+  bytes: number
+  durationMs: number
+}
+
+/** A photo and/or an audio, a short caption and the date it happened, uploaded by an admitted visitor. */
 export interface Memory {
   id: string
   /** The visitor's Instagram handle (normalized). */
   handle: string
-  /** Cloudinary public id of the photo. */
-  publicId: string
+  /** Cloudinary public id of the photo; null for an audio-only memory. */
+  publicId: string | null
   caption: string
   /** Calendar date the memory happened, as UTC midnight. */
   happenedOn: Date
-  width: number
-  height: number
+  /** The photo's size; null when there is no photo. */
+  width: number | null
+  height: number | null
   status: MemoryStatus
   createdAt: Date
   kind: MediaKind
@@ -35,15 +46,20 @@ export interface Memory {
   locationSource: LocationSource | null
   /** `#rrggbb` the orb glows in. Null only for rows stored before orb colors existed. */
   orbColor: string | null
+  /** The voice of the memory; null for a photo-only one. */
+  audio: StoredAudio | null
 }
 
 /** What a visitor submits. The handle comes from the session, never from this input. */
 export interface MemoryCore {
-  publicId: string
+  /** The photo's public id, or null when the memory is only an audio. */
+  publicId: string | null
   caption: string
   happenedOn: Date
-  width: number
-  height: number
+  width: number | null
+  height: number | null
+  /** At least one of `publicId` and `audio` is set. */
+  audio: StoredAudio | null
 }
 
 /** Unvalidated input, same shape as {@link MemoryCore}. */

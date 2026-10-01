@@ -6,6 +6,8 @@ import {
 } from "./memory"
 
 export type MemoryValidationError =
+  | "media_missing"
+  | "audio_invalid"
   | "public_id_empty"
   | "caption_empty"
   | "caption_too_long"
@@ -34,8 +36,22 @@ function utcDay(date: Date): Date {
 export function validateNewMemory(input: NewMemoryInput, now: Date = new Date()): ValidationResult {
   const errors: MemoryValidationError[] = []
 
-  const publicId = input.publicId.trim()
-  if (publicId === "") errors.push("public_id_empty")
+  // A memory is a photo, an audio or both; with a photo its size is known, without one it is not.
+  const audio = input.audio ?? null
+  let publicId: string | null = null
+  if (input.publicId === null) {
+    if (audio === null) errors.push("media_missing")
+  } else {
+    publicId = input.publicId.trim()
+    if (publicId === "") errors.push("public_id_empty")
+  }
+
+  if (audio !== null) {
+    const { bytes, durationMs } = audio
+    if (audio.publicId.trim() === "" || !isPositiveInteger(bytes) || !isPositiveInteger(durationMs)) {
+      errors.push("audio_invalid")
+    }
+  }
 
   const caption = input.caption.trim()
   if (caption === "") errors.push("caption_empty")
@@ -51,12 +67,17 @@ export function validateNewMemory(input: NewMemoryInput, now: Date = new Date())
     else if (happenedOn < EARLIEST_MEMORY_DATE) errors.push("date_too_old")
   }
 
-  if (!isPositiveInteger(input.width)) errors.push("width_invalid")
-  if (!isPositiveInteger(input.height)) errors.push("height_invalid")
+  if (input.publicId === null) {
+    if (input.width !== null) errors.push("width_invalid")
+    if (input.height !== null) errors.push("height_invalid")
+  } else {
+    if (input.width === null || !isPositiveInteger(input.width)) errors.push("width_invalid")
+    if (input.height === null || !isPositiveInteger(input.height)) errors.push("height_invalid")
+  }
 
   if (errors.length > 0) return { ok: false, errors }
   return {
     ok: true,
-    value: { publicId, caption, happenedOn, width: input.width, height: input.height },
+    value: { publicId, caption, happenedOn, width: input.width, height: input.height, audio },
   }
 }

@@ -1,6 +1,6 @@
 import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
 import { checkPhoto } from "../upload-limits"
-import type { CreateMemoryResult } from "../upload-view"
+import type { CreateMemoryResult, PrepareUploadFailure } from "../upload-view"
 
 /** The form's Spanish copy (neutral, `tú`). Short and honest. */
 export const COPY = {
@@ -55,11 +55,11 @@ export function validateForm({ file, caption, date, today }: FormValues): FormEr
   return errors
 }
 
-type Failure = Extract<CreateMemoryResult, { ok: false }> | { ok: false; reason: "no_session" | "unavailable" | "rate_limited" }
+type Failure = Extract<CreateMemoryResult, { ok: false }> | { ok: false; reason: PrepareUploadFailure }
 
 /** Where a failed save shows up: on the field it is about, or on the form. */
 export function messageForFailure(failure: Failure): FormErrors {
-  if (failure.reason === "invalid") {
+  if (failure.reason === "invalid" && "errors" in failure) {
     const errors: FormErrors = {}
     for (const error of failure.errors) {
       if (error === "caption_empty" || error === "caption_too_long") errors.caption = COPY.caption

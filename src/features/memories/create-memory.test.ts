@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
-import type { AssetInfo, CloudinaryAssets } from "./cloudinary-assets"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
+import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
-import { MAX_UPLOAD_BYTES } from "./upload-limits"
+import { MAX_AUDIO_BYTES, MAX_AUDIO_MS, MAX_UPLOAD_BYTES } from "./upload-limits"
 import type { CreateMemoryInput } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
@@ -17,8 +17,13 @@ const SECRET = Buffer.alloc(32, 7).toString("base64url")
 const NOW_MS = Date.UTC(2026, 9, 1, 15, 0, 0)
 const NOW = NOW_MS / 1000
 const PID = "my-life/memories/3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f"
-const ticketFor = (over: Partial<{ h: string; pid: string; exp: number }> = {}, secret = SECRET) =>
+const AID = "my-life/memories/audio-9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
+const ticketFor = (over: Partial<{ h: string; pid: string; aid: string; exp: number }> = {}, secret = SECRET) =>
   signUploadTicket({ h: "ana", pid: PID, exp: NOW + 600, ...over }, secret)
+const voiceTicket = (over: Partial<{ pid: string | undefined; aid: string }> = {}) => {
+  const { pid, aid } = { pid: undefined, aid: AID, ...over }
+  return signUploadTicket({ h: "ana", ...(pid ? { pid } : {}), aid, exp: NOW + 600 }, SECRET)
+}
 
 const asset = (over: Partial<AssetInfo> = {}): AssetInfo => ({
   publicId: PID,
@@ -28,6 +33,17 @@ const asset = (over: Partial<AssetInfo> = {}): AssetInfo => ({
   bytes: 1_000_000,
   width: 4032,
   height: 3024,
+  ...over,
+})
+
+const voice = (over: Partial<AudioInfo> = {}): AudioInfo => ({
+  publicId: AID,
+  resourceType: "video",
+  type: "authenticated",
+  format: "webm",
+  bytes: 200_000,
+  durationSeconds: 42.5,
+  isAudio: true,
   ...over,
 })
 
@@ -53,10 +69,14 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   placeName: null,
   locationSource: null,
   orbColor: null,
+  audio: null,
   ...over,
 })
 
-function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; info?: AssetInfo | null } = {}) {
+function setup(
+  over: Partial<CreateMemoryDeps> = {},
+  opts: { recent?: number; info?: AssetInfo | null; audio?: AudioInfo | null } = {},
+) {
   const reverse = vi.fn<ReverseGeocoder["reverse"]>(async () => "Palermo, Buenos Aires")
   const follow = vi.fn<CreateMemoryDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const repository: MemoryRepository = {
@@ -67,6 +87,8 @@ function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; in
   const assets: CloudinaryAssets = {
     describe: vi.fn(async () => (opts.info === undefined ? asset() : opts.info)),
     destroy: vi.fn(async () => {}),
+    describeAudio: vi.fn(async () => (opts.audio === undefined ? voice() : opts.audio)),
+    destroyAudio: vi.fn(async () => {}),
   }
   const full: CreateMemoryDeps = {
     currentVisitor: async () => ({ handle: "ana" }),
@@ -243,6 +265,7 @@ describe("createMemoryWith: rate limit and insert", () => {
       placeName: null,
       locationSource: null,
       orbColor: DEFAULT_ORB_COLOR,
+      audio: null,
     })
     expect(assets.destroy).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
@@ -268,6 +291,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         orbColor: DEFAULT_ORB_COLOR,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
+        audio: null,
       },
     })
     const json = JSON.stringify(result)
@@ -601,5 +625,197 @@ describe("createMemoryWith: the orb color", () => {
       orbColor: "#ff9a3c",
       latitude: null,
     })
+  })
+})
+
+describe("createMemoryWith: audio", () => {
+  const audioIn = (over: Parameters<typeof input>[0] = {}) => input({ ticket: voiceTicket(), ...over })
+  const bothIn = (over: Parameters<typeof input>[0] = {}) => input({ ticket: ticketFor({ aid: AID }), ...over })
+
+  it("stores an audio-only memory: the audio facts come from Cloudinary and the photo columns stay empty", async () => {
+    const { full, repository, assets } = setup({}, { audio: voice({ bytes: 321_000, durationSeconds: 61.235, format: "M4A" }) })
+    const result = await createMemoryWith(full, audioIn({ caption: "  Mi voz  " }))
+    expect(assets.describeAudio).toHaveBeenCalledWith(AID)
+    expect(assets.describe).not.toHaveBeenCalled()
+    expect(repository.createPending).toHaveBeenCalledWith("ana", {
+      publicId: null,
+      caption: "Mi voz",
+      happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+      width: null,
+      height: null,
+      kind: "image",
+      format: null,
+      bytes: null,
+      takenAt: null,
+      dominantColor: null,
+      palette: [],
+      metadata: {},
+      latitude: null,
+      longitude: null,
+      placeName: null,
+      locationSource: null,
+      orbColor: DEFAULT_ORB_COLOR,
+      audio: { publicId: AID, format: "m4a", bytes: 321_000, durationMs: 61_235 },
+    })
+    expect(assets.destroy).not.toHaveBeenCalled()
+    expect(assets.destroyAudio).not.toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+  })
+
+  it("stores a photo with an audio, verifying both", async () => {
+    const { full, repository, assets } = setup({}, { info: photo() })
+    const result = await createMemoryWith(full, bothIn())
+    expect(assets.describe).toHaveBeenCalledWith(PID)
+    expect(assets.describeAudio).toHaveBeenCalledWith(AID)
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({
+      publicId: PID,
+      width: 4032,
+      height: 3024,
+      format: "jpg",
+      dominantColor: "#112233",
+      audio: { publicId: AID, format: "webm", bytes: 200_000, durationMs: 42_500 },
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("answers the new memory with a null photo, and a signed mp3 URL with the duration", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.createPending).mockResolvedValueOnce(
+      stored({
+        publicId: null,
+        width: null,
+        height: null,
+        format: null,
+        bytes: null,
+        audio: { publicId: AID, format: "webm", bytes: 200_000, durationMs: 42_500 },
+      }),
+    )
+    const result = await createMemoryWith(full, audioIn())
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.memory).toMatchObject({
+      width: null,
+      height: null,
+      thumbUrl: null,
+      fullUrl: null,
+      audio: { url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 },
+    })
+    expect(JSON.stringify(result)).not.toMatch(/publicId|audioPublicId|"format"|"bytes"/)
+  })
+
+  it.each<[string, AudioInfo, string]>([
+    ["is not audio (a video with pictures)", voice({ isAudio: false }), "audio_type"],
+    ["is a public upload", voice({ type: "upload" }), "audio_type"],
+    ["is an image", voice({ resourceType: "image" }), "audio_type"],
+    ["has a format we do not allow", voice({ format: "flac" }), "audio_type"],
+    ["has no duration", voice({ durationSeconds: null }), "audio_type"],
+    ["is over 15 MB", voice({ bytes: MAX_AUDIO_BYTES + 1 }), "audio_too_large"],
+    ["is longer than 2 minutes", voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 5 }), "audio_too_long"],
+  ])("destroys the audio and refuses when it %s", async (_name, info, reason) => {
+    const { full, repository, assets } = setup({}, { audio: info })
+    expect(await createMemoryWith(full, audioIn())).toEqual({ ok: false, reason })
+    expect(assets.destroyAudio).toHaveBeenCalledWith(AID)
+    expect(repository.createPending).not.toHaveBeenCalled()
+  })
+
+  it("destroys the photo too when only the audio fails", async () => {
+    const { full, assets } = setup({}, { info: photo(), audio: voice({ bytes: MAX_AUDIO_BYTES + 1 }) })
+    expect(await createMemoryWith(full, bothIn())).toEqual({ ok: false, reason: "audio_too_large" })
+    expect(assets.destroy).toHaveBeenCalledWith(PID)
+    expect(assets.destroyAudio).toHaveBeenCalledWith(AID)
+  })
+
+  it("destroys the audio too when only the photo fails, and never reads the audio first", async () => {
+    const { full, assets } = setup({}, { info: asset({ format: "gif" }) })
+    expect(await createMemoryWith(full, bothIn())).toEqual({ ok: false, reason: "asset_type" })
+    expect(assets.destroy).toHaveBeenCalledWith(PID)
+    expect(assets.destroyAudio).toHaveBeenCalledWith(AID)
+  })
+
+  it("answers audio_missing when Cloudinary has no audio, with nothing to destroy for it", async () => {
+    const { full, assets } = setup({}, { audio: null })
+    expect(await createMemoryWith(full, audioIn())).toEqual({ ok: false, reason: "audio_missing" })
+    expect(assets.destroyAudio).not.toHaveBeenCalled()
+  })
+
+  it("destroys the audio when the photo is missing, but not the photo that is not there", async () => {
+    const { full, assets } = setup({}, { info: null })
+    expect(await createMemoryWith(full, bothIn())).toEqual({ ok: false, reason: "asset_missing" })
+    expect(assets.destroy).not.toHaveBeenCalled()
+    expect(assets.destroyAudio).toHaveBeenCalledWith(AID)
+  })
+
+  it("answers unavailable, cleaning up both, when Cloudinary cannot answer about the audio", async () => {
+    const { full, assets } = setup({}, { info: photo() })
+    vi.mocked(assets.describeAudio).mockRejectedValueOnce(new Error("503"))
+    expect(await createMemoryWith(full, bothIn())).toEqual({ ok: false, reason: "unavailable" })
+    expect(assets.destroy).toHaveBeenCalledWith(PID)
+    expect(assets.destroyAudio).toHaveBeenCalledWith(AID)
+  })
+
+  it("still answers with the original failure when an audio cleanup fails too", async () => {
+    const { full, assets } = setup({}, { audio: voice({ format: "flac" }) })
+    vi.mocked(assets.destroyAudio).mockRejectedValueOnce(new Error("503"))
+    expect(await createMemoryWith(full, audioIn())).toEqual({ ok: false, reason: "audio_type" })
+  })
+
+  it("destroys every uploaded asset when the validation fails or the rate limit is reached", async () => {
+    const invalid = setup({}, { info: photo() })
+    expect(await createMemoryWith(invalid.full, bothIn({ caption: " " }))).toMatchObject({ ok: false, reason: "invalid" })
+    expect(invalid.assets.destroy).toHaveBeenCalledWith(PID)
+    expect(invalid.assets.destroyAudio).toHaveBeenCalledWith(AID)
+
+    const limited = setup({}, { recent: 5 })
+    expect(await createMemoryWith(limited.full, audioIn())).toEqual({ ok: false, reason: "rate_limited" })
+    expect(limited.assets.destroyAudio).toHaveBeenCalledWith(AID)
+  })
+
+  it("keeps both assets when the insert hits a duplicate id", async () => {
+    const { full, repository, assets } = setup({}, { info: photo() })
+    vi.mocked(repository.createPending).mockRejectedValueOnce(new DuplicatePublicIdError())
+    expect(await createMemoryWith(full, bothIn())).toEqual({ ok: false, reason: "duplicate" })
+    expect(assets.destroy).not.toHaveBeenCalled()
+    expect(assets.destroyAudio).not.toHaveBeenCalled()
+  })
+
+  it("gives an audio-only memory the color the visitor chose, or the default glow", async () => {
+    const chosen = setup()
+    await createMemoryWith(chosen.full, audioIn({ orbColor: "#a58cff" }))
+    expect(vi.mocked(chosen.repository.createPending).mock.calls[0][1]).toMatchObject({ orbColor: "#a58cff" })
+
+    const dark = setup()
+    await createMemoryWith(dark.full, audioIn({ orbColor: "#112233" }))
+    expect(vi.mocked(dark.repository.createPending).mock.calls[0][1]).toMatchObject({ orbColor: DEFAULT_ORB_COLOR })
+  })
+
+  it("stores a place for an audio-only memory only from a Maps link, never from a photo it does not have", async () => {
+    const withLink = setup()
+    await createMemoryWith(
+      withLink.full,
+      audioIn({ shareLocation: true, mapsUrl: "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z" }),
+    )
+    expect(vi.mocked(withLink.repository.createPending).mock.calls[0][1]).toMatchObject({
+      latitude: -34.581,
+      longitude: -58.4208,
+      locationSource: "link",
+      placeName: "Plaza Italia",
+    })
+
+    const noLink = setup()
+    const result = await createMemoryWith(noLink.full, audioIn({ shareLocation: true }))
+    expect(vi.mocked(noLink.repository.createPending).mock.calls[0][1]).toMatchObject({
+      latitude: null,
+      locationSource: null,
+    })
+    expect(result).toMatchObject({ ok: true, locationSaved: false })
+    expect(noLink.reverse).not.toHaveBeenCalled()
+  })
+
+  it("refuses a ticket that covers neither a photo nor an audio, touching nothing", async () => {
+    const { full, assets } = setup()
+    const token = signUploadTicket({ h: "ana", exp: NOW + 600 }, SECRET)
+    expect(await createMemoryWith(full, input({ ticket: token }))).toEqual({ ok: false, reason: "invalid_ticket" })
+    expect(assets.describe).not.toHaveBeenCalled()
+    expect(assets.describeAudio).not.toHaveBeenCalled()
   })
 })

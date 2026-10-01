@@ -311,3 +311,58 @@ describe("the orb color migration", () => {
     expect(code).not.toMatch(/TO\s+PUBLIC/i)
   })
 })
+
+describe("the voice memories migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_audio"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the orb color migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261002010000_memory_orb_color").toBe(true)
+  })
+
+  it("passes the migration lint and touches no other table", () => {
+    expect(lintMigration(sql)).toEqual([])
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("adds the snake_case audio columns, all nullable, and a unique audio public id", () => {
+    for (const column of ["audio_public_id", "audio_format", "audio_bytes", "audio_duration_ms"]) {
+      expect(code).toMatch(new RegExp(`ADD\\s+COLUMN\\s+"${column}"\\s+(TEXT|INTEGER)\\s*(,|;)`, "i"))
+    }
+    expect(code).toMatch(/CREATE\s+UNIQUE\s+INDEX\s+"memories_audio_public_id_key"\s+ON\s+"memories"\s*\(\s*"audio_public_id"\s*\)/i)
+  })
+
+  it("is expand-only: it relaxes NOT NULL on the photo columns and never renames or drops anything", () => {
+    for (const column of ["public_id", "width", "height"]) {
+      expect(code).toMatch(new RegExp(`ALTER\\s+COLUMN\\s+"${column}"\\s+DROP\\s+NOT\\s+NULL`, "i"))
+    }
+    expect(code).not.toMatch(/DROP\s+(COLUMN|TABLE|CONSTRAINT|INDEX|TYPE)|RENAME|DELETE\s+FROM|TRUNCATE|SET\s+NOT\s+NULL|ALTER\s+TYPE/i)
+  })
+
+  it("requires a photo or an audio, and keeps each one's columns together", () => {
+    expect(code).toMatch(/CONSTRAINT\s+"memories_has_media"\s+CHECK\s*\(\s*"public_id"\s+IS\s+NOT\s+NULL\s+OR\s+"audio_public_id"\s+IS\s+NOT\s+NULL\s*\)/i)
+    expect(code).toMatch(/CONSTRAINT\s+"memories_photo_paired"/i)
+    expect(code).toMatch(/CONSTRAINT\s+"memories_audio_paired"/i)
+  })
+
+  it("bounds the audio duration and size", () => {
+    expect(code).toMatch(/CONSTRAINT\s+"memories_audio_duration_range"\s+CHECK[^;]*"audio_duration_ms"[^;]*BETWEEN\s+1\s+AND\s+125000/i)
+    expect(code).toMatch(/CONSTRAINT\s+"memories_audio_bytes_range"\s+CHECK[^;]*"audio_bytes"[^;]*BETWEEN\s+1\s+AND\s+15728640/i)
+  })
+
+  it("grants app_user INSERT on exactly the four new columns", () => {
+    const grant = /GRANT\s+INSERT\s*\(([^)]*)\)\s+ON\s+"memories"\s+TO\s+app_user/i.exec(code)
+    expect(grant).not.toBeNull()
+    const columns = grant![1].split(",").map((c) => c.trim().replace(/"/g, ""))
+    expect(columns.sort()).toEqual(["audio_bytes", "audio_duration_ms", "audio_format", "audio_public_id"])
+  })
+
+  it("leaves row-level security and the other grants alone", () => {
+    expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY/i)
+    expect(code).not.toMatch(/CREATE\s+POLICY|DROP\s+POLICY/i)
+    expect(code).not.toMatch(/GRANT\s+(UPDATE|DELETE|ALL|SELECT)/i)
+    expect(code).not.toMatch(/TO\s+PUBLIC/i)
+  })
+})

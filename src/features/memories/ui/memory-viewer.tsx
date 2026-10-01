@@ -35,6 +35,7 @@ const Chevron = ({ flip }: { flip?: boolean }) => (
 
 function Photo({ memory }: { memory: MemoryView }) {
   const [loaded, setLoaded] = useState(false)
+  if (!memory.fullUrl || !memory.width || !memory.height) return null
   return (
     <div
       data-photo-frame
@@ -126,6 +127,17 @@ export function MemoryViewer({ memories, openId, origin, container, onOpenChange
                 }}
               >
                 <Photo key={memory.id} memory={memory} />
+                {memory.audio && (
+                  // Plain controls for now: the glass-orb viewer plays the voice with the talking orb.
+                  <audio
+                    key={`${memory.id}-audio`}
+                    controls
+                    preload="metadata"
+                    src={memory.audio.url}
+                    aria-label="Audio del recuerdo"
+                    className="w-full max-w-[420px]"
+                  />
+                )}
                 <div className="flex w-full max-w-[640px] items-center justify-between gap-3">
                   <button
                     type="button"

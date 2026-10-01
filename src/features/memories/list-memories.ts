@@ -1,4 +1,4 @@
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import type { ListMemoriesResult, MemoryPlace, MemoryView } from "./memory-view"
@@ -29,6 +29,8 @@ function toPlace(memory: Memory): MemoryPlace | null {
 
 export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryView | null {
   if (memory.status === "rejected") return null
+  // A row with neither a photo nor an audio cannot exist (a CHECK refuses it); if one did, it would show nothing.
+  if (memory.publicId === null && memory.audio === null) return null
   return {
     id: memory.id,
     caption: memory.caption,
@@ -42,8 +44,12 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     place: toPlace(memory),
     // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks.
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
-    thumbUrl: cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
-    fullUrl: cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
+    thumbUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
+    fullUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
+    // The original (webm, ogg, m4a...) never leaves the server: the browser gets a signed mp3 transcode.
+    audio: memory.audio
+      ? { url: cloudinaryAudioUrl(cloudName, memory.audio.publicId, apiSecret), durationMs: memory.audio.durationMs }
+      : null,
   }
 }
 

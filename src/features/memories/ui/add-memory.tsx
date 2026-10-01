@@ -8,7 +8,7 @@ import { cn } from "@/shared/lib/utils"
 import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
 import type { MemoryView } from "../memory-view"
 import { checkPhoto } from "../upload-limits"
-import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadResult } from "../upload-view"
+import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadInput, PrepareUploadResult } from "../upload-view"
 import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
 import type { GpsParser } from "./photo-gps"
@@ -22,7 +22,7 @@ import { usePhotoPlace, type SuggestPlace } from "./use-photo-place"
 export interface AddMemoryProps {
   /** The element the dialog mounts into, so it stays inside the stage (and its cursor). */
   container: HTMLElement | null
-  prepare: () => Promise<PrepareUploadResult>
+  prepare: (input: PrepareUploadInput) => Promise<PrepareUploadResult>
   create: (input: CreateMemoryInput) => Promise<CreateMemoryResult>
   upload: UploadToCloudinary
   /** Names the place of the photo's GPS position; the server rounds it before geocoding (a server action). */
@@ -170,13 +170,15 @@ function MemoryForm({
     controller.current = abort
     setPhase({ kind: "uploading", percent: 0 })
     try {
-      const prepared = await props.prepare()
+      const prepared = await props.prepare({ photo: true, audio: false })
       if (abort.signal.aborted) return
       if (!prepared.ok) return fail(messageForFailure(prepared))
 
       const sent = await props.upload({
         file: picked!.file,
-        grant: prepared.upload,
+        cloudName: prepared.upload.cloudName,
+        fields: prepared.upload.photo ?? {},
+        resource: "image",
         onProgress: (percent) => setPhase((p) => (p.kind === "uploading" ? { kind: "uploading", percent } : p)),
         signal: abort.signal,
       })

@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, signDeliveryPath } from "./cloudinary-url"
+import {
+  AUDIO_TRANSFORM,
+  FULL_TRANSFORM,
+  THUMB_TRANSFORM,
+  cloudinaryAudioUrl,
+  cloudinaryUrl,
+  signDeliveryPath,
+} from "./cloudinary-url"
 
 // Test vector from Cloudinary's "Delivery URL signatures" page: secret `abcd`, the `sample-authenticated.png`
 // image with `c_fill,w_300,h_250/e_grayscale`. The signature is the first 8 characters of the URL-safe base64
@@ -68,5 +75,29 @@ describe("cloudinaryUrl", () => {
   it("uses a square auto-cropped thumbnail and a width-limited full image", () => {
     expect(THUMB_TRANSFORM).toBe("f_auto,q_auto,c_fill,g_auto,w_160,h_160")
     expect(FULL_TRANSFORM).toBe("f_auto,q_auto,c_limit,w_1600")
+  })
+})
+
+describe("cloudinaryAudioUrl", () => {
+  const AID = "my-life/memories/audio-3f2b8c1e"
+
+  it("transcodes to mp3 (plays on Safari and iOS) as a signed delivery URL of the authenticated video type", () => {
+    expect(AUDIO_TRANSFORM).toBe("f_mp3")
+    const signature = signDeliveryPath(AUDIO_TRANSFORM, AID, "abcd")
+    expect(cloudinaryAudioUrl("demo", AID, "abcd")).toBe(
+      `https://res.cloudinary.com/demo/video/authenticated/${signature}/f_mp3/${AID}`,
+    )
+  })
+
+  it("never builds a public upload URL and never puts the secret in the URL", () => {
+    const url = cloudinaryAudioUrl("demo", AID, "very-secret")
+    expect(url).not.toContain("/video/upload/")
+    expect(url).not.toContain("very-secret")
+  })
+
+  it("refuses path traversal and a missing cloud name or secret", () => {
+    expect(() => cloudinaryAudioUrl("demo", "a/../b", "abcd")).toThrow()
+    expect(() => cloudinaryAudioUrl("", AID, "abcd")).toThrow()
+    expect(() => cloudinaryAudioUrl("demo", AID, "")).toThrow()
   })
 })

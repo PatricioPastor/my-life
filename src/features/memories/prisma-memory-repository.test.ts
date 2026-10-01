@@ -29,7 +29,18 @@ const row = {
   placeName: "Nueva York",
   locationSource: "photo" as const,
   orbColor: "#ff9a3c" as string | null,
+  audioPublicId: null as string | null,
+  audioFormat: null as string | null,
+  audioBytes: null as number | null,
+  audioDurationMs: null as number | null,
 }
+
+/** What the domain holds for `row`: the four audio columns become one `audio` value. */
+const domainRow = (() => {
+  const { audioPublicId: _a, audioFormat: _b, audioBytes: _c, audioDurationMs: _d, ...rest } = row
+  void [_a, _b, _c, _d]
+  return { ...rest, audio: null }
+})()
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
 function fakeDb(rows: unknown[] = [row]) {
@@ -78,6 +89,7 @@ const input: NewMemory = {
   placeName: "Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
+  audio: null,
 }
 
 describe("PrismaMemoryRepository", () => {
@@ -105,7 +117,7 @@ describe("PrismaMemoryRepository", () => {
 
     it("maps rows to the domain", async () => {
       const { db } = fakeDb()
-      expect(await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")).toEqual([row])
+      expect(await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")).toEqual([domainRow])
     })
 
     it("returns an empty list when there are no rows", async () => {
@@ -155,6 +167,10 @@ describe("PrismaMemoryRepository", () => {
           placeName: "Nueva York",
           locationSource: "photo",
           orbColor: "#ff9a3c",
+          audioPublicId: null,
+          audioFormat: null,
+          audioBytes: null,
+          audioDurationMs: null,
         },
       })
     })
@@ -205,7 +221,7 @@ describe("PrismaMemoryRepository", () => {
       const { db } = fakeDb()
       expect(
         await new PrismaMemoryRepository(() => db as never).createPending("ana", input),
-      ).toEqual(row)
+      ).toEqual(domainRow)
     })
   })
   describe("createPending duplicates", () => {
@@ -242,5 +258,83 @@ describe("PrismaMemoryRepository", () => {
       expect(tx.memory.count).toHaveBeenCalledWith({ where: { handle: "ana", createdAt: { gte: since } } })
       expect(count).toBe(3)
     })
+  })
+})
+describe("PrismaMemoryRepository: audio", () => {
+  const audioRow = {
+    ...row,
+    publicId: null,
+    width: null,
+    height: null,
+    format: null,
+    bytes: null,
+    dominantColor: null,
+    audioPublicId: "my-life/memories/audio-1",
+    audioFormat: "webm",
+    audioBytes: 2000,
+    audioDurationMs: 4500,
+  }
+
+  it("maps the audio columns into one audio value, and a photo-less row to null photo fields", async () => {
+    const { db } = fakeDb([audioRow])
+    const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+    expect(memory).toMatchObject({
+      publicId: null,
+      width: null,
+      height: null,
+      audio: { publicId: "my-life/memories/audio-1", format: "webm", bytes: 2000, durationMs: 4500 },
+    })
+  })
+
+  it("maps a photo-only row to a null audio", async () => {
+    const { db } = fakeDb([row])
+    const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+    expect(memory.audio).toBeNull()
+  })
+
+  it("writes the audio columns, and null photo columns, for an audio-only memory", async () => {
+    const { db, tx } = fakeDb()
+    await new PrismaMemoryRepository(() => db as never).createPending("ana", {
+      ...input,
+      publicId: null,
+      width: null,
+      height: null,
+      format: null,
+      bytes: null,
+      dominantColor: null,
+      palette: [],
+      metadata: {},
+      latitude: null,
+      longitude: null,
+      placeName: null,
+      locationSource: null,
+      takenAt: null,
+      audio: { publicId: "my-life/memories/audio-1", format: "webm", bytes: 2000, durationMs: 4500 },
+    })
+    const data = (tx.memory.create.mock.calls[0][0] as { data: Record<string, unknown> }).data
+    expect(data).toMatchObject({
+      publicId: null,
+      width: null,
+      height: null,
+      audioPublicId: "my-life/memories/audio-1",
+      audioFormat: "webm",
+      audioBytes: 2000,
+      audioDurationMs: 4500,
+    })
+  })
+
+  it("writes null audio columns for a photo-only memory", async () => {
+    const { db, tx } = fakeDb()
+    await new PrismaMemoryRepository(() => db as never).createPending("ana", input)
+    const data = (tx.memory.create.mock.calls[0][0] as { data: Record<string, unknown> }).data
+    expect(data).toMatchObject({ audioPublicId: null, audioFormat: null, audioBytes: null, audioDurationMs: null })
+  })
+
+  it("answers a duplicate when the audio public id is already taken too (P2002)", async () => {
+    const { db, tx } = fakeDb()
+    tx.memory.create.mockRejectedValueOnce(Object.assign(new Error("dup"), { code: "P2002" }))
+    await expect(new PrismaMemoryRepository(() => db as never).createPending("ana", input)).rejects.toBeInstanceOf(
+      DuplicatePublicIdError,
+    )
   })
 })

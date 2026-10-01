@@ -36,6 +36,10 @@ function toDomain(row: MemoryRow): Memory {
     placeName: row.placeName,
     locationSource: row.locationSource,
     orbColor: row.orbColor,
+    audio:
+      row.audioPublicId !== null && row.audioFormat !== null && row.audioBytes !== null && row.audioDurationMs !== null
+        ? { publicId: row.audioPublicId, format: row.audioFormat, bytes: row.audioBytes, durationMs: row.audioDurationMs }
+        : null,
   }
 }
 
@@ -84,12 +88,16 @@ export class PrismaMemoryRepository implements MemoryRepository {
             placeName: input.placeName,
             locationSource: input.locationSource,
             orbColor: input.orbColor,
+            audioPublicId: input.audio?.publicId ?? null,
+            audioFormat: input.audio?.format ?? null,
+            audioBytes: input.audio?.bytes ?? null,
+            audioDurationMs: input.audio?.durationMs ?? null,
           },
         }),
       )
       return toDomain(row)
     } catch (error) {
-      // P2002 is the unique-constraint violation code; public_id is the only unique column a visitor sets.
+      // P2002 is the unique-constraint violation code; public_id and audio_public_id are the unique columns a visitor sets.
       if ((error as { code?: unknown } | null)?.code === "P2002") throw new DuplicatePublicIdError()
       throw error
     }

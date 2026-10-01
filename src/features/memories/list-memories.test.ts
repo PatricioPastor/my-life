@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
@@ -29,6 +29,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   placeName: "Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
+  audio: null,
   ...over,
 })
 
@@ -76,6 +77,7 @@ describe("listMemoriesWith", () => {
           orbColor: "#ff9a3c",
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
+          audio: null,
         },
       ],
     })
@@ -208,5 +210,57 @@ describe("listMemoriesWith", () => {
   it("answers unavailable when a stored public id cannot make a URL", async () => {
     const { full } = deps({}, [memory({ publicId: "a/../b" })])
     expect(await listMemoriesWith(full)).toEqual({ ok: false, reason: "unavailable" })
+  })
+})
+
+describe("listMemoriesWith: photo, audio or both", () => {
+  const AID = "my-life/memories/audio-9a8b7c6d"
+  const audio = { publicId: AID, format: "webm", bytes: 200_000, durationMs: 42_500 }
+  const list = async (row: Memory) => {
+    const { full } = deps({}, [row])
+    const result = await listMemoriesWith(full)
+    if (!result.ok) throw new Error("expected ok")
+    return result.memories[0]
+  }
+
+  it("maps a photo-only memory with a null audio", async () => {
+    expect(await list(memory())).toMatchObject({ audio: null, width: 800, height: 600 })
+  })
+
+  it("maps an audio-only memory: no photo fields, and a signed mp3 URL with the duration", async () => {
+    const view = await list(
+      memory({ publicId: null, width: null, height: null, format: null, bytes: null, dominantColor: null, audio }),
+    )
+    expect(view).toMatchObject({
+      width: null,
+      height: null,
+      thumbUrl: null,
+      fullUrl: null,
+      kind: "image",
+      audio: { url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 },
+    })
+  })
+
+  it("maps a photo with an audio: both are present", async () => {
+    const view = await list(memory({ audio }))
+    expect(view.thumbUrl).toBe(cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"))
+    expect(view.audio).toEqual({ url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 })
+  })
+
+  it("gives an audio-only memory a glowing orb color even when none was stored", async () => {
+    const view = await list(memory({ publicId: null, width: null, height: null, dominantColor: null, orbColor: null, audio }))
+    expect(view.orbColor).toBe(DEFAULT_ORB_COLOR)
+  })
+
+  it("never leaks the audio public id, format or size", async () => {
+    const view = await list(memory({ audio }))
+    const json = JSON.stringify(view)
+    expect(json).not.toMatch(/"format"|"bytes"|publicId|audioPublicId/)
+  })
+
+  it("lists a memory with neither (a corrupt row) without crashing the listing", async () => {
+    const { full } = deps({}, [memory({ publicId: null, width: null, height: null, audio: null }), memory({ id: "2" })])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories.map((m) => m.id)).toEqual(["2"])
   })
 })

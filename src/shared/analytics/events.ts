@@ -18,6 +18,7 @@ export interface EventProps {
   memory_orb_opened: Record<never, never>
   memory_orb_summoned: Record<never, never>
   memory_submitted: Record<never, never>
+  memory_audio_recorded: Record<never, never>
   facet_opened: { facet: FacetId }
   entry_opened: { facet: FacetId; index: number }
 }
@@ -42,6 +43,7 @@ const ALLOWED: Record<EventName, Record<string, Accepts>> = {
   memory_orb_opened: {},
   memory_orb_summoned: {},
   memory_submitted: {},
+  memory_audio_recorded: {},
   facet_opened: { facet: isFacet },
   entry_opened: { facet: isFacet, index: isIndex },
 }

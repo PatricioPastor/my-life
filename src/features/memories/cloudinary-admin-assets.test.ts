@@ -96,3 +96,96 @@ describe("CloudinaryAdminAssets.destroy", () => {
     await expect(new CloudinaryAdminAssets(config, fetchMock as never).destroy(ID)).rejects.toThrow(/401/)
   })
 })
+
+describe("CloudinaryAdminAssets.describeAudio", () => {
+  const AID = "my-life/memories/audio-3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f"
+  const body = {
+    public_id: AID,
+    resource_type: "video",
+    type: "authenticated",
+    format: "webm",
+    bytes: 4321,
+    duration: 12.345,
+    is_audio: true,
+    audio: { codec: "opus" },
+  }
+
+  it("reads the video-type resource over the Admin API and maps the audio fields", async () => {
+    const fetchMock = vi.fn(async () => json(200, { ...body, secret: "x" }))
+    const info = await new CloudinaryAdminAssets(config, fetchMock as never).describeAudio(AID)
+    expect(info).toEqual({
+      publicId: AID,
+      resourceType: "video",
+      type: "authenticated",
+      format: "webm",
+      bytes: 4321,
+      durationSeconds: 12.345,
+      isAudio: true,
+    })
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe(`https://api.cloudinary.com/v1_1/demo/resources/video/authenticated/${AID}?media_metadata=true`)
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from("key:secret").toString("base64")}`)
+  })
+
+  it("says the asset is audio when Cloudinary reports an audio stream and no video stream", async () => {
+    const { is_audio: _omit, ...noFlag } = body
+    void _omit
+    const audioOnly = await new CloudinaryAdminAssets(config, (async () => json(200, noFlag)) as never).describeAudio(AID)
+    expect(audioOnly?.isAudio).toBe(true)
+    const withPictures = await new CloudinaryAdminAssets(
+      config,
+      (async () => json(200, { ...noFlag, video: { codec: "vp8" } })) as never,
+    ).describeAudio(AID)
+    expect(withPictures?.isAudio).toBe(false)
+  })
+
+  it("trusts an explicit is_audio over the streams", async () => {
+    const info = await new CloudinaryAdminAssets(
+      config,
+      (async () => json(200, { ...body, is_audio: false })) as never,
+    ).describeAudio(AID)
+    expect(info?.isAudio).toBe(false)
+  })
+
+  it("reads a missing duration as null", async () => {
+    const { duration: _omit, ...noDuration } = body
+    void _omit
+    const info = await new CloudinaryAdminAssets(config, (async () => json(200, noDuration)) as never).describeAudio(AID)
+    expect(info?.durationSeconds).toBeNull()
+  })
+
+  it("is null when the asset does not exist, and throws on any other failure without echoing it", async () => {
+    expect(await new CloudinaryAdminAssets(config, (async () => json(404, {})) as never).describeAudio(AID)).toBeNull()
+    const failing = vi.fn(async () => json(500, { error: { message: "secret detail" } }))
+    await expect(new CloudinaryAdminAssets(config, failing as never).describeAudio(AID)).rejects.toThrow(/500/)
+    await expect(new CloudinaryAdminAssets(config, failing as never).describeAudio(AID)).rejects.not.toThrow(/secret detail/)
+  })
+
+  it("refuses a public id that could walk out of its path, and an answer that is not shaped like an asset", async () => {
+    const fetchMock = vi.fn()
+    await expect(new CloudinaryAdminAssets(config, fetchMock as never).describeAudio("a/../b")).rejects.toThrow()
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(
+      new CloudinaryAdminAssets(config, (async () => json(200, { public_id: AID })) as never).describeAudio(AID),
+    ).rejects.toThrow()
+  })
+})
+
+describe("CloudinaryAdminAssets.destroyAudio", () => {
+  it("deletes the one video-type resource and invalidates the CDN copy", async () => {
+    const fetchMock = vi.fn(async () => json(200, { deleted: {} }))
+    await new CloudinaryAdminAssets(config, fetchMock as never).destroyAudio(ID)
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe("https://api.cloudinary.com/v1_1/demo/resources/video/authenticated")
+    expect(init.method).toBe("DELETE")
+    const form = new URLSearchParams(String(init.body))
+    expect(form.getAll("public_ids[]")).toEqual([ID])
+    expect(form.get("invalidate")).toBe("true")
+  })
+
+  it("throws when Cloudinary refuses", async () => {
+    await expect(
+      new CloudinaryAdminAssets(config, (async () => json(401, {})) as never).destroyAudio(ID),
+    ).rejects.toThrow(/401/)
+  })
+})

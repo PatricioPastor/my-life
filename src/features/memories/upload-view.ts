@@ -1,16 +1,30 @@
 import type { MemoryValidationError } from "./validate-new-memory"
 import type { MemoryView } from "./memory-view"
 
-/** Everything the browser needs for one direct Cloudinary upload. No secret is ever in here. */
+/** Which assets the visitor is about to upload. At least one must be true. */
+export interface PrepareUploadInput {
+  photo: boolean
+  audio: boolean
+}
+
+/** The signed form fields (including `api_key` and `signature`) of one upload, to be sent as they are next to the file. */
+export type UploadFields = Record<string, string>
+
+/**
+ * Everything the browser needs for the direct Cloudinary uploads of one memory. No secret is ever in here. A photo
+ * goes to `image/upload` with `photo`, an audio to `video/upload` with `audio` (Cloudinary stores audio as video).
+ */
 export interface UploadGrant {
   cloudName: string
-  /** The signed form fields (including `api_key` and `signature`), to be sent as they are next to the file. */
-  fields: Record<string, string>
-  /** Proves to `createMemory` that the server issued this upload to this visitor. */
+  /** Null when no photo was asked for. */
+  photo: UploadFields | null
+  /** Null when no audio was asked for. */
+  audio: UploadFields | null
+  /** Proves to `createMemory` that the server issued these uploads to this visitor. One ticket covers every asset. */
   ticket: string
 }
 
-export type PrepareUploadFailure = "no_session" | "unavailable" | "rate_limited"
+export type PrepareUploadFailure = "no_session" | "unavailable" | "rate_limited" | "invalid"
 export type PrepareUploadResult = { ok: true; upload: UploadGrant } | { ok: false; reason: PrepareUploadFailure }
 
 export interface CreateMemoryInput {
@@ -42,6 +56,10 @@ export type CreateMemoryFailure =
   | "asset_missing"
   | "asset_type"
   | "asset_too_large"
+  | "audio_missing"
+  | "audio_type"
+  | "audio_too_large"
+  | "audio_too_long"
   | "duplicate"
   | "unavailable"
 

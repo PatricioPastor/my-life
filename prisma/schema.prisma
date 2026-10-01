@@ -29,25 +29,27 @@ enum LocationSource {
   @@map("location_source")
 }
 
-/// What kind of media a memory holds. Only photos for now; audio and video come later.
+/// What kind of media a memory holds. Only `image` is stored: a memory is a photo, an audio or both, and which
+/// it is gets derived from `public_id` and `audio_public_id`.
 enum MediaKind {
   image
 
   @@map("media_kind")
 }
 
-/// A photo, a short caption and the date it happened, uploaded by an admitted visitor.
-/// Stays `pending` until the owner approves it with a manual UPDATE.
+/// A photo and/or an audio, a short caption and the date it happened, uploaded by an admitted visitor.
+/// Stays `pending` until the owner approves it with a manual UPDATE. A CHECK requires a photo or an audio.
 model Memory {
   id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// The visitor's Instagram handle (normalized).
   handle     String       @db.VarChar(30)
-  /// Cloudinary public id of the uploaded photo.
-  publicId   String       @unique @map("public_id")
+  /// Cloudinary public id of the uploaded photo. Null for an audio-only memory.
+  publicId   String?      @unique @map("public_id")
   caption    String       @db.VarChar(140)
   happenedOn DateTime     @map("happened_on") @db.Date
-  width      Int
-  height     Int
+  /// The photo's size, from Cloudinary. Null exactly when there is no photo.
+  width      Int?
+  height     Int?
   status     MemoryStatus @default(dbgenerated("'pending'::memory_status"))
   createdAt  DateTime     @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz(3)
 
@@ -74,6 +76,14 @@ model Memory {
   /// The color of the memory's orb, `#rrggbb`, chosen by the visitor from their photo (or derived by the server).
   /// Null only for rows stored before orb colors existed; the client always gets one.
   orbColor       String?         @map("orb_color") @db.VarChar(7)
+
+  /// The voice of the memory: a Cloudinary `video`-type resource (that is how it stores audio), `authenticated`.
+  /// All four columns are set together or all null, and only the server writes them, from Cloudinary's answer.
+  audioPublicId   String? @unique @map("audio_public_id")
+  /// Lowercase format of the original upload (`webm`, `m4a`...). Playback is always an mp3 transcode.
+  audioFormat     String? @map("audio_format")
+  audioBytes      Int?    @map("audio_bytes")
+  audioDurationMs Int?    @map("audio_duration_ms")
 
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")

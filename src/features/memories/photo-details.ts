@@ -26,12 +26,12 @@ export type PaletteColor = {
 
 export type MetadataValue = string | number
 
-/** What the server learns about a photo and keeps. */
+/** What the server learns about a photo and keeps. All empty for a memory that has no photo. */
 export interface PhotoDetails {
   kind: MediaKind
-  /** Lowercase Cloudinary format name (`jpg`, `heic`...). */
-  format: string
-  bytes: number
+  /** Lowercase Cloudinary format name (`jpg`, `heic`...); null without a photo. */
+  format: string | null
+  bytes: number | null
   /** When the photo was taken, from EXIF; null when absent or unparseable. */
   takenAt: Date | null
   dominantColor: string | null
@@ -270,4 +270,19 @@ export function extractPhotoDetails(photo: RawPhoto, options: { shareLocation: b
     placeName: null,
     locationSource: location ? "photo" : null,
   }
+}
+
+/** The details of a memory with no photo (an audio-only one): nothing was learned, so nothing is stored. */
+export const NO_PHOTO_DETAILS: PhotoDetails = {
+  kind: "image",
+  format: null,
+  bytes: null,
+  takenAt: null,
+  dominantColor: null,
+  palette: [],
+  metadata: {},
+  latitude: null,
+  longitude: null,
+  placeName: null,
+  locationSource: null,
 }

@@ -11,7 +11,7 @@ describe("sanitizeProps", () => {
   })
 
   it("drops every prop from events that carry none", () => {
-    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed", "story_completed", "memory_orb_opened", "memory_orb_summoned", "memory_submitted"] as const) {
+    for (const name of ["gate_submitted", "gate_granted", "gate_denied", "access_requested", "onboarding_completed", "onboarding_skipped", "hw_accel_suggested", "intro_replayed", "story_completed", "memory_orb_opened", "memory_orb_summoned", "memory_submitted", "memory_audio_recorded"] as const) {
       expect(sanitizeProps(name, { handle: "ana", facet: "now" })).toEqual({})
     }
   })
@@ -44,5 +44,12 @@ describe("sanitizeProps", () => {
 
   it("knows exactly the facets the site has", () => {
     expect([...FACET_IDS].sort()).toEqual(FACETS.map((f) => f.id).sort())
+  })
+})
+
+describe("memory_audio_recorded", () => {
+  it("is recorded with no props: never the audio, its length or the handle", () => {
+    expect(sanitizeProps("memory_audio_recorded", {})).toEqual({})
+    expect(sanitizeProps("memory_audio_recorded", { durationMs: 4200, handle: "ana", url: "blob:x" })).toEqual({})
   })
 })

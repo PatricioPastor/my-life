@@ -1,5 +1,5 @@
 import "server-only"
-import type { AssetInfo, CloudinaryAssets } from "./cloudinary-assets"
+import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 
 export interface CloudinaryConfig {
   cloudName: string
@@ -55,6 +55,41 @@ function toAssetInfo(body: unknown): AssetInfo {
   }
 }
 
+function toAudioInfo(body: unknown): AudioInfo {
+  const b = body as Record<string, unknown> | null
+  if (
+    !b ||
+    typeof b.public_id !== "string" ||
+    typeof b.resource_type !== "string" ||
+    typeof b.type !== "string" ||
+    typeof b.format !== "string" ||
+    typeof b.bytes !== "number"
+  ) {
+    throw new Error("Cloudinary answered with an unexpected shape.")
+  }
+  return {
+    publicId: b.public_id,
+    resourceType: b.resource_type,
+    type: b.type,
+    format: b.format,
+    bytes: b.bytes,
+    durationSeconds: typeof b.duration === "number" ? b.duration : null,
+    // `is_audio` when Cloudinary says it; otherwise an audio stream with no video stream (the documented
+    // `audio` and `video` objects of a media answer).
+    isAudio:
+      typeof b.is_audio === "boolean"
+        ? b.is_audio
+        : recordOrUndefined(b.audio) !== undefined && recordOrUndefined(b.video) === undefined,
+  }
+}
+
+/** A public id as URL path segments (folder slashes kept), refusing anything that could walk out of its path. */
+function encodedPath(publicId: string): string {
+  const segments = publicId.split("/")
+  if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error("Invalid Cloudinary public id.")
+  return segments.map(encodeURIComponent).join("/")
+}
+
 /**
  * Adapter over Cloudinary's Admin API (plain `fetch`, no SDK). The API secret stays in here: it goes out only
  * as the basic-auth header of a request to Cloudinary. Errors carry the status code, never the response body.
@@ -71,9 +106,7 @@ export class CloudinaryAdminAssets implements CloudinaryAssets {
   }
 
   async describe(publicId: string): Promise<AssetInfo | null> {
-    const segments = publicId.split("/")
-    if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error("Invalid Cloudinary public id.")
-    const path = segments.map(encodeURIComponent).join("/")
+    const path = encodedPath(publicId)
     const response = await this.fetchFn(
       `${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}/${path}?media_metadata=true&colors=true`,
       { headers: this.headers() },
@@ -83,15 +116,38 @@ export class CloudinaryAdminAssets implements CloudinaryAssets {
     return toAssetInfo(await response.json())
   }
 
-  async destroy(publicId: string): Promise<void> {
+  async describeAudio(publicId: string): Promise<AudioInfo | null> {
+    const path = encodedPath(publicId)
+    // Audio is a `video` resource. `media_metadata` also asks for the stream details (duration, codecs).
+    const response = await this.fetchFn(
+      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/video/${DELIVERY_TYPE}/${path}?media_metadata=true`,
+      { headers: this.headers() },
+    )
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(`Cloudinary describe failed (${response.status}).`)
+    return toAudioInfo(await response.json())
+  }
+
+  private async destroyResource(resourceType: "image" | "video", publicId: string): Promise<void> {
     const body = new URLSearchParams()
     body.append("public_ids[]", publicId)
     body.append("invalidate", "true")
-    const response = await this.fetchFn(`${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}`, {
-      method: "DELETE",
-      headers: { ...this.headers(), "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    })
+    const response = await this.fetchFn(
+      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/${resourceType}/${DELIVERY_TYPE}`,
+      {
+        method: "DELETE",
+        headers: { ...this.headers(), "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      },
+    )
     if (!response.ok) throw new Error(`Cloudinary destroy failed (${response.status}).`)
+  }
+
+  destroy(publicId: string): Promise<void> {
+    return this.destroyResource("image", publicId)
+  }
+
+  destroyAudio(publicId: string): Promise<void> {
+    return this.destroyResource("video", publicId)
   }
 }

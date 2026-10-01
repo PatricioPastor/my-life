@@ -11,6 +11,7 @@ function input(overrides: Partial<NewMemoryInput> = {}): NewMemoryInput {
     happenedOn: new Date("2024-06-15T00:00:00.000Z"),
     width: 1200,
     height: 800,
+    audio: null,
     ...overrides,
   }
 }
@@ -125,5 +126,43 @@ describe("validateNewMemory", () => {
       "width_invalid",
       "height_invalid",
     ])
+  })
+})
+
+describe("validateNewMemory: photo, audio or both", () => {
+  const AUDIO = { publicId: "my-life/memories/audio-1", format: "webm", bytes: 1000, durationMs: 5000 }
+
+  it("accepts an audio-only memory: no photo, no dimensions", () => {
+    const only = input({ publicId: null, width: null, height: null, audio: AUDIO })
+    expect(validateNewMemory(only, NOW)).toEqual({ ok: true, value: only })
+  })
+
+  it("accepts a photo with an audio", () => {
+    const both = input({ audio: AUDIO })
+    expect(validateNewMemory(both, NOW)).toEqual({ ok: true, value: both })
+  })
+
+  it("asks for a photo or an audio when there is neither", () => {
+    expect(errorsOf({ publicId: null, width: null, height: null, audio: null })).toEqual(["media_missing"])
+  })
+
+  it("still wants valid dimensions for a photo, and none without one", () => {
+    expect(errorsOf({ width: null })).toEqual(["width_invalid"])
+    expect(errorsOf({ height: 0 })).toEqual(["height_invalid"])
+    expect(errorsOf({ publicId: null, width: 100, height: 100, audio: AUDIO })).toEqual(["width_invalid", "height_invalid"])
+  })
+
+  it("rejects an empty photo public id", () => {
+    expect(errorsOf({ publicId: "  " })).toEqual(["public_id_empty"])
+  })
+
+  it("rejects an audio whose public id is empty, or whose numbers are not positive integers", () => {
+    expect(errorsOf({ audio: { ...AUDIO, publicId: " " } })).toEqual(["audio_invalid"])
+    expect(errorsOf({ audio: { ...AUDIO, durationMs: 0 } })).toEqual(["audio_invalid"])
+    expect(errorsOf({ audio: { ...AUDIO, bytes: 1.5 } })).toEqual(["audio_invalid"])
+  })
+
+  it("keeps the caption and date rules for an audio-only memory", () => {
+    expect(errorsOf({ publicId: null, width: null, height: null, audio: AUDIO, caption: " " })).toEqual(["caption_empty"])
   })
 })
