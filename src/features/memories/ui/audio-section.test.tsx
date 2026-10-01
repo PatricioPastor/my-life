@@ -19,12 +19,13 @@ afterEach(() => {
 const clip = { blob: new Blob(["x"], { type: "audio/webm" }), name: "recuerdo.webm", url: "blob:clip" }
 const noAudioGraph: LevelEnv = { createContext: () => null }
 
-function setup(state: Partial<RecorderState> = {}, over: Partial<AudioSectionProps> = {}, withClip = true) {
+function setup(state: Partial<RecorderState> = {}, over: Partial<AudioSectionProps> = {}, withClip = true, sizeBytes = 0) {
   const recorder = {
     state: { ...INITIAL_RECORDER, ...state },
     supported: true,
     clip: state.phase === "recorded" || state.phase === "playing" ? (withClip ? clip : null) : null,
     stream: null,
+    sizeBytes,
     start: vi.fn(async () => {}),
     stop: vi.fn(),
     discard: vi.fn(),
@@ -122,6 +123,28 @@ describe("AudioSection: asking for the microphone and recording", () => {
     setup({ phase: "requesting" })
     expect((screen.getByRole("button", { name: "Grabar" }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole("status").textContent).toBe(AUDIO_COPY.requesting)
+  })
+
+  it("shows the elapsed time, the approximate size so far and no warning in the first hour's early minutes", () => {
+    setup({ phase: "recording", elapsedMs: 600_000 }, {}, true, 34_567_890)
+    expect(screen.getByRole("timer").textContent).toContain("10:00 / 60:00")
+    expect(screen.getByRole("timer").textContent).toContain("~35 MB")
+    expect(screen.getByRole("status").textContent).toBe(AUDIO_COPY.recording)
+  })
+
+  it("warns, quietly, from 55 minutes that the recording will stop by itself", () => {
+    setup({ phase: "recording", elapsedMs: 55 * 60 * 1000 }, {}, true, 50_000_000)
+    const statuses = screen.getAllByRole("status").map((el) => el.textContent)
+    expect(statuses).toContain("Quedan 5 min. La grabación se detendrá sola a los 60 minutos.")
+    // A polite status, not an alert: the recording carries on.
+    expect(screen.queryByRole("alert")).toBeNull()
+  })
+
+  it("does not warn one second before", () => {
+    setup({ phase: "recording", elapsedMs: 55 * 60 * 1000 - 1000 }, {}, true, 50_000_000)
+    expect(screen.getAllByRole("status").map((el) => el.textContent)).not.toContain(
+      "Quedan 5 min. La grabación se detendrá sola a los 60 minutos.",
+    )
   })
 
   it("shows the time against the cap and a Detener button while recording", () => {
