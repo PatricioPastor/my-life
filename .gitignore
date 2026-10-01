@@ -45,3 +45,6 @@ next-env.d.ts
 
 # local-only assets (font licenses forbid publishing the files)
 /resources/
+
+# prisma generated client
+/src/generated/

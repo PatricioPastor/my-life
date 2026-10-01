@@ -1,0 +1,42 @@
+// Database rules (see odd/tasks/memory-orb.md):
+//  - snake_case in the database: every model/enum has @@map, every camelCase field has @map.
+//  - Row-level security is enabled and forced on every table in the migration SQL.
+//  - Columns the runtime role must not write use DB-side defaults (`dbgenerated`), so the
+//    Prisma engine never sends them in an INSERT and the column-level GRANT can exclude them.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MemoryStatus {
+  pending
+  approved
+  rejected
+
+  @@map("memory_status")
+}
+
+/// A photo, a short caption and the date it happened, uploaded by an admitted visitor.
+/// Stays `pending` until the owner approves it with a manual UPDATE.
+model Memory {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// The visitor's Instagram handle (normalized).
+  handle     String       @db.VarChar(30)
+  /// Cloudinary public id of the uploaded photo.
+  publicId   String       @unique @map("public_id")
+  caption    String       @db.VarChar(140)
+  happenedOn DateTime     @map("happened_on") @db.Date
+  width      Int
+  height     Int
+  status     MemoryStatus @default(dbgenerated("'pending'::memory_status"))
+  createdAt  DateTime     @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz(3)
+
+  @@index([status, happenedOn], map: "memories_status_happened_on_idx")
+  @@index([handle, createdAt], map: "memories_handle_created_at_idx")
+  @@map("memories")
+}
