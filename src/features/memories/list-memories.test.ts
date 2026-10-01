@@ -76,6 +76,7 @@ describe("listMemoriesWith", () => {
           orbColor: "#ff9a3c",
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
+          audio: null,
         },
       ],
     })

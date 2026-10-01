@@ -268,6 +268,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         orbColor: DEFAULT_ORB_COLOR,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
+        audio: null,
       },
     })
     const json = JSON.stringify(result)

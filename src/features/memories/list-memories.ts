@@ -44,6 +44,8 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
     thumbUrl: cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
+    // Audio arrives with the audio data (the other half of this feature); until then every memory is a photo.
+    audio: null,
   }
 }
 

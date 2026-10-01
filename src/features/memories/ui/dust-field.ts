@@ -41,6 +41,18 @@ export const DUST_LAYERS: readonly DustLayer[] = [
 
 export const DUST_TINTS = 3
 
+/**
+ * How much of the camera's movement each dust layer follows, far to near (1 would be fixed to the world): far dust barely
+ * moves and near dust moves a good part, so panning the canvas gives the void depth.
+ */
+export const DUST_DEPTH: readonly number[] = [0.08, 0.2, 0.4]
+
+/** A position wrapped into 0..size, so a field that is shifted by the camera never runs out. */
+export function wrapAround(value: number, size: number): number {
+  if (!(size > 0)) return 0
+  return ((value % size) + size) % size
+}
+
 /** mulberry32: a small seeded generator. */
 function rng(seed: number): () => number {
   let a = seed | 0

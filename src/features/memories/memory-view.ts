@@ -6,8 +6,9 @@ export interface MemoryView {
   happenedOn: string
   /** `pending` only ever appears for the visitor's own memories. */
   status: "approved" | "pending"
-  width: number
-  height: number
+  /** Null when the memory has no photo (audio only). */
+  width: number | null
+  height: number | null
   kind: "image"
   /** ISO 8601 UTC from the photo's EXIF, or null when unknown. */
   takenAt: string | null
@@ -20,8 +21,16 @@ export interface MemoryView {
   place: MemoryPlace | null
   /** `#rrggbb`: the color the memory's orb glows in. Always valid, and always light enough for the dark void. */
   orbColor: string
-  thumbUrl: string
-  fullUrl: string
+  /** Null when the memory has no photo. */
+  thumbUrl: string | null
+  fullUrl: string | null
+  /** The voice: a signed, playable transcode, or null when the memory has none. A memory has a photo, audio, or both. */
+  audio: MemoryAudio | null
+}
+
+export interface MemoryAudio {
+  url: string
+  durationMs: number
 }
 
 /** A coarse position (2 decimals) and the place name, when it has one. */

@@ -18,6 +18,8 @@ export interface VoidGlow {
   /** How far it travels, as a percentage of the stage. */
   travelX: number
   travelY: number
+  /** How much of the camera's movement it follows (0 is fixed to the screen): the farthest layer of the void. */
+  depth: number
 }
 
 /**
@@ -25,7 +27,7 @@ export interface VoidGlow {
  * so the combined picture does not look like it repeats. Violet and indigo, each with a faint tint of an orb color.
  */
 export const VOID_GLOWS: readonly VoidGlow[] = [
-  { color: "#5b49c8", tint: "#8ab4ff", x: 34, y: 38, size: 70, alpha: 0.16, duration: 97, delay: -31, travelX: 16, travelY: 10 },
-  { color: "#3a3fa8", tint: "#b79cff", x: 68, y: 58, size: 64, alpha: 0.14, duration: 113, delay: -74, travelX: -14, travelY: 14 },
-  { color: "#6a3fb0", tint: "#7fe0d0", x: 52, y: 22, size: 52, alpha: 0.1, duration: 71, delay: -12, travelX: 10, travelY: -12 },
+  { color: "#5b49c8", tint: "#8ab4ff", x: 34, y: 38, size: 70, alpha: 0.16, duration: 97, delay: -31, travelX: 16, travelY: 10, depth: 0.06 },
+  { color: "#3a3fa8", tint: "#b79cff", x: 68, y: 58, size: 64, alpha: 0.14, duration: 113, delay: -74, travelX: -14, travelY: 14, depth: 0.1 },
+  { color: "#6a3fb0", tint: "#7fe0d0", x: 52, y: 22, size: 52, alpha: 0.1, duration: 71, delay: -12, travelX: 10, travelY: -12, depth: 0.14 },
 ]

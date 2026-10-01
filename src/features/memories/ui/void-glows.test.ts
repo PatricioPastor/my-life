@@ -39,4 +39,12 @@ describe("VOID_GLOWS", () => {
       expect(glow.size).toBeGreaterThan(40)
     }
   })
+
+  it("sits far behind the orbs: each glow has a small depth, so it moves less than the dust with the camera", () => {
+    for (const glow of VOID_GLOWS) {
+      expect(glow.depth).toBeGreaterThan(0)
+      expect(glow.depth).toBeLessThanOrEqual(0.16)
+    }
+    expect(new Set(VOID_GLOWS.map((g) => g.depth)).size).toBe(VOID_GLOWS.length)
+  })
 })

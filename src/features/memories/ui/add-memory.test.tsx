@@ -43,6 +43,7 @@ const MEMORY: MemoryView = {
   orbColor: "#8ab4ff",
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
+  audio: null,
 }
 
 /** What the browser would take from the photo: glowing tones, the dominant one first. */
