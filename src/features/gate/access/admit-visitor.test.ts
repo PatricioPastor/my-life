@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "@/shared/session/session-cookie"
-import { verifySession } from "@/shared/session/session-token"
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS } from "../session/session-cookie"
+import { verifySession } from "../session/session-token"
 import { admitVisitor, type AdmitDeps } from "./admit-visitor"
 
 const SECRET = "a".repeat(43)

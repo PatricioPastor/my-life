@@ -114,7 +114,7 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
     - Targeted validation approved; lineage `review-44f696e6128708f0` acknowledged. Reviewed boundary: `36f2623`.
 
 - 2026-10-01: T2 done (route: delegated writer, 2+ non-trivial files).
-  - `src/shared/session` (`server-only`): `signSession` and `verifySession` (HMAC-SHA256, constant-time compare, strict payload `{ h, exp }`, handle checked with the gate's `isValidHandle`), `getSessionSecret` (at least 32 decoded bytes, else not configured), cookie constants and options, and `currentVisitor()`, which also re-checks the handle against `AccessPolicy` so removing it from the whitelist revokes the session.
+  - `src/features/gate/session` (`server-only`; moved from `src/shared/session` so shared code never imports a feature, the gate owns visitor identity): `signSession` and `verifySession` (HMAC-SHA256, constant-time compare, strict payload `{ h, exp }`, handle checked with the gate's `isValidHandle`), `getSessionSecret` (at least 32 decoded bytes, else not configured), cookie constants and options, and `currentVisitor()`, which also re-checks the handle against `AccessPolicy` so removing it from the whitelist revokes the session.
   - Cookie `ml_visitor`: `httpOnly`, `secure` in production, `sameSite: "lax"`, `path: "/"`, 30 days.
   - The gate action now goes through `admitVisitor` (`src/features/gate/access/admit-visitor.ts`). A denied or invalid handle gets no cookie. With no valid `SESSION_SECRET` it still admits, skips the cookie and logs one handle-free warning.
 

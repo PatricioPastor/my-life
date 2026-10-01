@@ -1,6 +1,6 @@
 import "server-only"
 import { createHmac, timingSafeEqual } from "node:crypto"
-import { isValidHandle } from "@/features/gate/handle"
+import { isValidHandle } from "../handle"
 
 /** `h` is the normalized handle; `exp` is expiry in unix seconds. */
 export interface SessionPayload {

@@ -4,8 +4,8 @@ import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
   type SessionCookieOptions,
-} from "@/shared/session/session-cookie"
-import { signSession } from "@/shared/session/session-token"
+} from "../session/session-cookie"
+import { signSession } from "../session/session-token"
 import type { AccessPolicy } from "./access-policy"
 import { checkAccess, type AccessResult } from "./check-access"
 import { normalizeHandle } from "../handle"
