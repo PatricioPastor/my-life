@@ -11,9 +11,9 @@ function make(over: Partial<ResolveLinkDeps> = {}) {
 }
 
 describe("resolveMapsLocation", () => {
-  it("rounds the coordinates and takes the label from the URL", async () => {
+  it("keeps the exact coordinates (the pin wins over the viewport) and takes the label from the URL", async () => {
     const { deps, reverse } = make()
-    expect(await resolveMapsLocation(FULL, deps)).toEqual({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" })
+    expect(await resolveMapsLocation(FULL, deps)).toEqual({ ok: true, lat: -34.58123, lng: -58.42087, label: "Plaza Italia" })
     expect(reverse).not.toHaveBeenCalled()
   })
 
@@ -21,11 +21,19 @@ describe("resolveMapsLocation", () => {
     const { deps, reverse } = make()
     expect(await resolveMapsLocation("https://www.google.com/maps/@-34.5937,-58.4251,15z", deps)).toEqual({
       ok: true,
-      lat: -34.59,
-      lng: -58.43,
+      lat: -34.5937,
+      lng: -58.4251,
       label: "Palermo, Buenos Aires",
     })
     expect(reverse).toHaveBeenCalledWith(-34.59, -58.43)
+  })
+
+  it("trims the stored position to 6 decimals", async () => {
+    const { deps } = make()
+    expect(await resolveMapsLocation("https://www.google.com/maps/@-34.59371234,-58.42509876,15z", deps)).toMatchObject({
+      lat: -34.593712,
+      lng: -58.425099,
+    })
   })
 
   it("never sends the exact coordinates to the geocoder", async () => {
@@ -58,8 +66,8 @@ describe("resolveMapsLocation", () => {
     follow.mockResolvedValueOnce({ ok: true, url: FULL })
     expect(await resolveMapsLocation("https://maps.app.goo.gl/AbCd", deps)).toEqual({
       ok: true,
-      lat: -34.58,
-      lng: -58.42,
+      lat: -34.58123,
+      lng: -58.42087,
       label: "Plaza Italia",
     })
     expect(follow).toHaveBeenCalledWith("https://maps.app.goo.gl/AbCd")
@@ -139,9 +147,9 @@ describe("resolveMapsLinkWith (the server action)", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("returns the rounded position and the label", async () => {
+  it("returns the position and the label", async () => {
     const { deps } = withSession()
-    expect(await resolveMapsLinkWith(deps, { url: FULL })).toEqual({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" })
+    expect(await resolveMapsLinkWith(deps, { url: FULL })).toEqual({ ok: true, lat: -34.58123, lng: -58.42087, label: "Plaza Italia" })
   })
 
   it("passes the typed failures through", async () => {

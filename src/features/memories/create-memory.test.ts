@@ -47,8 +47,8 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   dominantColor: null,
   palette: [],
   metadata: {},
-  approxLatitude: null,
-  approxLongitude: null,
+  latitude: null,
+  longitude: null,
   placeName: null,
   locationSource: null,
   ...over,
@@ -229,8 +229,8 @@ describe("createMemoryWith: rate limit and insert", () => {
       dominantColor: null,
       palette: [],
       metadata: {},
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
       placeName: null,
       locationSource: null,
     })
@@ -254,6 +254,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         kind: "image",
         takenAt: null,
         dominantColor: null,
+        place: null,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
       },
@@ -263,7 +264,7 @@ describe("createMemoryWith: rate limit and insert", () => {
     expect(json).not.toContain("publicId")
   })
 
-  it("answers with kind, takenAt and dominantColor, but never the location, palette or metadata", async () => {
+  it("answers with kind, takenAt, dominantColor and a coarse place, but never the exact location, palette or metadata", async () => {
     const { full, repository } = setup({}, { info: photo() })
     vi.mocked(repository.createPending).mockResolvedValueOnce(
       stored({
@@ -271,8 +272,9 @@ describe("createMemoryWith: rate limit and insert", () => {
         dominantColor: "#112233",
         palette: [{ color: "#112233", share: 40 }],
         metadata: { Make: "Apple" },
-        approxLatitude: 40.71,
-        approxLongitude: -74.01,
+        latitude: 40.712812,
+        longitude: -74.006009,
+        placeName: "Palermo, Buenos Aires",
       }),
     )
     const result = await createMemoryWith(full, input({ shareLocation: true }))
@@ -281,9 +283,10 @@ describe("createMemoryWith: rate limit and insert", () => {
       kind: "image",
       takenAt: "2024-03-12T12:05:09.000Z",
       dominantColor: "#112233",
+      place: { lat: 40.71, lng: -74.01, name: "Palermo, Buenos Aires" },
     })
     const json = JSON.stringify(result)
-    expect(json).not.toMatch(/latitude|longitude|approx|palette|metadata|Apple|40\.71|74\.01|GPS/i)
+    expect(json).not.toMatch(/latitude|longitude|approx|palette|metadata|Apple|40\.7128|74\.006|GPS/i)
   })
 
   it("answers duplicate, and keeps the asset, when the public id is already stored", async () => {
@@ -324,13 +327,13 @@ describe("createMemoryWith: photo details", () => {
     expect(JSON.stringify(saved)).not.toMatch(/GPS|SECRET-SERIAL|Ana Perez|Serial|Owner/)
   })
 
-  it("stores only an approximate location (2 decimals) when the visitor opted in", async () => {
+  it("stores the exact location from the photo's EXIF when the visitor opted in", async () => {
     const { full, repository } = setup({}, { info: photo() })
     await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: 40.71, approxLongitude: -74.01 })
-    // The exact coordinates (40.7128 / -74.006) appear nowhere in what is stored.
-    expect(JSON.stringify(saved)).not.toMatch(/40\.712|74\.006|42' 46|21\.6/)
+    expect(saved).toMatchObject({ latitude: 40.7128, longitude: -74.006 })
+    // The raw EXIF strings are never stored, only the decoded position.
+    expect(JSON.stringify(saved)).not.toMatch(/42' 46|21\.6|GPS/)
   })
 
   it.each([
@@ -342,7 +345,7 @@ describe("createMemoryWith: photo details", () => {
     const { full, repository } = setup({}, { info: photo() })
     await createMemoryWith(full, input({ shareLocation }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null })
+    expect(saved).toMatchObject({ latitude: null, longitude: null })
   })
 
   it("stores no location when the visitor opted in but the photo has no valid GPS", async () => {
@@ -352,7 +355,7 @@ describe("createMemoryWith: photo details", () => {
     )
     await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null })
+    expect(saved).toMatchObject({ latitude: null, longitude: null })
   })
 
   it("never logs coordinates or metadata, even when saving fails", async () => {
@@ -370,11 +373,12 @@ describe("createMemoryWith: the place", () => {
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
     expect(saved).toMatchObject({
-      approxLatitude: 40.71,
-      approxLongitude: -74.01,
+      latitude: 40.7128,
+      longitude: -74.006,
       locationSource: "photo",
       placeName: "Palermo, Buenos Aires",
     })
+    // The name is looked up from a rounded position (2 decimals), never the exact one.
     expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
@@ -389,7 +393,7 @@ describe("createMemoryWith: the place", () => {
     const { full, repository, reverse } = setup({}, { info: photo() })
     const result = await createMemoryWith(full, input({ shareLocation: false }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null, locationSource: null, placeName: null })
+    expect(saved).toMatchObject({ latitude: null, longitude: null, locationSource: null, placeName: null })
     expect(reverse).not.toHaveBeenCalled()
     expect(result).toMatchObject({ ok: true, locationSaved: false })
   })
@@ -399,7 +403,7 @@ describe("createMemoryWith: the place", () => {
     reverse.mockRejectedValueOnce(new Error("down"))
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: 40.71, locationSource: "photo", placeName: null })
+    expect(saved).toMatchObject({ latitude: 40.7128, locationSource: "photo", placeName: null })
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
 
@@ -407,32 +411,40 @@ describe("createMemoryWith: the place", () => {
     const { full, repository } = setup({}, { info: asset({ imageMetadata: { Make: "Apple" }, colors: COLORS }) })
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, locationSource: null, placeName: null })
+    expect(saved).toMatchObject({ latitude: null, locationSource: null, placeName: null })
     expect(result).toMatchObject({ ok: true, locationSaved: false })
   })
 
-  it("never returns the place name or source in the DTO", async () => {
+  it("returns only a coarse place in the DTO: rounded coordinates and the name, never the source or exact position", async () => {
     const { full, repository } = setup({}, { info: photo() })
     vi.mocked(repository.createPending).mockResolvedValueOnce(
-      stored({ approxLatitude: 40.71, approxLongitude: -74.01, placeName: "Palermo, Buenos Aires", locationSource: "photo" }),
+      stored({ latitude: 40.712812, longitude: -74.006009, placeName: "Palermo, Buenos Aires", locationSource: "photo" }),
     )
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     if (!result.ok) throw new Error("expected ok")
-    expect(JSON.stringify(result.memory)).not.toMatch(/Palermo|placeName|locationSource|photo"/)
+    expect(result.memory.place).toEqual({ lat: 40.71, lng: -74.01, name: "Palermo, Buenos Aires" })
+    expect(JSON.stringify(result.memory)).not.toMatch(/locationSource|photo"|40\.7128|74\.006/)
+  })
+
+  it("returns a null place in the DTO when no location was stored", async () => {
+    const { full } = setup({}, { info: photo() })
+    const result = await createMemoryWith(full, input({ shareLocation: false }))
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.memory.place).toBeNull()
   })
 })
 
 describe("createMemoryWith: a Google Maps link", () => {
   const PLACE_LINK = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z"
-  const NAMELESS = "https://www.google.com/maps/@40.7128,-74.006,12z"
+  const NAMELESS = "https://www.google.com/maps/@40.712812,-74.006009,12z"
 
   it("stores the link position, source link and the name from the URL, ignoring the photo GPS", async () => {
     const { full, repository, reverse } = setup({}, { info: photo() })
     const result = await createMemoryWith(full, input({ shareLocation: true, mapsUrl: PLACE_LINK }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
     expect(saved).toMatchObject({
-      approxLatitude: -34.58,
-      approxLongitude: -58.42,
+      latitude: -34.581,
+      longitude: -58.4208,
       locationSource: "link",
       placeName: "Plaza Italia",
     })
@@ -440,11 +452,16 @@ describe("createMemoryWith: a Google Maps link", () => {
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
 
-  it("names a nameless link by reverse geocoding its rounded position", async () => {
+  it("stores the exact link position and names a nameless link by reverse geocoding its rounded position", async () => {
     const { full, repository, reverse } = setup()
     await createMemoryWith(full, input({ shareLocation: true, mapsUrl: NAMELESS }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: 40.71, approxLongitude: -74.01, locationSource: "link", placeName: "Palermo, Buenos Aires" })
+    expect(saved).toMatchObject({
+      latitude: 40.712812,
+      longitude: -74.006009,
+      locationSource: "link",
+      placeName: "Palermo, Buenos Aires",
+    })
     expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
   })
 
@@ -454,7 +471,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     await createMemoryWith(full, input({ shareLocation: true, mapsUrl: "https://maps.app.goo.gl/AbCd" }))
     expect(follow).toHaveBeenCalledWith("https://maps.app.goo.gl/AbCd")
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ locationSource: "link", approxLatitude: -34.58 })
+    expect(saved).toMatchObject({ locationSource: "link", latitude: -34.581 })
   })
 
   it("never trusts coordinates or labels sent by the client", async () => {
@@ -462,7 +479,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     const forged = { ...input({ shareLocation: true, mapsUrl: PLACE_LINK }), lat: 1.23, lng: 4.56, label: "Casa de Ana", placeName: "x" }
     await createMemoryWith(full, forged as never)
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: -34.58, approxLongitude: -58.42, placeName: "Plaza Italia" })
+    expect(saved).toMatchObject({ latitude: -34.581, longitude: -58.4208, placeName: "Plaza Italia" })
     expect(JSON.stringify(saved)).not.toMatch(/1\.23|4\.56|Casa de Ana/)
   })
 
@@ -473,7 +490,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     const { full, repository } = setup({}, { info: photo() })
     const result = await createMemoryWith(full, input({ shareLocation: true, mapsUrl }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null, locationSource: null, placeName: null })
+    expect(saved).toMatchObject({ latitude: null, longitude: null, locationSource: null, placeName: null })
     expect(result).toMatchObject({ ok: true, locationSaved: false })
   })
 
@@ -481,7 +498,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     const { full, repository } = setup()
     const result = await createMemoryWith(full, input({ shareLocation: true, mapsUrl: "https://maps.app.goo.gl/AbCd" }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ locationSource: null, approxLatitude: null })
+    expect(saved).toMatchObject({ locationSource: null, latitude: null })
     expect(result).toMatchObject({ ok: true })
   })
 
@@ -489,7 +506,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     const { full, repository, follow, reverse } = setup()
     await createMemoryWith(full, input({ shareLocation: false, mapsUrl: "https://maps.app.goo.gl/AbCd" }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: null, locationSource: null, placeName: null })
+    expect(saved).toMatchObject({ latitude: null, locationSource: null, placeName: null })
     expect(follow).not.toHaveBeenCalled()
     expect(reverse).not.toHaveBeenCalled()
   })
@@ -498,7 +515,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     const { full, repository } = setup({}, { info: photo() })
     await createMemoryWith(full, input({ shareLocation: true, mapsUrl: { href: PLACE_LINK } }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ locationSource: "photo", approxLatitude: 40.71 })
+    expect(saved).toMatchObject({ locationSource: "photo", latitude: 40.7128 })
   })
 
   it("keeps the location, with no name, when naming it fails", async () => {
@@ -506,7 +523,7 @@ describe("createMemoryWith: a Google Maps link", () => {
     reverse.mockRejectedValueOnce(new Error("down"))
     const result = await createMemoryWith(full, input({ shareLocation: true, mapsUrl: NAMELESS }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
-    expect(saved).toMatchObject({ approxLatitude: 40.71, locationSource: "link", placeName: null })
+    expect(saved).toMatchObject({ latitude: 40.712812, locationSource: "link", placeName: null })
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
 })

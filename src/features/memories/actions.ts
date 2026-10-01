@@ -62,15 +62,15 @@ export async function createMemory(input: CreateMemoryInput): Promise<CreateMemo
 }
 
 /**
- * Names the place of a photo's rounded GPS position, for the "where was it taken" suggestion. The browser rounds to
- * 2 decimals before calling; anything more precise is refused. A failed lookup answers `{ ok: true, label: null }`.
+ * Names the place of a photo's GPS position, for the "where was it taken" suggestion. The server rounds the position to
+ * 2 decimals before it asks Nominatim; a failed lookup answers `{ ok: true, label: null }`.
  */
 export async function suggestPlace(input: { lat: number; lng: number }): Promise<SuggestPlaceResult> {
   return suggestPlaceWith({ currentVisitor, geocoder: getReverseGeocoder, log }, input)
 }
 
 /**
- * Reads a pasted Google Maps link (full or short) on the server and answers with the rounded position and a short
+ * Reads a pasted Google Maps link (full or short) on the server and answers with the exact position and a short
  * label. Short links are followed only through the SSRF-guarded follower. `createMemory` resolves the link again.
  */
 export async function resolveMapsLink(input: { url: string }): Promise<ResolveMapsLinkResult> {

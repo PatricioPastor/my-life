@@ -1,4 +1,4 @@
-import { isApproximatePosition, roundCoordinate } from "../place/coordinates"
+import { exactCoordinate, isValidPosition } from "../place/coordinates"
 
 /** What exifr's GPS reader answers: exact decimal degrees, or nothing when the photo has no GPS block. */
 export type GpsParser = (file: Blob) => Promise<{ latitude: number; longitude: number } | undefined>
@@ -13,9 +13,9 @@ export const parseGpsWithExifr: GpsParser = async (file) => {
 }
 
 /**
- * The photo's position rounded to 2 decimals (about 1 km), or null when it has no GPS, the GPS is not a real
- * position, or the file cannot be parsed. The exact values never leave this function: only rounded ones are
- * ever shown, sent to the server or stored.
+ * The photo's position trimmed to 6 decimals (what the server stores), or null when it has no GPS, the GPS is not a
+ * real position, or the file cannot be parsed. The position stays in the visitor's browser until they ask for a
+ * suggestion: the server rounds it before it asks a third party for a place name.
  */
 export async function readPhotoGps(
   file: Blob,
@@ -24,9 +24,9 @@ export async function readPhotoGps(
   try {
     const found = await parse(file)
     if (!found) return null
-    const lat = roundCoordinate(found.latitude)
-    const lng = roundCoordinate(found.longitude)
-    return isApproximatePosition(lat, lng) ? { lat, lng } : null
+    const lat = exactCoordinate(found.latitude)
+    const lng = exactCoordinate(found.longitude)
+    return isValidPosition(lat, lng) ? { lat, lng } : null
   } catch {
     return null
   }

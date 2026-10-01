@@ -1,4 +1,4 @@
-import { isApproximatePosition, roundCoordinate } from "./coordinates"
+import { exactCoordinate, isValidPosition, roundCoordinate } from "./coordinates"
 import type { FollowResult } from "./follow-short-link"
 import { parseMapsLink, type MapsLinkParse } from "./maps-link"
 import { cleanPlaceName } from "./place-name"
@@ -15,24 +15,27 @@ export interface ResolveLinkDeps {
 
 export type ResolveLinkFailure = "not_maps_link" | "unreadable"
 
-/** A position rounded to 2 decimals, with a short label (the place name from the URL, or a geocoded one). */
+/** The exact position (6 decimals) with a short label (the place name from the URL, or a geocoded one). */
 export type ResolvedLink = { ok: true; lat: number; lng: number; label: string | null }
 
 const failed = (reason: ResolveLinkFailure) => ({ ok: false, reason }) as const
 
-/** Rounds the position and finds a label: the URL's own place name first, else reverse geocoding (never fatal). */
+/**
+ * Trims the position to the stored precision and finds a label: the URL's own place name first, else reverse
+ * geocoding (never fatal), which only ever receives the position rounded to 2 decimals.
+ */
 async function located(
   parsed: Extract<MapsLinkParse, { kind: "location" }>,
   deps: ResolveLinkDeps,
 ): Promise<ResolvedLink | { ok: false; reason: ResolveLinkFailure }> {
-  const lat = roundCoordinate(parsed.lat)
-  const lng = roundCoordinate(parsed.lng)
-  if (!isApproximatePosition(lat, lng)) return failed("unreadable")
+  const lat = exactCoordinate(parsed.lat)
+  const lng = exactCoordinate(parsed.lng)
+  if (!isValidPosition(lat, lng)) return failed("unreadable")
 
   let label = cleanPlaceName(parsed.name)
   if (!label) {
     try {
-      label = cleanPlaceName(await deps.geocoder().reverse(lat, lng))
+      label = cleanPlaceName(await deps.geocoder().reverse(roundCoordinate(lat), roundCoordinate(lng)))
     } catch (error) {
       deps.log(`Naming a linked place failed (${error instanceof Error ? error.name : "unknown"}).`)
     }
@@ -41,7 +44,7 @@ async function located(
 }
 
 /**
- * Turns a pasted Google Maps link into a rounded position and a label. Used by the visitor-facing action and, again,
+ * Turns a pasted Google Maps link into an exact position and a label. Used by the visitor-facing action and, again,
  * by `createMemory`, which never trusts what the browser resolved. Never throws.
  */
 export async function resolveMapsLocation(
@@ -69,7 +72,7 @@ export interface ResolveMapsLinkDeps extends ResolveLinkDeps {
 
 export type ResolveMapsLinkResult = ResolvedLink | { ok: false; reason: "no_session" | ResolveLinkFailure }
 
-/** The server action behind the form's link input: needs a session, takes `{ url }`, returns the rounded place. */
+/** The server action behind the form's link input: needs a session, takes `{ url }`, returns the exact place. */
 export async function resolveMapsLinkWith(deps: ResolveMapsLinkDeps, input: unknown): Promise<ResolveMapsLinkResult> {
   const visitor = await deps.currentVisitor()
   if (!visitor) return { ok: false, reason: "no_session" }

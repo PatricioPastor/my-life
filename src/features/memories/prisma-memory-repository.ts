@@ -31,8 +31,8 @@ function toDomain(row: MemoryRow): Memory {
     palette: storedPaletteOf(row.palette),
     metadata: whitelistMetadata(row.metadata),
     // Decimal columns arrive as Prisma.Decimal; the domain holds plain numbers.
-    approxLatitude: row.approxLatitude === null ? null : Number(row.approxLatitude),
-    approxLongitude: row.approxLongitude === null ? null : Number(row.approxLongitude),
+    latitude: row.latitude === null ? null : Number(row.latitude),
+    longitude: row.longitude === null ? null : Number(row.longitude),
     placeName: row.placeName,
     locationSource: row.locationSource,
   }
@@ -78,8 +78,8 @@ export class PrismaMemoryRepository implements MemoryRepository {
             dominantColor: input.dominantColor,
             palette: input.palette,
             metadata: input.metadata,
-            approxLatitude: input.approxLatitude,
-            approxLongitude: input.approxLongitude,
+            latitude: input.latitude,
+            longitude: input.longitude,
             placeName: input.placeName,
             locationSource: input.locationSource,
           },

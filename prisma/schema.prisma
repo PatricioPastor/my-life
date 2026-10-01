@@ -63,12 +63,13 @@ model Memory {
   palette        Json      @default("[]")
   /// Whitelisted, non-identifying EXIF fields. Never GPS, serials or owner names. Not sent to the client.
   metadata       Json      @default("{}")
-  /// Approximate location, rounded to 2 decimals (about 1 km). Set only when the visitor opted in. Never exact.
-  approxLatitude  Decimal? @map("approx_latitude") @db.Decimal(5, 2)
-  approxLongitude Decimal? @map("approx_longitude") @db.Decimal(5, 2)
-  /// Short human label of the approximate location (neighbourhood and city). Only with a location. Never sent to the client.
+  /// Exact position of the photo (6 decimals, about 10 cm). Set only when the visitor opted in.
+  /// The client only ever gets it rounded to 2 decimals; Nominatim too.
+  latitude       Decimal? @db.Decimal(9, 6)
+  longitude      Decimal? @db.Decimal(9, 6)
+  /// Short human label of the location (neighbourhood and city). Only with a location.
   placeName      String?         @map("place_name") @db.VarChar(120)
-  /// Set if and only if the approximate location is.
+  /// Set if and only if the location is.
   locationSource LocationSource? @map("location_source")
 
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")

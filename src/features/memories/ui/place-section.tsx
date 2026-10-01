@@ -18,7 +18,7 @@ interface PlaceSectionProps {
   /** The Google Maps link the visitor pasted, and what the server made of it. */
   link: { text: string; state: MapsLinkState }
   onLinkChange: (text: string) => void
-  /** The visitor's consent to keep the (approximate) place. */
+  /** The visitor's consent to keep the place. */
   consent: boolean
   onConsentChange: (next: boolean) => void
   disabled: boolean
@@ -57,8 +57,7 @@ function statusText(place: PhotoPlace, link: MapsLinkState): string {
 
 /**
  * "¿Dónde se sacó?": where the PHOTO was taken, suggested from its own GPS (never the visitor's location). The
- * visitor can check the spot on the map, correct it with a Google Maps link, and decides whether to keep an
- * approximate version of it.
+ * visitor can check the spot on the map, correct it with a Google Maps link, and decides whether to keep it.
  */
 export function PlaceSection({ place, link, onLinkChange, consent, onConsentChange, disabled }: PlaceSectionProps) {
   const shown = shownPlace(place, link.state)

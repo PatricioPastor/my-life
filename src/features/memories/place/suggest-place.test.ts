@@ -25,11 +25,24 @@ describe("suggestPlaceWith", () => {
     expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
   })
 
+  it("accepts an exact position but only ever geocodes it rounded to 2 decimals", async () => {
+    const { deps, reverse } = make()
+    expect(await suggestPlaceWith(deps, { lat: -34.593712, lng: -58.421589 })).toEqual({
+      ok: true,
+      label: "Palermo, Buenos Aires",
+    })
+    expect(reverse).toHaveBeenCalledTimes(1)
+    expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
+    expect(JSON.stringify(reverse.mock.calls)).not.toMatch(/593712|421589/)
+  })
+
   it.each([
-    ["more than 2 decimals", { lat: -34.5937, lng: -58.42 }],
     ["latitude out of range", { lat: 91, lng: 0.5 }],
     ["longitude out of range", { lat: 0.5, lng: 181 }],
     ["strings", { lat: "-34.59", lng: "-58.42" }],
+    ["the 0,0 no-fix position", { lat: 0, lng: 0 }],
+    ["a position that rounds to 0,0", { lat: 0.001, lng: -0.002 }],
+    ["NaN", { lat: Number.NaN, lng: 1 }],
     ["missing fields", { lat: 1 }],
     ["null", null],
     ["a non-object", "x"],

@@ -26,10 +26,10 @@ export interface Memory {
   palette: PaletteColor[]
   /** A whitelist of non-identifying camera fields: never GPS, serials or owner names. */
   metadata: Record<string, MetadataValue>
-  /** Rounded to 2 decimals (about 1 km), stored only when the visitor opted in. Never sent to the client. */
-  approxLatitude: number | null
-  approxLongitude: number | null
-  /** Short label of the approximate location. Never sent to the client. */
+  /** Exact position (6 decimals), stored only when the visitor opted in. Only a 2-decimal view reaches the client. */
+  latitude: number | null
+  longitude: number | null
+  /** Short label of the location. */
   placeName: string | null
   /** Where the location came from; set if and only if the location is. */
   locationSource: LocationSource | null

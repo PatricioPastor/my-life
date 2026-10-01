@@ -7,7 +7,7 @@ export const PLACE_COPY = {
   noGps: "Esta foto no trae ubicación.",
   mapLink: "Ver en el mapa",
   consent: "Guardar dónde se sacó la foto",
-  help: "Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.",
+  help: "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo.",
   notSaved: "No pudimos guardar el lugar.",
   linkLabelFound: "¿No fue ahí? Pega un link de Google Maps",
   linkLabelNone: "Si quieres, pega un link de Google Maps",
@@ -23,8 +23,8 @@ export const suggestionLabel = (place: string) => `Parece que fue en ${place}`
 /** The place a pasted link points at; it replaces the suggestion from the photo. */
 export const linkPlaceLabel = (place: string) => `Según el link: ${place}`
 
-/** A rounded position shown when there is no place name: "Cerca de -34.59, -58.42". */
+/** A position shown with 2 decimals when there is no place name: "Cerca de -34.59, -58.42". */
 export const coordinatesLabel = (lat: number, lng: number) => `Cerca de ${lat.toFixed(2)}, ${lng.toFixed(2)}`
 
-/** Where the visitor can check a rounded position on the map. Opens in a new tab. */
+/** Where the visitor can check a position on the map. Opens in a new tab. */
 export const googleMapsUrl = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat},${lng}`

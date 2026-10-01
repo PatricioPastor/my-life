@@ -75,6 +75,20 @@ CREATE INDEX "myThings_idx" ON "myThings"("createdAt");
     ).toContain("cD")
   })
 
+  it("flags a column renamed to a camelCase name", () => {
+    expect(lintMigration(`ALTER TABLE "things" RENAME COLUMN "approx_latitude" TO "exactLatitude";`).join("\n")).toContain(
+      "exactLatitude",
+    )
+    expect(lintMigration(`ALTER TABLE "things" RENAME COLUMN "approx_latitude" TO "latitude";`)).toEqual([])
+  })
+
+  it("flags a constraint renamed to a camelCase name", () => {
+    expect(
+      lintMigration(`ALTER TABLE "things" RENAME CONSTRAINT "things_a_range" TO "thingsARange";`).join("\n"),
+    ).toContain("thingsARange")
+    expect(lintMigration(`ALTER TABLE "things" RENAME CONSTRAINT "things_a_range" TO "things_b_range";`)).toEqual([])
+  })
+
   it("flags a migration that turns row-level security off", () => {
     expect(lintMigration(`ALTER TABLE "things" DISABLE ROW LEVEL SECURITY;`).join("\n")).toContain("DISABLE")
     expect(lintMigration(`ALTER TABLE "things" NO FORCE ROW LEVEL SECURITY;`).join("\n")).toContain("NO FORCE")
@@ -209,6 +223,51 @@ describe("the place migration", () => {
   it("keeps the source set if and only if the coordinates are, and the name only with coordinates", () => {
     expect(code).toMatch(/location_source"?\s+IS\s+NULL\)\s*=\s*\(?"?approx_latitude"?\s+IS\s+NULL/i)
     expect(code).toMatch(/place_name"?\s+IS\s+NULL\s+OR\s+"?approx_latitude"?\s+IS\s+NOT\s+NULL/i)
+  })
+
+  it("leaves row-level security and the other grants alone", () => {
+    expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY/i)
+    expect(code).not.toMatch(/CREATE\s+POLICY|DROP\s+POLICY/i)
+    expect(code).not.toMatch(/GRANT\s+(UPDATE|DELETE|ALL|SELECT)/i)
+    expect(code).not.toMatch(/TO\s+PUBLIC/i)
+  })
+})
+
+describe("the exact location migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_exact_location"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the place migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261001180000_memory_place").toBe(true)
+  })
+
+  it("widens the position to numeric(9,6) and touches no other table", () => {
+    expect(code).toMatch(/ALTER\s+COLUMN\s+"approx_latitude"\s+SET\s+DATA\s+TYPE\s+DECIMAL\(9,\s*6\)/i)
+    expect(code).toMatch(/ALTER\s+COLUMN\s+"approx_longitude"\s+SET\s+DATA\s+TYPE\s+DECIMAL\(9,\s*6\)/i)
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("renames the columns and their constraints so nothing says approximate any more", () => {
+    expect(code).toMatch(/RENAME\s+COLUMN\s+"approx_latitude"\s+TO\s+"latitude"/i)
+    expect(code).toMatch(/RENAME\s+COLUMN\s+"approx_longitude"\s+TO\s+"longitude"/i)
+    expect(code).toMatch(/RENAME\s+CONSTRAINT\s+"memories_approx_latitude_range"\s+TO\s+"memories_latitude_range"/i)
+    expect(code).toMatch(/RENAME\s+CONSTRAINT\s+"memories_approx_longitude_range"\s+TO\s+"memories_longitude_range"/i)
+    expect(code).toMatch(/RENAME\s+CONSTRAINT\s+"memories_approx_location_paired"\s+TO\s+"memories_location_paired"/i)
+  })
+
+  it("drops no column and no data", () => {
+    expect(code).not.toMatch(/DROP\s+COLUMN|DROP\s+TABLE|DELETE\s+FROM|TRUNCATE/i)
+  })
+
+  it("keeps the range and pairing checks, and only restates the app_user INSERT on the two renamed columns", () => {
+    // The checks follow the rename; nothing here drops or recreates them with a weaker rule.
+    expect(code).not.toMatch(/DROP\s+CONSTRAINT/i)
+    const grant = /GRANT\s+INSERT\s*\(([^)]*)\)\s+ON\s+"memories"\s+TO\s+app_user/i.exec(code)
+    expect(grant).not.toBeNull()
+    const columns = grant![1].split(",").map((c) => c.trim().replace(/"/g, ""))
+    expect(columns.sort()).toEqual(["latitude", "longitude"])
   })
 
   it("leaves row-level security and the other grants alone", () => {

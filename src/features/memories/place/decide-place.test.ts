@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { decidePlace, type DecidePlaceDeps } from "./decide-place"
 
-const NONE = { approxLatitude: null, approxLongitude: null, locationSource: null, placeName: null }
-const PHOTO = { latitude: -34.59, longitude: -58.42 }
+const NONE = { latitude: null, longitude: null, locationSource: null, placeName: null }
+// Exact, as read from the photo's EXIF: Nominatim must only ever see it rounded to 2 decimals.
+const PHOTO = { latitude: -34.593712, longitude: -58.421589 }
 const LINK = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z"
-const LINK_NO_NAME = "https://www.google.com/maps/@40.7128,-74.006,12z"
+const LINK_NO_NAME = "https://www.google.com/maps/@40.712812,-74.006009,12z"
 
 const make = (label: string | null | Error = "Palermo, Buenos Aires") => {
   const reverse = vi.fn<(lat: number, lng: number) => Promise<string | null>>(async () => {
@@ -29,21 +30,23 @@ describe("decidePlace: no link (the photo GPS path)", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("stores the rounded photo position, the source photo and the geocoded name", async () => {
+  it("stores the exact photo position, the source photo and the name geocoded from a rounded position", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toEqual({
-      approxLatitude: -34.59,
-      approxLongitude: -58.42,
+      latitude: -34.593712,
+      longitude: -58.421589,
       locationSource: "photo",
       placeName: "Palermo, Buenos Aires",
     })
+    // Nominatim is a third party: it only ever receives 2 decimals.
+    expect(reverse).toHaveBeenCalledTimes(1)
     expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
   })
 
   it("keeps the location, with no name, when geocoding finds nothing", async () => {
     const { deps } = make(null)
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toMatchObject({
-      approxLatitude: -34.59,
+      latitude: -34.593712,
       locationSource: "photo",
       placeName: null,
     })
@@ -52,7 +55,7 @@ describe("decidePlace: no link (the photo GPS path)", () => {
   it("keeps the location, with no name, when geocoding throws, and logs without coordinates", async () => {
     const { deps } = make(new Error("-34.59 boom"))
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toMatchObject({
-      approxLatitude: -34.59,
+      latitude: -34.593712,
       placeName: null,
     })
     expect(JSON.stringify(vi.mocked(deps.log).mock.calls)).not.toMatch(/34\.59/)
@@ -80,8 +83,8 @@ describe("decidePlace: a Google Maps link", () => {
   it("stores the link position, the source link and the name from the URL", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK, photo: null }, deps)).toEqual({
-      approxLatitude: -34.58,
-      approxLongitude: -58.42,
+      latitude: -34.581,
+      longitude: -58.4208,
       locationSource: "link",
       placeName: "Plaza Italia",
     })
@@ -91,8 +94,8 @@ describe("decidePlace: a Google Maps link", () => {
   it("reverse-geocodes the rounded position when the link carries no name", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK_NO_NAME, photo: null }, deps)).toEqual({
-      approxLatitude: 40.71,
-      approxLongitude: -74.01,
+      latitude: 40.712812,
+      longitude: -74.006009,
       locationSource: "link",
       placeName: "Palermo, Buenos Aires",
     })
@@ -102,7 +105,7 @@ describe("decidePlace: a Google Maps link", () => {
   it("wins over the photo position", async () => {
     const { deps } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK, photo: PHOTO }, deps)).toMatchObject({
-      approxLatitude: -34.58,
+      latitude: -34.581,
       locationSource: "link",
     })
   })
@@ -111,7 +114,7 @@ describe("decidePlace: a Google Maps link", () => {
     const { deps, follow } = make()
     follow.mockResolvedValueOnce({ ok: true, url: LINK })
     expect(await decidePlace({ shareLocation: true, mapsUrl: "https://maps.app.goo.gl/AbCd", photo: null }, deps)).toMatchObject({
-      approxLatitude: -34.58,
+      latitude: -34.581,
       locationSource: "link",
       placeName: "Plaza Italia",
     })
@@ -120,7 +123,7 @@ describe("decidePlace: a Google Maps link", () => {
   it("keeps the location, with no name, when naming the link position fails", async () => {
     const { deps } = make(new Error("down"))
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK_NO_NAME, photo: null }, deps)).toMatchObject({
-      approxLatitude: 40.71,
+      latitude: 40.712812,
       locationSource: "link",
       placeName: null,
     })

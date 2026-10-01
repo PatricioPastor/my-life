@@ -23,8 +23,8 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   dominantColor: "#112233",
   palette: [{ color: "#112233", share: 40 }],
   metadata: { Make: "Apple" },
-  approxLatitude: 40.71,
-  approxLongitude: -74.01,
+  latitude: 40.712812,
+  longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo",
   ...over,
@@ -70,6 +70,7 @@ describe("listMemoriesWith", () => {
           kind: "image",
           takenAt: "2024-03-12T12:05:09.000Z",
           dominantColor: "#112233",
+          place: { lat: 40.71, lng: -74.01, name: "Nueva York" },
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
         },
@@ -85,10 +86,25 @@ describe("listMemoriesWith", () => {
     expect(json).not.toContain("publicId")
   })
 
-  it("never sends the location, the palette or the metadata to the client", async () => {
+  it("never sends the exact location, the source, the palette or the metadata to the client", async () => {
     const { full } = deps()
     const json = JSON.stringify(await listMemoriesWith(full))
-    expect(json).not.toMatch(/latitude|longitude|approx|palette|metadata|Apple|40\.71|74\.01/i)
+    expect(json).not.toMatch(/latitude|longitude|approx|locationSource|palette|metadata|Apple|40\.7128|74\.006/i)
+  })
+
+  it("sends a coarse place (2 decimals) with its name, rounding half away from zero", async () => {
+    const { full } = deps({}, [memory({ latitude: -34.595, longitude: -58.425, placeName: "Palermo" })])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories[0].place).toEqual({ lat: -34.6, lng: -58.43, name: "Palermo" })
+  })
+
+  it("has a place with no name when the location has none, and no place without a location", async () => {
+    const { full } = deps({}, [
+      memory({ id: "a", placeName: null }),
+      memory({ id: "b", latitude: null, longitude: null, placeName: null, locationSource: null }),
+    ])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories.map((m) => m.place)).toEqual([{ lat: 40.71, lng: -74.01, name: null }, null])
   })
 
   it("has a null taken date and color when the photo had none", async () => {

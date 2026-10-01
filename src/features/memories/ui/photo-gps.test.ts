@@ -5,10 +5,10 @@ const FILE = new File(["x"], "foto.jpg", { type: "image/jpeg" })
 const parse = (value: { latitude: number; longitude: number } | undefined) => vi.fn(async () => value)
 
 describe("readPhotoGps", () => {
-  it("rounds the position to 2 decimals before returning it", async () => {
-    expect(await readPhotoGps(FILE, parse({ latitude: -34.593701, longitude: -58.425123 }))).toEqual({
-      lat: -34.59,
-      lng: -58.43,
+  it("returns the exact position, trimmed to 6 decimals (the precision that is stored)", async () => {
+    expect(await readPhotoGps(FILE, parse({ latitude: -34.5937012345, longitude: -58.4251236789 }))).toEqual({
+      lat: -34.593701,
+      lng: -58.425124,
     })
   })
 
@@ -25,7 +25,7 @@ describe("readPhotoGps", () => {
     ["latitude out of range", { latitude: 91, longitude: 1 }],
     ["longitude out of range", { latitude: 1, longitude: 181 }],
     ["the 0,0 no-fix position", { latitude: 0, longitude: 0 }],
-    ["a position that rounds to 0,0", { latitude: 0.001, longitude: -0.002 }],
+    ["a position that rounds to 0,0", { latitude: 0.0000001, longitude: -0.0000002 }],
   ])("gives null for %s", async (_label, value) => {
     expect(await readPhotoGps(FILE, parse(value))).toBeNull()
   })
@@ -80,8 +80,9 @@ function geotaggedJpeg(): Blob {
 }
 
 describe("readPhotoGps with the real exifr parser", () => {
-  it("reads only the GPS of a geotagged JPEG, rounded", async () => {
-    expect(await readPhotoGps(geotaggedJpeg() as File)).toEqual({ lat: -34.59, lng: -58.43 })
+  it("reads only the GPS of a geotagged JPEG, exact", async () => {
+    // 34 35' 37.32" S = -34.5937, 58 25' 30.36" W = -58.4251
+    expect(await readPhotoGps(geotaggedJpeg() as File)).toEqual({ lat: -34.5937, lng: -58.4251 })
   })
 
   it("gives null for a file with no EXIF", async () => {

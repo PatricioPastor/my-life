@@ -24,8 +24,8 @@ const row = {
   dominantColor: "#112233",
   palette: [{ color: "#112233", share: 40 }],
   metadata: { Make: "Apple" },
-  approxLatitude: 40.71,
-  approxLongitude: -74.01,
+  latitude: 40.712812,
+  longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo" as const,
 }
@@ -72,8 +72,8 @@ const input: NewMemory = {
   dominantColor: "#112233",
   palette: [{ color: "#112233", share: 40 }],
   metadata: { Make: "Apple" },
-  approxLatitude: 40.71,
-  approxLongitude: -74.01,
+  latitude: 40.712812,
+  longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo",
 }
@@ -148,8 +148,8 @@ describe("PrismaMemoryRepository", () => {
           dominantColor: "#112233",
           palette: [{ color: "#112233", share: 40 }],
           metadata: { Make: "Apple" },
-          approxLatitude: 40.71,
-          approxLongitude: -74.01,
+          latitude: 40.712812,
+          longitude: -74.006009,
           placeName: "Nueva York",
           locationSource: "photo",
         },
@@ -161,13 +161,13 @@ describe("PrismaMemoryRepository", () => {
       await new PrismaMemoryRepository(() => db as never).createPending("ana", {
         ...input,
         takenAt: null,
-        approxLatitude: null,
-        approxLongitude: null,
+        latitude: null,
+        longitude: null,
         placeName: null,
         locationSource: null,
       })
       expect(tx.memory.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ takenAt: null, approxLatitude: null, approxLongitude: null, placeName: null, locationSource: null }),
+        data: expect.objectContaining({ takenAt: null, latitude: null, longitude: null, placeName: null, locationSource: null }),
       })
     })
 
@@ -176,15 +176,15 @@ describe("PrismaMemoryRepository", () => {
       const { db } = fakeDb([
         {
           ...row,
-          approxLatitude: decimal(40.71),
-          approxLongitude: decimal(-74.01),
+          latitude: decimal(40.712812),
+          longitude: decimal(-74.006009),
           palette: [{ color: "#112233", share: 40 }, "junk"],
           metadata: { Make: "Apple", GPSLatitude: "1", SerialNumber: "x" },
         },
       ])
       const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
-      expect(memory.approxLatitude).toBe(40.71)
-      expect(memory.approxLongitude).toBe(-74.01)
+      expect(memory.latitude).toBe(40.712812)
+      expect(memory.longitude).toBe(-74.006009)
       expect(memory.palette).toEqual([{ color: "#112233", share: 40 }])
       expect(memory.metadata).toEqual({ Make: "Apple" })
       expect(memory.placeName).toBe("Nueva York")

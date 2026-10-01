@@ -20,7 +20,7 @@ export interface CreateMemoryInput {
   happenedOn: string
   /**
    * The visitor ticked "Guardar dónde se sacó la foto". Only an explicit `true` counts; the server alone decides what
-   * is stored (an approximate location, and only when the photo has valid GPS).
+   * is stored (the exact location, and only when the photo has valid GPS).
    */
   shareLocation: boolean
   /**

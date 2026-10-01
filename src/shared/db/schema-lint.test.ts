@@ -62,6 +62,16 @@ model Owner {
   })
 })
 
+describe("prisma/schema.prisma (exact location)", () => {
+  const source = readFileSync(path.join(process.cwd(), "prisma", "schema.prisma"), "utf8")
+
+  it("stores the exact position as numeric(9,6) in latitude and longitude, with no approximate columns left", () => {
+    expect(source).toMatch(/latitude\s+Decimal\?\s+@db\.Decimal\(9,\s*6\)/)
+    expect(source).toMatch(/longitude\s+Decimal\?\s+@db\.Decimal\(9,\s*6\)/)
+    expect(source).not.toMatch(/approx/i)
+  })
+})
+
 describe("prisma/schema.prisma", () => {
   it("is fully snake_case mapped", () => {
     const source = readFileSync(path.join(process.cwd(), "prisma", "schema.prisma"), "utf8")

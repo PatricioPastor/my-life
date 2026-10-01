@@ -37,6 +37,7 @@ const MEMORY: MemoryView = {
   kind: "image",
   takenAt: null,
   dominantColor: null,
+  place: null,
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
 }
@@ -436,7 +437,7 @@ describe("AddMemory closing", () => {
 
 describe("AddMemory place section", () => {
   const checkbox = () => screen.getByRole("checkbox", { name: "Guardar dónde se sacó la foto" }) as HTMLInputElement
-  const HELP = "Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta."
+  const HELP = "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo."
   // What exifr reports for the photo: exact values, more than 2 decimals.
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
 
@@ -454,12 +455,11 @@ describe("AddMemory place section", () => {
     expect(screen.queryByRole("checkbox")).toBeNull()
   })
 
-  it("rounds to 2 decimals before anything leaves the browser", async () => {
+  it("sends the exact position to the suggestion call (the server rounds it before geocoding)", async () => {
     const { suggest, parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    await waitFor(() => expect(suggest).toHaveBeenCalledWith({ lat: -34.59, lng: -58.43 }))
-    expect(JSON.stringify(suggest.mock.calls)).not.toMatch(/34\.5937|58\.4251/)
+    await waitFor(() => expect(suggest).toHaveBeenCalledWith({ lat: -34.593701, lng: -58.425123 }))
   })
 
   it("suggests the place, with a safe link to check it on the map", async () => {
@@ -468,12 +468,12 @@ describe("AddMemory place section", () => {
     pickWithGps()
     expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
     const link = screen.getByRole("link", { name: "Ver en el mapa" }) as HTMLAnchorElement
-    expect(link.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.59,-58.43")
+    expect(link.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.593701,-58.425123")
     expect(link.getAttribute("target")).toBe("_blank")
     expect(link.getAttribute("rel")).toBe("noopener noreferrer")
   })
 
-  it("shows the rounded coordinates, and does not block, when the place has no name", async () => {
+  it("shows the coordinates (2 decimals), and does not block, when the place has no name", async () => {
     const { parseGps, suggest, create } = setup()
     parseGps.mockResolvedValue(EXACT)
     suggest.mockResolvedValue({ ok: true, label: null })
@@ -670,7 +670,7 @@ describe("AddMemory Google Maps link", () => {
     await openWithGps()
     const ids = input().getAttribute("aria-describedby")!.split(" ")
     expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(
-      "Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.",
+      "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo.",
     )
   })
 

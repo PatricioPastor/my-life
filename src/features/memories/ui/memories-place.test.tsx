@@ -22,6 +22,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   kind: "image",
   takenAt: null,
   dominantColor: null,
+  place: null,
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
   ...over,
@@ -193,6 +194,32 @@ describe("MemoriesPlace viewer", () => {
     open(/Uno/)
     const frame = screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
     expect(frame.style.aspectRatio).toBe("1200 / 800")
+  })
+
+  it("shows the place name under the date, small and quiet, when the memory has one", () => {
+    const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
+    render(<MemoriesPlace state={ready(view("a", "Uno", { place }))} />)
+    open(/Uno/)
+    const dialog = within(screen.getByRole("dialog"))
+    const date = dialog.getByText("12 de marzo de 2024")
+    const name = dialog.getByText("Palermo, Buenos Aires")
+    expect(date.nextElementSibling).toBe(name)
+    // The coordinates are not shown: only the name.
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/34\.59|58\.42/)
+  })
+
+  it("shows no place line when there is no place, or the place has no name", () => {
+    render(
+      <MemoriesPlace
+        state={ready(view("a", "Uno"), view("b", "Dos", { place: { lat: -34.59, lng: -58.42, name: null } }))}
+      />,
+    )
+    for (const caption of [/Uno/, /Dos/]) {
+      open(caption)
+      const date = within(screen.getByRole("dialog")).getByText("12 de marzo de 2024")
+      expect(date.nextElementSibling).toBeNull()
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    }
   })
 
   it("says a pending memory is waiting for approval", () => {

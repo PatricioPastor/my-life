@@ -5,11 +5,11 @@
  * Privacy rules, each pinned by a test:
  *  - the metadata that is kept is a WHITELIST of non-identifying camera fields: no GPS, serial numbers, owner
  *    or author names;
- *  - the location is stored only on request (`shareLocation`) and only rounded to 2 decimals (about 1 km). The
- *    exact coordinates never leave `approximateLocation`: it is the only function that sees them.
+ *  - the location is stored only on request (`shareLocation`): it is the exact position of the photo (6 decimals).
+ *    Without consent it is never even decoded. Third parties and the client only ever see it rounded elsewhere.
  */
 
-import { roundCoordinate } from "./place/coordinates"
+import { exactCoordinate, isValidPosition } from "./place/coordinates"
 
 export type MediaKind = "image"
 
@@ -37,9 +37,9 @@ export interface PhotoDetails {
   dominantColor: string | null
   palette: PaletteColor[]
   metadata: Record<string, MetadataValue>
-  /** Rounded to 2 decimals; both set or both null. Only ever set with the visitor's consent. */
-  approxLatitude: number | null
-  approxLongitude: number | null
+  /** Exact position, 6 decimals; both set or both null. Only ever set with the visitor's consent. */
+  latitude: number | null
+  longitude: number | null
   /** Short label of the stored location. Set by the place decision (geocoding), never by this module. */
   placeName: string | null
   /** Set if and only if the location is. */
@@ -95,7 +95,7 @@ export function parseExifDate(value: unknown, offset?: unknown): Date | null {
   return new Date(utc.getTime() - shiftMinutes * 60_000)
 }
 
-// --- Approximate location -----------------------------------------------------------------------------------
+// --- Location -----------------------------------------------------------------------------------
 
 type Axis = "latitude" | "longitude"
 const LIMIT: Record<Axis, number> = { latitude: 90, longitude: 180 }
@@ -167,16 +167,16 @@ function decimalDegrees(value: unknown, ref: unknown, axis: Axis): number | null
 }
 
 /**
- * The photo's location rounded to 2 decimals (about 1 km), or null when the GPS fields are missing, malformed or
- * out of range, or are the 0,0 "no fix" position. This is the only place that holds the exact coordinates.
+ * The photo's exact location, trimmed to the 6 decimals the database keeps, or null when the GPS fields are
+ * missing, malformed or out of range, or are the 0,0 "no fix" position (also after trimming).
  */
-export function approximateLocation(raw: Record<string, unknown>): { latitude: number; longitude: number } | null {
+export function exactLocation(raw: Record<string, unknown>): { latitude: number; longitude: number } | null {
   const latitude = decimalDegrees(raw.GPSLatitude, raw.GPSLatitudeRef, "latitude")
   const longitude = decimalDegrees(raw.GPSLongitude, raw.GPSLongitudeRef, "longitude")
   if (latitude === null || longitude === null) return null
   if (Math.abs(latitude) > LIMIT.latitude || Math.abs(longitude) > LIMIT.longitude) return null
-  if (latitude === 0 && longitude === 0) return null
-  return { latitude: roundCoordinate(latitude), longitude: roundCoordinate(longitude) }
+  const position = { latitude: exactCoordinate(latitude), longitude: exactCoordinate(longitude) }
+  return isValidPosition(position.latitude, position.longitude) ? position : null
 }
 
 // --- Metadata whitelist -------------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ export function dominantColorOf(colors: unknown): string | null {
 /** Maps Cloudinary's answer to the value a memory stores. `shareLocation` is the visitor's explicit opt-in. */
 export function extractPhotoDetails(photo: RawPhoto, options: { shareLocation: boolean }): PhotoDetails {
   const raw = isRecord(photo.imageMetadata) ? photo.imageMetadata : {}
-  const location = options.shareLocation ? approximateLocation(raw) : null
+  const location = options.shareLocation ? exactLocation(raw) : null
   const palette = paletteOf(photo.colors)
   return {
     kind: "image",
@@ -265,8 +265,8 @@ export function extractPhotoDetails(photo: RawPhoto, options: { shareLocation: b
     dominantColor: palette[0]?.color ?? null,
     palette,
     metadata: whitelistMetadata(raw),
-    approxLatitude: location?.latitude ?? null,
-    approxLongitude: location?.longitude ?? null,
+    latitude: location?.latitude ?? null,
+    longitude: location?.longitude ?? null,
     placeName: null,
     locationSource: location ? "photo" : null,
   }

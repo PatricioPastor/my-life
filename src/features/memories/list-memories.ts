@@ -1,7 +1,8 @@
 import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
-import type { ListMemoriesResult, MemoryView } from "./memory-view"
+import type { ListMemoriesResult, MemoryPlace, MemoryView } from "./memory-view"
+import { roundCoordinate } from "./place/coordinates"
 
 export interface ListMemoriesDeps {
   currentVisitor: () => Promise<{ handle: string } | null>
@@ -19,6 +20,12 @@ export interface DeliveryConfig {
   apiSecret: string
 }
 
+/** The coarse place the client gets: 2 decimals and the name. The exact position stays on the server. */
+function toPlace(memory: Memory): MemoryPlace | null {
+  if (memory.latitude === null || memory.longitude === null) return null
+  return { lat: roundCoordinate(memory.latitude), lng: roundCoordinate(memory.longitude), name: memory.placeName }
+}
+
 export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryView | null {
   if (memory.status === "rejected") return null
   return {
@@ -31,6 +38,7 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     kind: memory.kind,
     takenAt: memory.takenAt ? memory.takenAt.toISOString() : null,
     dominantColor: memory.dominantColor,
+    place: toPlace(memory),
     thumbUrl: cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
   }

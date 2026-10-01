@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { SuggestPlaceResult } from "../place/suggest-place"
 import { readPhotoGps, type GpsParser } from "./photo-gps"
 
-/** What the form knows about where the picked photo was taken. Positions are always rounded to 2 decimals. */
+/** What the form knows about where the picked photo was taken. The position is the photo's exact one. */
 export type PhotoPlace =
   | { status: "idle" }
   | { status: "reading" }
@@ -15,8 +15,8 @@ export type PhotoPlace =
 export type SuggestPlace = (input: { lat: number; lng: number }) => Promise<SuggestPlaceResult>
 
 /**
- * Container logic for the photo's suggested place: reads the GPS of the picked photo in the browser, rounds it, and
- * asks the server to name it. Only the rounded position is ever sent. Each `begin` supersedes the one before, so a
+ * Container logic for the photo's suggested place: reads the GPS of the picked photo in the browser and asks the
+ * server to name it (the server rounds the position before it geocodes). Each `begin` supersedes the one before, so a
  * slow answer for a photo that is no longer picked is ignored. Failures only mean "no label": nothing blocks saving.
  */
 export function usePhotoPlace(parseGps: GpsParser | undefined, suggest: SuggestPlace) {
@@ -44,7 +44,7 @@ export function usePhotoPlace(parseGps: GpsParser | undefined, suggest: SuggestP
         const answer = await suggest(position)
         if (answer.ok) label = answer.label
       } catch {
-        // No label: the form shows the rounded coordinates instead.
+        // No label: the form shows the coordinates instead.
       }
       if (mine !== run.current) return
       setPlace({ status: "found", ...position, label, naming: false })

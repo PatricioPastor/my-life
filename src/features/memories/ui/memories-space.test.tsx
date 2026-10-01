@@ -29,6 +29,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   kind: "image",
   takenAt: null,
   dominantColor: null,
+  place: null,
   thumbUrl: `https://res.cloudinary.com/demo/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/f/${id}`,
   ...over,

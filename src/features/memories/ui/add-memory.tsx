@@ -22,7 +22,7 @@ export interface AddMemoryProps {
   prepare: () => Promise<PrepareUploadResult>
   create: (input: CreateMemoryInput) => Promise<CreateMemoryResult>
   upload: UploadToCloudinary
-  /** Names the place of the photo's rounded GPS position (a server action). */
+  /** Names the place of the photo's GPS position; the server rounds it before geocoding (a server action). */
   suggest: SuggestPlace
   /** Reads a pasted Google Maps link on the server (a server action). */
   resolveLink: ResolveLink
@@ -71,7 +71,7 @@ function MemoryForm({
   const [dragging, setDragging] = useState(false)
   const [caption, setCaption] = useState("")
   const [date, setDate] = useState("")
-  // Off by default: the visitor opts in to keeping an approximate place for this photo.
+  // Off by default: the visitor opts in to keeping the place of this photo.
   const [shareLocation, setShareLocation] = useState(false)
   const [placeNotSaved, setPlaceNotSaved] = useState(false)
   const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)

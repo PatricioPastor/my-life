@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
-  approximateLocation,
+  exactLocation,
   dominantColorOf,
   extractPhotoDetails,
   paletteOf,
@@ -57,72 +57,69 @@ const gps = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-describe("approximateLocation", () => {
-  it("converts degrees, minutes and seconds with hemisphere refs, then rounds to 2 decimals", () => {
+describe("exactLocation", () => {
+  it("converts degrees, minutes and seconds with hemisphere refs, keeping the exact position", () => {
     // 40 + 42/60 + 46.08/3600 = 40.7128; 74 + 0/60 + 21.6/3600 = 74.006, west so negative.
-    expect(approximateLocation(gps())).toEqual({ latitude: 40.71, longitude: -74.01 })
+    expect(exactLocation(gps())).toEqual({ latitude: 40.7128, longitude: -74.006 })
   })
 
   it("applies the south and west refs, in letters or words, in any case", () => {
     expect(
-      approximateLocation({
+      exactLocation({
         GPSLatitude: `33 deg 52' 7.68" S`,
         GPSLatitudeRef: "South",
         GPSLongitude: `151 deg 12' 25.2" E`,
         GPSLongitudeRef: "east",
       }),
-    ).toEqual({ latitude: -33.87, longitude: 151.21 })
-    expect(approximateLocation(gps({ GPSLatitudeRef: "s", GPSLongitudeRef: "W" }))).toEqual({
-      latitude: -40.71,
-      longitude: -74.01,
+    ).toEqual({ latitude: -33.8688, longitude: 151.207 })
+    expect(exactLocation(gps({ GPSLatitudeRef: "s", GPSLongitudeRef: "W" }))).toEqual({
+      latitude: -40.7128,
+      longitude: -74.006,
     })
   })
 
   it("reads comma-separated, rational and array forms of degrees, minutes and seconds", () => {
-    expect(approximateLocation(gps({ GPSLatitude: "40, 42, 46.08", GPSLongitude: "74, 0, 21.6" }))).toEqual({
-      latitude: 40.71,
-      longitude: -74.01,
+    expect(exactLocation(gps({ GPSLatitude: "40, 42, 46.08", GPSLongitude: "74, 0, 21.6" }))).toEqual({
+      latitude: 40.7128,
+      longitude: -74.006,
     })
     expect(
-      approximateLocation(gps({ GPSLatitude: "40/1, 42/1, 4608/100", GPSLongitude: "74/1, 0/1, 216/10" })),
-    ).toEqual({ latitude: 40.71, longitude: -74.01 })
-    expect(approximateLocation(gps({ GPSLatitude: [40, 42, 46.08], GPSLongitude: [74, 0, 21.6] }))).toEqual({
-      latitude: 40.71,
-      longitude: -74.01,
+      exactLocation(gps({ GPSLatitude: "40/1, 42/1, 4608/100", GPSLongitude: "74/1, 0/1, 216/10" })),
+    ).toEqual({ latitude: 40.7128, longitude: -74.006 })
+    expect(exactLocation(gps({ GPSLatitude: [40, 42, 46.08], GPSLongitude: [74, 0, 21.6] }))).toEqual({
+      latitude: 40.7128,
+      longitude: -74.006,
     })
   })
 
   it("reads decimal degrees, signed or with a ref, without negating twice", () => {
-    expect(approximateLocation({ GPSLatitude: -33.8688, GPSLongitude: "151.2093" })).toEqual({
-      latitude: -33.87,
-      longitude: 151.21,
+    expect(exactLocation({ GPSLatitude: -33.8688, GPSLongitude: "151.2093" })).toEqual({
+      latitude: -33.8688,
+      longitude: 151.2093,
     })
     expect(
-      approximateLocation({ GPSLatitude: "33.8688", GPSLatitudeRef: "S", GPSLongitude: -70.5, GPSLongitudeRef: "W" }),
-    ).toEqual({ latitude: -33.87, longitude: -70.5 })
+      exactLocation({ GPSLatitude: "33.8688", GPSLatitudeRef: "S", GPSLongitude: -70.5, GPSLongitudeRef: "W" }),
+    ).toEqual({ latitude: -33.8688, longitude: -70.5 })
   })
 
-  it("rounds half values up in magnitude, not by binary accident", () => {
-    expect(approximateLocation({ GPSLatitude: "12.345", GPSLongitude: "1.005" })).toEqual({
-      latitude: 12.35,
-      longitude: 1.01,
-    })
-    expect(approximateLocation({ GPSLatitude: "-12.345", GPSLongitude: "-1.005" })).toEqual({
-      latitude: -12.35,
-      longitude: -1.01,
+  it("does not round the position to a coarse grid any more: 2 decimals are kept as they are", () => {
+    expect(exactLocation({ GPSLatitude: "12.345", GPSLongitude: "1.005" })).toEqual({
+      latitude: 12.345,
+      longitude: 1.005,
     })
   })
 
-  it("never returns more than 2 decimals, so the exact position is not recoverable", () => {
-    const location = approximateLocation({ GPSLatitude: "40.712812345", GPSLongitude: "-74.006009876" })
-    expect(location).toEqual({ latitude: 40.71, longitude: -74.01 })
-    for (const value of [location!.latitude, location!.longitude]) {
-      expect(Math.round(value * 100) / 100).toBe(value)
-    }
+  it("trims to 6 decimals (the column's precision, about 10 cm) half away from zero", () => {
+    expect(exactLocation({ GPSLatitude: "12.3456785", GPSLongitude: "-1.0000005" })).toEqual({
+      latitude: 12.345679,
+      longitude: -1.000001,
+    })
+    const location = exactLocation({ GPSLatitude: "40.712812345", GPSLongitude: "-74.006009876" })
+    expect(location).toEqual({ latitude: 40.712812, longitude: -74.00601 })
   })
 
   it("never returns negative zero", () => {
-    const location = approximateLocation({ GPSLatitude: "-0.001", GPSLongitude: "10" })
+    const location = exactLocation({ GPSLatitude: "-0.0000001", GPSLongitude: "10" })
     expect(Object.is(location!.latitude, 0)).toBe(true)
   })
 
@@ -143,13 +140,17 @@ describe("approximateLocation", () => {
     ["a missing longitude", gps({ GPSLongitude: undefined })],
     ["a missing latitude", gps({ GPSLatitude: undefined })],
   ])("is null for %s", (_name, raw) => {
-    expect(approximateLocation(raw)).toBeNull()
+    expect(exactLocation(raw)).toBeNull()
+  })
+
+  it("is null for a position that rounds to the 0,0 no-fix position", () => {
+    expect(exactLocation({ GPSLatitude: "0.0000001", GPSLongitude: "-0.0000002" })).toBeNull()
   })
 
   it("is null for the 0,0 no-fix position", () => {
-    expect(approximateLocation({ GPSLatitude: "0", GPSLongitude: "0" })).toBeNull()
+    expect(exactLocation({ GPSLatitude: "0", GPSLongitude: "0" })).toBeNull()
     expect(
-      approximateLocation({
+      exactLocation({
         GPSLatitude: "0, 0, 0",
         GPSLatitudeRef: "N",
         GPSLongitude: "0, 0, 0",
@@ -159,7 +160,7 @@ describe("approximateLocation", () => {
   })
 
   it("is null when there is no metadata at all", () => {
-    expect(approximateLocation({})).toBeNull()
+    expect(exactLocation({})).toBeNull()
   })
 })
 
@@ -333,23 +334,23 @@ describe("extractPhotoDetails", () => {
         { color: "#ffffff", share: 10 },
       ],
       metadata: { Make: "Apple", DateTimeOriginal: "2024:03:12 14:05:09", OffsetTimeOriginal: "+02:00" },
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
       placeName: null,
       locationSource: null,
     })
   })
 
-  it("stores the approximate location only when the visitor opted in", () => {
+  it("stores the exact location only when the visitor opted in", () => {
     expect(extractPhotoDetails(asset, { shareLocation: true })).toMatchObject({
-      approxLatitude: 40.71,
-      approxLongitude: -74.01,
+      latitude: 40.7128,
+      longitude: -74.006,
       locationSource: "photo",
       placeName: null,
     })
     expect(extractPhotoDetails(asset, { shareLocation: false })).toMatchObject({
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
       locationSource: null,
     })
   })
@@ -357,13 +358,13 @@ describe("extractPhotoDetails", () => {
   it("stores no location when the visitor opted in but the photo has no valid GPS", () => {
     const noGps = { ...asset, imageMetadata: { Make: "Apple" } }
     expect(extractPhotoDetails(noGps, { shareLocation: true })).toMatchObject({
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
     })
     const bad = { ...asset, imageMetadata: { ...gps({ GPSLatitude: "95" }) } }
     expect(extractPhotoDetails(bad, { shareLocation: true })).toMatchObject({
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
     })
   })
 
@@ -383,8 +384,8 @@ describe("extractPhotoDetails", () => {
       dominantColor: null,
       palette: [],
       metadata: {},
-      approxLatitude: null,
-      approxLongitude: null,
+      latitude: null,
+      longitude: null,
       placeName: null,
       locationSource: null,
     })

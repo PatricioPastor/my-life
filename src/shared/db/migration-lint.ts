@@ -1,7 +1,8 @@
 /**
  * Static rules for SQL migrations, enforced by `migration-lint.test.ts`:
  *  - every created table has ENABLE and FORCE ROW LEVEL SECURITY and at least one policy;
- *  - every created identifier (table, column, type, index) is snake_case, including columns added later;
+ *  - every created identifier (table, column, type, index) is snake_case, including columns added or renamed later
+ *    and renamed constraints;
  *  - row-level security is never turned off or un-forced;
  *  - nothing is granted to PUBLIC, app_user never gets UPDATE, DELETE or ALL, and no INSERT grant covers a
  *    column the database fills itself (id, status, created_at).
@@ -95,6 +96,14 @@ export function lintMigration(rawSql: string): string[] {
 
   for (const m of sql.matchAll(/ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?/gi)) {
     checkSnake("added column", m[1], problems)
+  }
+
+  for (const m of sql.matchAll(/RENAME\s+COLUMN\s+"?[A-Za-z_][A-Za-z0-9_]*"?\s+TO\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi)) {
+    checkSnake("renamed column", m[1], problems)
+  }
+
+  for (const m of sql.matchAll(/RENAME\s+CONSTRAINT\s+"?[A-Za-z_][A-Za-z0-9_]*"?\s+TO\s+"?([A-Za-z_][A-Za-z0-9_]*)"?/gi)) {
+    checkSnake("renamed constraint", m[1], problems)
   }
 
   for (const m of sql.matchAll(/ALTER\s+TABLE\s+[^;]*?\b(DISABLE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY/gi)) {

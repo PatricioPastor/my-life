@@ -95,7 +95,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     }
 
     const photo = info as AssetInfo // verified above, so it exists
-    // Only an explicit `true` opts in. The details keep an approximate location only with that consent.
+    // Only an explicit `true` opts in. The details decode the exact location only with that consent.
     const shareLocation = input.shareLocation === true
     const details = extractPhotoDetails(
       { format: photo.format, bytes: photo.bytes, imageMetadata: photo.imageMetadata, colors: photo.colors },
@@ -115,8 +115,8 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
         shareLocation,
         mapsUrl: input.mapsUrl,
         photo:
-          details.approxLatitude !== null && details.approxLongitude !== null
-            ? { latitude: details.approxLatitude, longitude: details.approxLongitude }
+          details.latitude !== null && details.longitude !== null
+            ? { latitude: details.latitude, longitude: details.longitude }
             : null,
       },
       deps,

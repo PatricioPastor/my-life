@@ -122,6 +122,9 @@ export function MemoryViewer({ memories, openId, origin, container, onOpenChange
                     <p id="memory-viewer-date" className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">
                       {formatMemoryDate(memory.happenedOn)}
                     </p>
+                    {memory.place?.name && (
+                      <p className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint">{memory.place.name}</p>
+                    )}
                     {memory.status === "pending" && (
                       <p className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">Pendiente de aprobación</p>
                     )}
