@@ -155,6 +155,28 @@ Make the memories dimension feel alive and personal. Memories float and interact
   - **Checks.** `pnpm lint` clean, `pnpm typecheck` clean, `pnpm test` 130 files and 1767 tests passed, `pnpm build` ok with `/` still static.
   - **Open notes.** The keyboard and the safe areas were emulated (a fake visual viewport and CDP insets) in Chromium only, not seen on a real phone: that belongs to T7's live check, iOS Safari especially, which resizes the visual viewport differently. The tag beside the orb can sit near a facet label, because the orb's keep-out boxes do not include it; it flips sides at the edge.
 
+- 2026-10-01 (T7), Live check: with the user's authorization ("Sí, ambas") the two migrations were applied to Neon `main`, then a read-only catalog check as the owner and a temporary vitest harness (outside the committed code, deleted afterwards; `jpeg-js` and `piexifjs` in the scratchpad) ran the real modules against Cloudinary, Neon as `app_user` and Nominatim, with one 64x48 JPEG carrying EXIF GPS for Plaza de Mayo (-34.6083, -58.3712). All checks passed.
+
+  **Catalog (owner, read-only):**
+  - `memories` has RLS enabled and forced.
+  - `latitude` and `longitude` are `numeric(9,6)`; no `approx_*` column remains; `orb_color` is `varchar(7)`, nullable.
+  - CHECKs present: `memories_latitude_range`, `memories_longitude_range`, `memories_location_paired`, `memories_orb_color_hex`, plus `memories_dominant_color_hex`, `memories_location_source_paired` and `memories_place_name_needs_location`.
+  - `app_user` has table-level `SELECT` only. Column `INSERT` on exactly 18 columns: `bytes`, `caption`, `dominant_color`, `format`, `handle`, `happened_on`, `height`, `kind`, `latitude`, `location_source`, `longitude`, `metadata`, `orb_color`, `palette`, `place_name`, `public_id`, `taken_at`, `width`. None on `id`, `status` or `created_at`; no UPDATE or DELETE.
+  - All five migrations are recorded as finished, none rolled back.
+
+  | # | Check | Result | Evidence |
+  |---|-------|--------|----------|
+  | 1 | Catalog | PASS | As listed above. |
+  | 2 | Signed upload | PASS | `prepareUpload` fields answered 200, type `authenticated`, id `my-life/memories/smoke-<uuid>`. |
+  | 3 | Exact location stored | PASS | Row `latitude` -34.608300, `longitude` -58.371200 (equal to the EXIF at 6 decimals), `location_source = photo`, `place_name` "Monserrat, Buenos Aires". The instrumented Nominatim fetch ran once, with `lat=-34.61&lon=-58.37` only. |
+  | 4 | DTO | PASS | `place` is `{ lat: -34.61, lng: -58.37, name }`; no exact coordinate string anywhere in the DTO JSON; `orbColor` `#ff645a` equals the swatch `extractPalette` gave for the image's colors, equals the stored `orb_color`, and passes `isGlowColor`. |
+  | 5 | `orbColor` fallback | PASS | `chooseOrbColor("#112233", "#dc2829")` returned `#ff645a` (the lifted dominant color); with no dominant color it returns the default `#8ab4ff`. |
+  | 6 | Delivery | PASS | Signed thumbnail (`image/png`) and full (`image/jpeg`) URLs 200; no `Exif` or `GPS` bytes in either, and `piexif.load` of the full image has an empty GPS IFD. Unsigned thumbnail, full and bare `authenticated` URLs and a bad signature: 401; `/upload/` URLs: 404. |
+  | 7 | Cleanup | PASS | The asset is destroyed (Admin API answers 404); `smoke_test` rows are 0 (re-checked after the harness was deleted); `git status` is clean. |
+
+  - **Checks:** `pnpm lint` clean, `pnpm typecheck` clean, `pnpm test` 130 files and 1767 tests passed, `pnpm build` ok with `/` still static (`○`).
+  - **Not exercised:** the browser flow, the swatch picker on a real photo and a real phone (keyboard, safe areas, iOS Safari), HEIC, and Google short links.
+
 ## Next step
 
 T7 (deliver): apply the two migrations after the user authorizes, a live check (including the keyboard and the safe areas on a real phone), then fast-forward main. T1 to T6 are done.
