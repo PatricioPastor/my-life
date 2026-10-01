@@ -159,6 +159,7 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - **Visual check.** Playwright (Chromium, software WebGL) on :3001 at 1440x900 and 390x844, a test handle through the process env; the temporary harness page for the viewer was deleted. Shots in the session scratchpad `shots/t3b-*`: `before` and `after` hover crops, return frames, the viewer open. Software GL renders about 2 frames per second and a screenshot takes seconds, so the mid-peek and mid-tunnel frames could not be sampled at known times: timing is judged from the tests and the constants, and the look from stills.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` (942 tests) and `pnpm build` pass; `/` stays static.
   - Open notes: the peek and return timings are tuned by constants, not by eye on a real GPU; the lens is dim on small phones; the Radix `aria-hidden` the cursor relies on is a library behavior, covered by a `MemoriesPlace` test.
+  - Commits `14a91f1`, `43d5058` and `3cec5e7`. RDD (medium; the slice budget was reached) was granted and approved with no findings; lineage `review-6fa9a66d9785d78e` acknowledged. Reviewed boundary: `3cec5e7`.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
