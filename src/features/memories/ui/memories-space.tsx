@@ -10,7 +10,6 @@ import { useMemories } from "./use-memories"
 
 interface MemoriesSpaceProps {
   accent?: string
-  palette?: readonly string[]
 }
 
 /**
@@ -18,7 +17,7 @@ interface MemoriesSpaceProps {
  * offers "Agregar recuerdo". A memory saved here is appended to the end of the list, so the orbs already on
  * the stage stay exactly where they are.
  */
-export function MemoriesSpace({ accent, palette }: MemoriesSpaceProps) {
+export function MemoriesSpace({ accent }: MemoriesSpaceProps) {
   const loaded = useMemories(listMemories)
   const [added, setAdded] = useState<readonly MemoryView[]>([])
   const state: MemoriesState =
@@ -28,7 +27,6 @@ export function MemoriesSpace({ accent, palette }: MemoriesSpaceProps) {
     <MemoriesPlace
       state={state}
       accent={accent}
-      palette={palette}
       action={
         state.status === "ready"
           ? (container) => (

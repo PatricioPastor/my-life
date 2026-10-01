@@ -2,6 +2,7 @@ import "server-only"
 import { type AssetInfo, type CloudinaryAssets, verifyAsset } from "./cloudinary-assets"
 import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
+import { chooseOrbColor } from "./orb-color"
 import { extractPhotoDetails } from "./photo-details"
 import { decidePlace } from "./place/decide-place"
 import type { FollowResult } from "./place/follow-short-link"
@@ -122,8 +123,11 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
       deps,
     )
 
+    // The visitor's pick when it is a valid glowing color; else the photo's own dominant color, lifted to glow.
+    const orbColor = chooseOrbColor(input.orbColor, details.dominantColor)
+
     try {
-      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details, ...place })
+      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details, ...place, orbColor })
       const view = toMemoryView(memory, deps.cloudinary)
       if (!view) throw new Error("The new memory has no view.")
       return { ok: true, memory: view, locationSaved: place.locationSource !== null }

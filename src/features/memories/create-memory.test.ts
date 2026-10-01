@@ -10,6 +10,7 @@ import { DuplicatePublicIdError, type MemoryRepository } from "./memory-reposito
 import { MAX_UPLOAD_BYTES } from "./upload-limits"
 import type { CreateMemoryInput } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
+import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
 import type { ReverseGeocoder } from "./place/reverse-geocoder"
 
 const SECRET = Buffer.alloc(32, 7).toString("base64url")
@@ -51,6 +52,7 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   longitude: null,
   placeName: null,
   locationSource: null,
+  orbColor: null,
   ...over,
 })
 
@@ -82,7 +84,14 @@ function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; in
 }
 
 const input = (
-  over: Partial<{ ticket: string; caption: string; happenedOn: string; shareLocation: unknown; mapsUrl: unknown }> = {},
+  over: Partial<{
+    ticket: string
+    caption: string
+    happenedOn: string
+    shareLocation: unknown
+    mapsUrl: unknown
+    orbColor: unknown
+  }> = {},
 ) => ({
   ticket: ticketFor(),
   caption: "Una tarde",
@@ -233,6 +242,7 @@ describe("createMemoryWith: rate limit and insert", () => {
       longitude: null,
       placeName: null,
       locationSource: null,
+      orbColor: DEFAULT_ORB_COLOR,
     })
     expect(assets.destroy).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
@@ -255,6 +265,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         takenAt: null,
         dominantColor: null,
         place: null,
+        orbColor: DEFAULT_ORB_COLOR,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
       },
@@ -525,5 +536,70 @@ describe("createMemoryWith: a Google Maps link", () => {
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
     expect(saved).toMatchObject({ latitude: 40.712812, locationSource: "link", placeName: null })
     expect(result).toMatchObject({ ok: true, locationSaved: true })
+  })
+})
+
+describe("createMemoryWith: the orb color", () => {
+  const saved = async (over: Parameters<typeof input>[0], info: AssetInfo | null = photo()) => {
+    const { full, repository } = setup({}, { info })
+    await createMemoryWith(full, input(over))
+    return vi.mocked(repository.createPending).mock.calls[0][1]
+  }
+
+  it("stores the color the visitor chose when it is a valid glowing #rrggbb", async () => {
+    expect(await saved({ orbColor: "#ff9a3c" })).toMatchObject({ orbColor: "#ff9a3c" })
+  })
+
+  it("lowercases the color it stores", async () => {
+    expect(await saved({ orbColor: "#FF9A3C" })).toMatchObject({ orbColor: "#ff9a3c" })
+  })
+
+  it.each([
+    ["too dark for the void", "#112233"],
+    ["black", "#000000"],
+    ["a grey with no chroma", "#c0c0c0"],
+    ["not a hex color", "orange"],
+    ["a 3-digit hex", "#f93"],
+    ["a CSS function", "rgb(255, 154, 60)"],
+    ["a script", "#ff9a3c;} body{display:none"],
+    ["not a string", 42],
+    ["an object", { hex: "#ff9a3c" }],
+    ["null", null],
+  ])("falls back to the adjusted dominant color of the photo when the color is %s", async (_name, orbColor) => {
+    const out = await saved({ orbColor })
+    // The photo's dominant color is #112233 (see COLORS): lifted to glow, same hue.
+    expect(out.orbColor).toBe(glowColor("#112233"))
+    expect(isGlowColor(out.orbColor)).toBe(true)
+  })
+
+  it("falls back to the adjusted dominant color when no color is sent", async () => {
+    const out = await saved({})
+    expect(out.orbColor).toBe(glowColor("#112233"))
+  })
+
+  it("falls back to the default cool tone when the photo has no dominant color either", async () => {
+    const out = await saved({ orbColor: "nope" }, asset())
+    expect(out.orbColor).toBe(DEFAULT_ORB_COLOR)
+  })
+
+  it("never stores a color that would not glow, whatever the browser says", async () => {
+    for (const orbColor of ["#000000", "#010101", "#222222", "#ffffff", "#123456", "bad", undefined]) {
+      expect(isGlowColor((await saved({ orbColor })).orbColor)).toBe(true)
+    }
+  })
+
+  it("answers the new memory with its orb color, valid and glowing", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    vi.mocked(repository.createPending).mockResolvedValueOnce(stored({ orbColor: "#a58cff" }))
+    const result = await createMemoryWith(full, input({ orbColor: "#a58cff" }))
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.memory.orbColor).toBe("#a58cff")
+  })
+
+  it("keeps the orb color independent of the location consent", async () => {
+    expect(await saved({ orbColor: "#ff9a3c", shareLocation: false })).toMatchObject({
+      orbColor: "#ff9a3c",
+      latitude: null,
+    })
   })
 })

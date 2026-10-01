@@ -28,6 +28,11 @@ export interface CreateMemoryInput {
    * coordinates or labels the browser may have seen.
    */
   mapsUrl?: string
+  /**
+   * The orb color the visitor picked from the swatches of their photo (`#rrggbb`). Optional: the server accepts it
+   * only when it is a valid color that glows on the dark void, and otherwise uses the photo's dominant color.
+   */
+  orbColor?: string
 }
 
 export type CreateMemoryFailure =

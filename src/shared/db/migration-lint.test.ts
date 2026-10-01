@@ -277,3 +277,37 @@ describe("the exact location migration", () => {
     expect(code).not.toMatch(/TO\s+PUBLIC/i)
   })
 })
+
+describe("the orb color migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_orb_color"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the exact location migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261002000000_memory_exact_location").toBe(true)
+  })
+
+  it("adds one snake_case varchar(7) column, nullable so older rows stay valid, and touches no other table", () => {
+    expect(code).toMatch(/ADD\s+COLUMN\s+"orb_color"\s+VARCHAR\(7\)\s*;/i)
+    expect(code).not.toMatch(/orb_color"?\s+VARCHAR\(7\)\s+NOT\s+NULL/i)
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("only accepts a lowercase #rrggbb (or nothing)", () => {
+    expect(code).toMatch(/CONSTRAINT\s+"memories_orb_color_hex"\s+CHECK\s*\(\s*"orb_color"\s+IS\s+NULL\s+OR\s+"orb_color"\s+~\s+'\^#\[0-9a-f\]\{6\}\$'\s*\)/i)
+  })
+
+  it("grants app_user INSERT on exactly the new column", () => {
+    const grant = /GRANT\s+INSERT\s*\(([^)]*)\)\s+ON\s+"memories"\s+TO\s+app_user/i.exec(code)
+    expect(grant).not.toBeNull()
+    expect(grant![1].split(",").map((c) => c.trim().replace(/"/g, ""))).toEqual(["orb_color"])
+  })
+
+  it("leaves row-level security and the other grants alone", () => {
+    expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY/i)
+    expect(code).not.toMatch(/CREATE\s+POLICY|DROP\s+POLICY/i)
+    expect(code).not.toMatch(/GRANT\s+(UPDATE|DELETE|ALL|SELECT)/i)
+    expect(code).not.toMatch(/TO\s+PUBLIC/i)
+  })
+})

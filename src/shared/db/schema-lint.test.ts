@@ -72,6 +72,14 @@ describe("prisma/schema.prisma (exact location)", () => {
   })
 })
 
+describe("prisma/schema.prisma (orb color)", () => {
+  const source = readFileSync(path.join(process.cwd(), "prisma", "schema.prisma"), "utf8")
+
+  it("keeps the orb color in a nullable, mapped varchar(7) column", () => {
+    expect(source).toMatch(/orbColor\s+String\?\s+@map\("orb_color"\)\s+@db\.VarChar\(7\)/)
+  })
+})
+
 describe("prisma/schema.prisma", () => {
   it("is fully snake_case mapped", () => {
     const source = readFileSync(path.join(process.cwd(), "prisma", "schema.prisma"), "utf8")

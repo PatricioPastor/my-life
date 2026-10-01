@@ -71,6 +71,9 @@ model Memory {
   placeName      String?         @map("place_name") @db.VarChar(120)
   /// Set if and only if the location is.
   locationSource LocationSource? @map("location_source")
+  /// The color of the memory's orb, `#rrggbb`, chosen by the visitor from their photo (or derived by the server).
+  /// Null only for rows stored before orb colors existed; the client always gets one.
+  orbColor       String?         @map("orb_color") @db.VarChar(7)
 
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")

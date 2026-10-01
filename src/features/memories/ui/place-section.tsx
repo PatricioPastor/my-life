@@ -70,21 +70,24 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
       <span id="memory-place-label" className={LABEL_CLASS}>
         {PLACE_COPY.heading}
       </span>
-      <p id="memory-place-status" aria-live="polite" className="t-body m-0 text-[length:var(--type-1)] text-ink">
-        {statusText(place, link.state)}
-      </p>
-      {shown && (
-        <a
-          href={googleMapsUrl(shown.lat, shown.lng)}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-magnetic="light"
-          data-cursor-label="Abrir mapa"
-          className="w-fit text-xs tracking-[0.06em] text-ink-muted underline underline-offset-4 transition-colors duration-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
-        >
-          {PLACE_COPY.mapLink}
-        </a>
-      )}
+      {/* What the place is, and where to check it, share a line when there is room. */}
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <p id="memory-place-status" aria-live="polite" className="t-body m-0 text-[length:var(--type-1)] text-ink">
+          {statusText(place, link.state)}
+        </p>
+        {shown && (
+          <a
+            href={googleMapsUrl(shown.lat, shown.lng)}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-magnetic="light"
+            data-cursor-label="Abrir mapa"
+            className="w-fit text-xs tracking-[0.06em] text-ink-muted underline underline-offset-4 transition-colors duration-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+          >
+            {PLACE_COPY.mapLink}
+          </a>
+        )}
+      </div>
       {shown && (
         <label htmlFor="memory-location" className={cn("flex cursor-pointer items-center gap-3 text-ink", disabled && "cursor-default")}>
           <input

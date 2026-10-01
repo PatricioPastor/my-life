@@ -35,6 +35,7 @@ function toDomain(row: MemoryRow): Memory {
     longitude: row.longitude === null ? null : Number(row.longitude),
     placeName: row.placeName,
     locationSource: row.locationSource,
+    orbColor: row.orbColor,
   }
 }
 
@@ -82,6 +83,7 @@ export class PrismaMemoryRepository implements MemoryRepository {
             longitude: input.longitude,
             placeName: input.placeName,
             locationSource: input.locationSource,
+            orbColor: input.orbColor,
           },
         }),
       )

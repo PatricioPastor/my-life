@@ -18,6 +18,8 @@ export interface MemoryView {
    * to cluster memories. The exact position never leaves the server.
    */
   place: MemoryPlace | null
+  /** `#rrggbb`: the color the memory's orb glows in. Always valid, and always light enough for the dark void. */
+  orbColor: string
   thumbUrl: string
   fullUrl: string
 }

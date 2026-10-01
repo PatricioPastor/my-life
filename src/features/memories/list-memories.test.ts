@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}))
 import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url"
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
+import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
 import { listMemoriesWith, type ListMemoriesDeps } from "./list-memories"
 
 const memory = (over: Partial<Memory> = {}): Memory => ({
@@ -27,6 +28,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo",
+  orbColor: "#ff9a3c",
   ...over,
 })
 
@@ -71,6 +73,7 @@ describe("listMemoriesWith", () => {
           takenAt: "2024-03-12T12:05:09.000Z",
           dominantColor: "#112233",
           place: { lat: 40.71, lng: -74.01, name: "Nueva York" },
+          orbColor: "#ff9a3c",
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
         },
@@ -105,6 +108,32 @@ describe("listMemoriesWith", () => {
     ])
     const result = await listMemoriesWith(full)
     expect(result.ok && result.memories.map((m) => m.place)).toEqual([{ lat: 40.71, lng: -74.01, name: null }, null])
+  })
+
+  describe("orb color", () => {
+    const colorOf = async (row: Memory) => {
+      const result = await listMemoriesWith(deps({}, [row]).full)
+      return result.ok ? result.memories[0].orbColor : undefined
+    }
+
+    it("sends the stored color", async () => {
+      expect(await colorOf(memory({ orbColor: "#a58cff" }))).toBe("#a58cff")
+    })
+
+    it("derives one for older rows with none: the dominant color, lifted to glow", async () => {
+      expect(await colorOf(memory({ orbColor: null, dominantColor: "#112233" }))).toBe(glowColor("#112233"))
+    })
+
+    it("falls back to the default cool tone for an older row with no color at all", async () => {
+      expect(await colorOf(memory({ orbColor: null, dominantColor: null }))).toBe(DEFAULT_ORB_COLOR)
+    })
+
+    it("never sends a stored color that would not glow, or is not a color", async () => {
+      for (const orbColor of ["#000000", "red", "#fff", "</style>"]) {
+        const out = await colorOf(memory({ orbColor, dominantColor: null }))
+        expect(isGlowColor(out)).toBe(true)
+      }
+    })
   })
 
   it("has a null taken date and color when the photo had none", async () => {

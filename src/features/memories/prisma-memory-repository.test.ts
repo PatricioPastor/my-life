@@ -28,6 +28,7 @@ const row = {
   longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo" as const,
+  orbColor: "#ff9a3c" as string | null,
 }
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
@@ -76,6 +77,7 @@ const input: NewMemory = {
   longitude: -74.006009,
   placeName: "Nueva York",
   locationSource: "photo",
+  orbColor: "#ff9a3c",
 }
 
 describe("PrismaMemoryRepository", () => {
@@ -152,6 +154,7 @@ describe("PrismaMemoryRepository", () => {
           longitude: -74.006009,
           placeName: "Nueva York",
           locationSource: "photo",
+          orbColor: "#ff9a3c",
         },
       })
     })
@@ -189,6 +192,13 @@ describe("PrismaMemoryRepository", () => {
       expect(memory.metadata).toEqual({ Make: "Apple" })
       expect(memory.placeName).toBe("Nueva York")
       expect(memory.locationSource).toBe("photo")
+      expect(memory.orbColor).toBe("#ff9a3c")
+    })
+
+    it("reads an older row with no orb color back as null", async () => {
+      const { db } = fakeDb([{ ...row, orbColor: null }])
+      const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(memory.orbColor).toBeNull()
     })
 
     it("maps the created row to the domain", async () => {

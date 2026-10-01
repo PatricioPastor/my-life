@@ -282,7 +282,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
           }}
         >
           {/* The place paints its own opaque void, so the way back sits above it. */}
-          <MemoriesSpace accent={ORB_PORTAL.rings[1]} palette={ORB_PORTAL.rings} />
+          <MemoriesSpace accent={ORB_PORTAL.rings[1]} />
           {screen === "memories" && (
             <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
           )}

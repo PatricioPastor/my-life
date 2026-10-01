@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
+import { rimColor } from "../orb-color"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
 
 afterEach(() => {
@@ -23,6 +24,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   takenAt: null,
   dominantColor: null,
   place: null,
+  orbColor: "#8ab4ff",
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
   ...over,
@@ -100,6 +102,30 @@ describe("MemoriesPlace dimension", () => {
       expect(Number(style.getPropertyValue("--size").replace("px", ""))).toBeGreaterThanOrEqual(6)
       expect(Number(style.getPropertyValue("--alpha"))).toBeGreaterThanOrEqual(0.5)
     }
+  })
+
+  it("tints each orb with its own color: core, halo and rim", () => {
+    render(
+      <MemoriesPlace
+        state={ready(view("a", "Uno", { orbColor: "#ff9a3c" }), view("b", "Dos", { orbColor: "#a58cff" }))}
+      />,
+    )
+    const [a, b] = screen.getAllByRole("button") as HTMLElement[]
+    expect(a.style.getPropertyValue("--pc")).toBe("#ff9a3c")
+    expect(b.style.getPropertyValue("--pc")).toBe("#a58cff")
+    // The rim is the neighbouring hue of the orb's own color, not another memory's.
+    expect(a.style.getPropertyValue("--rim")).toBe(rimColor("#ff9a3c"))
+    expect(b.style.getPropertyValue("--rim")).toBe(rimColor("#a58cff"))
+    expect(a.style.getPropertyValue("--rim")).not.toBe(a.style.getPropertyValue("--pc"))
+  })
+
+  it("keeps an orb's color wherever it sits in the list", () => {
+    const { rerender } = render(<MemoriesPlace state={ready(view("a", "Uno", { orbColor: "#ff9a3c" }))} />)
+    rerender(
+      <MemoriesPlace state={ready(view("z", "Cero", { orbColor: "#4fd1b9" }), view("a", "Uno", { orbColor: "#ff9a3c" }))} />,
+    )
+    const uno = screen.getByRole("button", { name: /Uno/ }) as HTMLElement
+    expect(uno.style.getPropertyValue("--pc")).toBe("#ff9a3c")
   })
 
   it("speaks its states in the serif, quietly", () => {

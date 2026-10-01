@@ -3,21 +3,19 @@
 import { useMemo, useState, type CSSProperties } from "react"
 import { formatMemoryDate, truncateCaption } from "../format"
 import type { MemoryView } from "../memory-view"
+import { rimColor } from "../orb-color"
 import { memoriesKeepOut } from "./keep-out"
 import { orbDepth, orbMetrics } from "./orb-depth"
-import { driftFor, layoutPoints, paletteIndex } from "./point-layout"
+import { driftFor, layoutPoints } from "./point-layout"
 import { useViewport } from "./use-viewport"
 
 const LABEL_MAX = 28
 const STAGGER_MS = 55
 const STAGGER_CAP = 24
 const NARROW_PX = 640
-const FALLBACK_TINT = "#cfe9ff"
 
 interface MemoryPointsProps {
   memories: readonly MemoryView[]
-  /** Orb colors, picked per memory. */
-  palette: readonly string[]
   reduced: boolean
   onOpen: (id: string, origin: { x: number; y: number }) => void
 }
@@ -25,12 +23,12 @@ interface MemoryPointsProps {
 type PointStyle = CSSProperties & Record<`--${string}`, string>
 
 /**
- * One soft round orb per memory, floating in the void. Each sits at its own seeded depth (which sets its
- * size, focus and brightness), fades in once its thumbnail has loaded (staggered, so the constellation
+ * One soft round orb per memory, floating in the void, tinted with the memory's own color (its core, halo and
+ * rim). Each sits at its own seeded depth (which sets its size, focus and brightness), fades in once its thumbnail has loaded (staggered, so the constellation
  * assembles), drifts on its own slow wobble, and is a real button named by its caption and date; the DOM
  * follows the list order.
  */
-export function MemoryPoints({ memories, palette, reduced, onOpen }: MemoryPointsProps) {
+export function MemoryPoints({ memories, reduced, onOpen }: MemoryPointsProps) {
   const { width, height } = useViewport()
   const [ready, setReady] = useState<ReadonlySet<string>>(() => new Set())
   const markReady = (id: string) => setReady((prev) => (prev.has(id) ? prev : new Set(prev).add(id)))
@@ -57,11 +55,10 @@ export function MemoryPoints({ memories, palette, reduced, onOpen }: MemoryPoint
         const drift = driftFor(memory.id)
         const date = formatMemoryDate(memory.happenedOn)
         const pending = memory.status === "pending"
-        const pick = paletteIndex(memory.id, palette.length)
         const style: PointStyle = {
-          "--pc": palette[pick] ?? FALLBACK_TINT,
-          // The neighbouring hue, for the orb's chromatic rim.
-          "--rim": palette[(pick + 1) % Math.max(palette.length, 1)] ?? FALLBACK_TINT,
+          "--pc": memory.orbColor,
+          // The neighbouring hue of the orb's own color, for its chromatic rim.
+          "--rim": rimColor(memory.orbColor),
           "--size": `${orb.size.toFixed(1)}px`,
           "--alpha": orb.alpha.toFixed(2),
           "--soft": orb.softness.toFixed(2),

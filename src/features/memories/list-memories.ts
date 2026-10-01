@@ -2,6 +2,7 @@ import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl } from "./cloudinary-url
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import type { ListMemoriesResult, MemoryPlace, MemoryView } from "./memory-view"
+import { chooseOrbColor } from "./orb-color"
 import { roundCoordinate } from "./place/coordinates"
 
 export interface ListMemoriesDeps {
@@ -39,6 +40,8 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     takenAt: memory.takenAt ? memory.takenAt.toISOString() : null,
     dominantColor: memory.dominantColor,
     place: toPlace(memory),
+    // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks.
+    orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
     thumbUrl: cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
   }

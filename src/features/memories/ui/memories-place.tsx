@@ -15,10 +15,8 @@ export type MemoriesState =
 
 interface MemoriesPlaceProps {
   state: MemoriesState
-  /** A faint cool tint for the title's glow and the orbs' fallback color. */
+  /** A faint cool tint for the title's glow. */
   accent?: string
-  /** Orb colors; defaults to the accent. */
-  palette?: readonly string[]
   /**
    * The "Agregar recuerdo" control, in the bottom-right corner the layout keeps clear. A function receives the
    * stage element, so a dialog it opens can mount inside it (and keep the magnetic cursor).
@@ -39,7 +37,7 @@ const FAILURE_COPY: Record<MemoriesFailure, string> = {
  * drifting through it and one floating orb per memory. It only presents the state it is given; loading it is
  * the container's job, and the way back belongs to the journey.
  */
-export function MemoriesPlace({ state, accent, palette, action }: MemoriesPlaceProps) {
+export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   const reduced = useReducedMotion()
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const [viewing, setViewing] = useState<{ id: string | null; origin: { x: number; y: number } }>({
@@ -92,7 +90,6 @@ export function MemoriesPlace({ state, accent, palette, action }: MemoriesPlaceP
       {memories.length > 0 && (
         <MemoryPoints
           memories={memories}
-          palette={palette && palette.length > 0 ? palette : [accent ?? "#cfe9ff"]}
           reduced={reduced}
           onOpen={(id, origin) => setViewing({ id, origin })}
         />

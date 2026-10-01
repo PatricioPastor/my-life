@@ -320,7 +320,7 @@
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      #fff 0%,
+      color-mix(in oklab, var(--pc) 22%, white) 0%,
       color-mix(in oklab, var(--pc) 70%, white) calc(14% + var(--soft, 0.4) * 10%),
       color-mix(in oklab, var(--pc) 70%, transparent) calc(46% + var(--soft, 0.4) * 14%),
       transparent 74%
@@ -391,6 +391,15 @@
   }
   .mem-viewer[data-state="closed"] {
     animation: mem-viewer-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+  /* On phones the add-memory dialog is a bottom sheet: it rises from the bottom edge instead of scaling out of a corner. */
+  @media (max-width: 767px) {
+    .mem-sheet[data-state="open"] {
+      animation: mem-sheet-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
+    .mem-sheet[data-state="closed"] {
+      animation: mem-sheet-out 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+    }
   }
 
   .gate input::placeholder {
@@ -1320,6 +1329,26 @@
   }
   to {
     opacity: 0;
+  }
+}
+@keyframes mem-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mem-sheet-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(24px);
   }
 }
 @keyframes mem-viewer-in {

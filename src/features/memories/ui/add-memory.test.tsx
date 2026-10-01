@@ -8,6 +8,8 @@ import type { ResolveMapsLinkResult } from "../place/resolve-maps-link"
 import type { SuggestPlaceResult } from "../place/suggest-place"
 import { AddMemory, type AddMemoryProps } from "./add-memory"
 import type { UploadResult } from "./cloudinary-upload"
+import { ORB_COLOR_COPY } from "./orb-color-picker"
+import type { PhotoPalette } from "./photo-palette"
 import { PLACE_COPY } from "./place-model"
 
 const track = vi.fn()
@@ -38,9 +40,13 @@ const MEMORY: MemoryView = {
   takenAt: null,
   dominantColor: null,
   place: null,
+  orbColor: "#8ab4ff",
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
 }
+
+/** What the browser would take from the photo: glowing tones, the dominant one first. */
+const SWATCHES = ["#ff9a3c", "#a58cff", "#4fd1b9", "#e88ad6"]
 
 function setup(over: Partial<AddMemoryProps> = {}) {
   const prepare = vi.fn(async (): Promise<PrepareUploadResult> => GRANT)
@@ -52,6 +58,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
   const resolveLink = vi.fn(
     async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }),
   )
+  const readPalette = vi.fn(async (): Promise<PhotoPalette> => ({ colors: SWATCHES, fromPhoto: true }))
   const onCreated = vi.fn()
   function Stage() {
     const [el, setEl] = useState<HTMLDivElement | null>(null)
@@ -66,6 +73,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           parseGps={parseGps}
           suggest={suggest}
           resolveLink={resolveLink}
+          readPalette={readPalette}
           linkDebounceMs={0}
           onCreated={onCreated}
           today="2026-10-01"
@@ -76,7 +84,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
     )
   }
   render(<Stage />)
-  return { prepare, upload, create, onCreated, parseGps, suggest, resolveLink }
+  return { prepare, upload, create, onCreated, parseGps, suggest, resolveLink, readPalette }
 }
 
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
@@ -709,6 +717,7 @@ describe("AddMemory Google Maps link", () => {
       happenedOn: "2024-03-12",
       shareLocation: true,
       mapsUrl: LINK,
+      orbColor: SWATCHES[0],
     })
     // Only the link goes up, never the coordinates or the label the browser saw.
     expect(JSON.stringify(create.mock.calls)).not.toMatch(/Plaza Italia|-34\.58/)
@@ -833,5 +842,251 @@ describe("AddMemory Google Maps link", () => {
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
     expect(input().disabled).toBe(true)
+  })
+})
+
+describe("AddMemory orb color", () => {
+  const group = () => screen.getByRole("radiogroup", { name: ORB_COLOR_COPY.label })
+  const swatches = () => within(group()).getAllByRole("radio") as HTMLButtonElement[]
+  const ready = async () => screen.findByRole("radiogroup", { name: ORB_COLOR_COPY.label })
+
+  it("asks for a photo first, with the preview and the swatch row already in place", () => {
+    setup()
+    open()
+    expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
+    expect(screen.queryByRole("radiogroup")).toBeNull()
+    expect(screen.getByTestId("orb-preview")).toBeTruthy()
+  })
+
+  it("takes the swatches from the picked photo, the dominant tone first and selected", async () => {
+    const { readPalette } = setup()
+    open()
+    const file = photo()
+    pick(file)
+    await ready()
+    expect(readPalette).toHaveBeenCalledWith(file)
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(SWATCHES)
+    expect(swatches().map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false"])
+    expect(screen.getByText(ORB_COLOR_COPY.fromPhoto)).toBeTruthy()
+  })
+
+  it("shows a live preview in the chosen color", async () => {
+    setup()
+    open()
+    pick(photo())
+    await ready()
+    const orb = () => screen.getByTestId("orb-preview").querySelector(".mem-dot") as HTMLElement
+    expect(orb().style.getPropertyValue("--pc")).toBe(SWATCHES[0])
+    fireEvent.click(swatches()[2])
+    expect(orb().style.getPropertyValue("--pc")).toBe(SWATCHES[2])
+  })
+
+  it("moves the selection with the arrow keys", async () => {
+    setup()
+    open()
+    pick(photo())
+    await ready()
+    swatches()[0].focus()
+    fireEvent.keyDown(swatches()[0], { key: "ArrowRight" })
+    expect(swatches()[1].getAttribute("aria-checked")).toBe("true")
+    expect(document.activeElement).toBe(swatches()[1])
+    fireEvent.keyDown(swatches()[1], { key: "ArrowLeft" })
+    fireEvent.keyDown(swatches()[0], { key: "ArrowLeft" })
+    expect(swatches()[3].getAttribute("aria-checked")).toBe("true")
+  })
+
+  it("sends the chosen color with the memory", async () => {
+    const { create } = setup()
+    open()
+    pick(photo())
+    fill()
+    await ready()
+    fireEvent.click(swatches()[1])
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: SWATCHES[1] }))
+  })
+
+  it("sends the dominant tone when the visitor never touched the swatches", async () => {
+    const { create } = setup()
+    open()
+    pick(photo())
+    fill()
+    await ready()
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: SWATCHES[0] }))
+  })
+
+  it("says so, and offers the site's cool swatches, when the browser cannot draw the photo (HEIC)", async () => {
+    const { create, readPalette } = setup()
+    readPalette.mockResolvedValue({ colors: ["#7ee0f2", "#8ab4ff", "#b49cff"], fromPhoto: false })
+    open()
+    pick(photo({ name: "IMG_1.HEIC", type: "image/heic" }))
+    fill()
+    await ready()
+    expect(screen.getByText(ORB_COLOR_COPY.fallback)).toBeTruthy()
+    expect(swatches()).toHaveLength(3)
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: "#7ee0f2" }))
+  })
+
+  it("starts over with the new photo's colors, and ignores a slow answer for the old one", async () => {
+    const { readPalette } = setup()
+    let finishFirst!: (p: PhotoPalette) => void
+    readPalette.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+    open()
+    pick(photo({ name: "uno.jpg" }))
+    expect(screen.getByText(ORB_COLOR_COPY.reading)).toBeTruthy()
+
+    readPalette.mockResolvedValueOnce({ colors: ["#ffe14d", "#8fe08a"], fromPhoto: true })
+    pick(photo({ name: "dos.jpg" }))
+    await waitFor(() => expect(swatches()).toHaveLength(2))
+    await act(async () => finishFirst({ colors: SWATCHES, fromPhoto: true }))
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(["#ffe14d", "#8fe08a"])
+    expect(swatches()[0].getAttribute("aria-checked")).toBe("true")
+  })
+
+  it("drops the swatches when the new photo is refused", async () => {
+    setup()
+    open()
+    pick(photo())
+    await ready()
+    pick(photo({ name: "a.gif", type: "image/gif" }))
+    expect(screen.queryByRole("radiogroup")).toBeNull()
+    expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
+  })
+
+  it("locks the swatches while saving", async () => {
+    setup({ upload: (() => new Promise<UploadResult>(() => undefined)) as never })
+    open()
+    pick(photo())
+    fill()
+    await ready()
+    submit()
+    await screen.findByRole("button", { name: /Subiendo/ })
+    for (const swatch of swatches()) expect(swatch.disabled).toBe(true)
+  })
+})
+
+describe("AddMemory layout", () => {
+  const dialog = () => screen.getByRole("dialog")
+  const scroller = () => screen.getByTestId("memory-scroll")
+
+  it("has exactly one scroll region for the fields, which does not chain scrolling to the page", () => {
+    setup()
+    open()
+    const scrollers = Array.from(dialog().querySelectorAll<HTMLElement>("*")).filter((el) =>
+      /(^|\s)(overflow-y-auto|overflow-y-scroll|overflow-auto|overflow-scroll)(\s|$)/.test(el.className?.toString() ?? ""),
+    )
+    expect(scrollers).toEqual([scroller()])
+    expect(scroller().className).toContain("overscroll-contain")
+    expect(scroller().className).toContain("min-h-0")
+  })
+
+  it("keeps the card itself from scrolling or bleeding past the sheet", () => {
+    setup()
+    open()
+    const card = scroller().closest("[data-testid='memory-card']") as HTMLElement
+    expect(card.className).toContain("overflow-hidden")
+  })
+
+  it("gives the card a fixed height, inside the safe areas, so it never resizes when the preview or the place appear", () => {
+    setup()
+    open()
+    const card = screen.getByTestId("memory-card")
+    // Phones: the sheet's height is the viewport minus the top safe area. Desktop: capped, so it fits 1280x720.
+    expect(card.className).toMatch(/(^|\s)h-\[calc\(100%-max\(0\.5rem,env\(safe-area-inset-top\)\)\)\]/)
+    expect(card.className).toMatch(/md:h-\[min\(100%,\d+px\)\]/)
+    expect(card.className).not.toMatch(/(^|\s)max-h-/)
+  })
+
+  it("keeps the caption counter inside the field, so the caption block does not take an extra row", () => {
+    setup()
+    open()
+    const caption = screen.getByLabelText("¿Qué recuerdas?")
+    expect(caption.parentElement?.contains(screen.getByText("0/140"))).toBe(true)
+    expect(caption.parentElement?.className).toContain("relative")
+  })
+
+  it("keeps every field inside the scroll region and the submit outside it, always reachable", () => {
+    setup()
+    open()
+    for (const label of ["Foto", "¿Qué recuerdas?", "¿Cuándo fue?"]) {
+      expect(scroller().contains(screen.getByLabelText(label))).toBe(true)
+    }
+    expect(scroller().contains(screen.getByRole("group", { name: PLACE_COPY.heading }))).toBe(true)
+    const actions = screen.getByTestId("memory-actions")
+    const submitButton = screen.getByRole("button", { name: "Guardar recuerdo" })
+    expect(actions.contains(submitButton)).toBe(true)
+    expect(scroller().contains(actions)).toBe(false)
+    expect(actions.className).toContain("shrink-0")
+    expect(actions.className).toContain("pb-[max(")
+  })
+
+  it("lays the fields out in two columns on desktop: photo and color on the left, the rest on the right", () => {
+    setup()
+    open()
+    const columns = screen.getByTestId("memory-columns")
+    expect(columns.className).toMatch(/md:grid-cols-/)
+    const [left, right] = Array.from(columns.children) as HTMLElement[]
+    expect(left.contains(screen.getByLabelText("Foto"))).toBe(true)
+    expect(left.contains(screen.getByTestId("orb-preview"))).toBe(true)
+    expect(left.contains(screen.getByText(ORB_COLOR_COPY.label))).toBe(true)
+    expect(right.contains(screen.getByLabelText("¿Qué recuerdas?"))).toBe(true)
+    expect(right.contains(screen.getByLabelText("¿Cuándo fue?"))).toBe(true)
+    expect(right.contains(screen.getByRole("group", { name: PLACE_COPY.heading }))).toBe(true)
+  })
+
+  it("puts the submit under the right column on desktop", () => {
+    setup()
+    open()
+    const actions = screen.getByTestId("memory-actions")
+    expect(actions.className).toMatch(/md:grid-cols-/)
+    const cells = Array.from(actions.children) as HTMLElement[]
+    expect(cells[cells.length - 1].contains(screen.getByRole("button", { name: "Guardar recuerdo" }))).toBe(true)
+  })
+
+  it("is a bottom sheet on phones, with a decorative grab handle", () => {
+    setup()
+    open()
+    expect(dialog().className).toContain("items-end")
+    expect(dialog().className).toContain("md:items-center")
+    expect(dialog().className).toContain("overscroll-contain")
+    const card = screen.getByTestId("memory-card")
+    expect(card.className).toContain("rounded-t-")
+    const handle = screen.getByTestId("sheet-handle")
+    expect(handle.getAttribute("aria-hidden")).toBe("true")
+    expect(handle.className).toContain("md:hidden")
+  })
+
+  it("keeps the photo box the same size before and after a photo is picked, so nothing jumps", () => {
+    setup()
+    open()
+    const zone = screen.getByTestId("photo-drop")
+    const before = zone.className
+    pick(photo())
+    expect(screen.getByTestId("photo-drop").className).toBe(before)
+    expect(before).toMatch(/(^|\s)h-\d+/)
+  })
+
+  it("shows form errors and the confirmation next to the submit, never out of sight in the scroll region", async () => {
+    setup({ create: async () => ({ ok: false, reason: "unavailable" }) })
+    open()
+    pick(photo())
+    fill()
+    submit()
+    const alert = await screen.findByRole("alert")
+    expect(screen.getByTestId("memory-actions").contains(alert)).toBe(true)
+    expect(scroller().contains(alert)).toBe(false)
+  })
+
+  it("moves focus into the dialog when it opens and closes on Escape", async () => {
+    setup()
+    open()
+    expect(dialog().contains(document.activeElement)).toBe(true)
+    fireEvent.keyDown(dialog(), { key: "Escape" })
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
   })
 })
