@@ -1,0 +1,102 @@
+import { describe, expect, it } from "vitest"
+import { byteRms, laggedLevels, levelFromRms, pushLevel, smoothLevel } from "./audio-level"
+
+/** A time-domain buffer like the AnalyserNode gives: unsigned bytes centered on 128. */
+const sine = (amplitude: number, length = 2048, cycles = 16) =>
+  Uint8Array.from({ length }, (_, i) => Math.round(128 + 128 * amplitude * Math.sin((2 * Math.PI * cycles * i) / length)))
+
+describe("byteRms", () => {
+  it("is 0 for silence (every byte at the center) and for an empty buffer", () => {
+    expect(byteRms(new Uint8Array(512).fill(128))).toBe(0)
+    expect(byteRms(new Uint8Array(0))).toBe(0)
+  })
+
+  it("is the root mean square of the samples as fractions of full scale", () => {
+    // A full-scale square wave swings the whole range: every sample is about one unit from the center.
+    const square = Uint8Array.from({ length: 512 }, (_, i) => (i % 2 === 0 ? 0 : 255))
+    expect(byteRms(square)).toBeGreaterThan(0.99)
+    expect(byteRms(square)).toBeLessThanOrEqual(1)
+  })
+
+  it("reads a sine of amplitude A as A over the square root of 2", () => {
+    expect(byteRms(sine(0.5))).toBeCloseTo(0.5 / Math.SQRT2, 2)
+    expect(byteRms(sine(0.9))).toBeCloseTo(0.9 / Math.SQRT2, 2)
+  })
+
+  it("does not care about the sign of the swing", () => {
+    expect(byteRms(Uint8Array.of(0, 0, 0, 0))).toBeCloseTo(byteRms(Uint8Array.of(255, 255, 255, 255)), 1)
+  })
+})
+
+describe("levelFromRms", () => {
+  it("turns hiss into nothing and a loud voice into 1", () => {
+    expect(levelFromRms(0)).toBe(0)
+    expect(levelFromRms(0.004)).toBe(0)
+    expect(levelFromRms(0.3)).toBe(1)
+    expect(levelFromRms(0.9)).toBe(1)
+  })
+
+  it("grows with the voice, and lifts a quiet one more than linearly so it is still seen", () => {
+    const levels = [0.01, 0.03, 0.08, 0.15, 0.25].map(levelFromRms)
+    expect([...levels].sort((a, b) => a - b)).toEqual(levels)
+    expect(levelFromRms(0.1)).toBeGreaterThan(0.1 / 0.3)
+  })
+
+  it("stays within 0 to 1 whatever it is given", () => {
+    for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, 0.1]) {
+      const level = levelFromRms(value)
+      expect(level).toBeGreaterThanOrEqual(0)
+      expect(level).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe("smoothLevel", () => {
+  it("rises faster than it falls, so a syllable pops and then lingers", () => {
+    const rise = smoothLevel(0, 1, 50)
+    const fall = 1 - smoothLevel(1, 0, 50)
+    expect(rise).toBeGreaterThan(fall)
+  })
+
+  it("moves toward the target without overshooting it", () => {
+    let level = 0
+    for (let i = 0; i < 100; i++) {
+      level = smoothLevel(level, 0.6, 16)
+      expect(level).toBeLessThanOrEqual(0.6)
+    }
+    expect(level).toBeCloseTo(0.6, 2)
+  })
+
+  it("does not move when no time has passed, and gets there when a lot has", () => {
+    expect(smoothLevel(0.3, 1, 0)).toBe(0.3)
+    expect(smoothLevel(0.3, 1, 10_000)).toBeCloseTo(1, 5)
+  })
+
+  it("is not thrown off by a bad target or a negative step", () => {
+    expect(smoothLevel(0.5, Number.NaN, 16)).toBeLessThan(0.5)
+    expect(smoothLevel(0.5, 0.9, -16)).toBe(0.5)
+  })
+})
+
+describe("pushLevel and laggedLevels", () => {
+  it("keeps only the most recent levels", () => {
+    expect(pushLevel([0.1, 0.2, 0.3], 0.4, 3)).toEqual([0.2, 0.3, 0.4])
+    expect(pushLevel([], 0.4, 3)).toEqual([0.4])
+  })
+
+  it("does not change the history it was given", () => {
+    const history = [0.1]
+    pushLevel(history, 0.2, 5)
+    expect(history).toEqual([0.1])
+  })
+
+  it("reads the level as it was a while ago, for each ripple", () => {
+    // Frames of 100 ms, the newest last: a ripple lagging 200 ms shows the level from two frames before the newest.
+    expect(laggedLevels([0.1, 0.2, 0.3, 0.4, 0.5], 100, [0, 200, 400])).toEqual([0.5, 0.3, 0.1])
+  })
+
+  it("answers 0 for a ripple that reaches back before the voice began", () => {
+    expect(laggedLevels([0.5], 100, [0, 100, 300])).toEqual([0.5, 0, 0])
+    expect(laggedLevels([], 100, [0, 100])).toEqual([0, 0])
+  })
+})
