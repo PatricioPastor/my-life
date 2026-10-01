@@ -226,6 +226,19 @@ Progress:
   - All columns are snake_case.
   - `neondb_owner` has `rolbypassrls=true`, which confirms why the runtime must not use it.
 - Note: the database is named `main`, not `neondb`, so `DATABASE_URL` must end in `/main`.
+- 2026-10-01, steps 2 and 3 done by the user: `ALTER ROLE app_user LOGIN PASSWORD ...`, with `DATABASE_URL` set to the pooled `app_user` URL. With the user's authorization, a live probe as `app_user` ran in one transaction that was rolled back, so nothing persisted. Results:
+  - `current_user` is `app_user`, over the pooler, with no `BYPASSRLS`.
+  - It reads 0 visible rows.
+  - An insert under another handle is refused by RLS.
+  - An insert of its own pending row is allowed.
+  - An insert that chooses `status` is refused, and so are update and delete.
+  - Its own pending row is invisible without `app.handle`.
+  - `_prisma_migrations` is refused.
+- 2026-10-01: with the user's authorization, `pnpm prisma migrate deploy` applied `20261001120000_memory_photo_details` and `20261001180000_memory_place`. Verified read-only as the owner:
+  - RLS is still enabled and forced on `memories`.
+  - All 20 columns are snake_case, and the six CHECKs are present.
+  - `app_user` has `INSERT` on the 17 writable columns only (never `id`, `status` or `created_at`), a table-level `SELECT` only, and no UPDATE or DELETE.
+  - All three migrations are recorded as applied.
 
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
 2. As the owner, run `ALTER ROLE app_user LOGIN PASSWORD '<generated secret>';` with SQL. The password never goes in the repo.
