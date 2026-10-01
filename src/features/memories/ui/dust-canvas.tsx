@@ -1,7 +1,10 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { parallaxOffset } from "./camera"
+import type { CameraSource } from "./camera-controller"
 import {
+  DUST_DEPTH,
   DUST_LAYERS,
   DUST_TINTS,
   dustCount,
@@ -9,6 +12,7 @@ import {
   dustReach,
   makeDust,
   spriteCoreStop,
+  wrapAround,
   type DustParticle,
 } from "./dust-field"
 
@@ -17,6 +21,8 @@ interface DustCanvasProps {
   reduced: boolean
   /** Dust tints (CSS colors); three are used. */
   tints?: readonly string[]
+  /** The canvas camera: each depth layer follows it a different amount (far dust barely moves), and the field wraps. */
+  camera?: CameraSource
 }
 
 const SEED = 20261001
@@ -47,7 +53,7 @@ function makeSprite(color: string, softness: number): HTMLCanvasElement {
  * (nearer motes more), pauses when the tab is hidden or the canvas is off screen, and holds still under
  * reduced motion.
  */
-export function DustCanvas({ reduced, tints = DEFAULT_TINTS }: DustCanvasProps) {
+export function DustCanvas({ reduced, tints = DEFAULT_TINTS, camera }: DustCanvasProps) {
   const ref = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -88,10 +94,20 @@ export function DustCanvas({ reduced, tints = DEFAULT_TINTS }: DustCanvasProps) 
 
     const draw = (seconds: number) => {
       ctx.clearRect(0, 0, cssW, cssH)
+      const cam = camera?.camera()
+      const home = camera?.home()
       for (const p of dust) {
         const at = dustPositionAt(p, seconds)
-        const x = at.x * cssW + lean.x * p.parallax
-        const y = at.y * cssH + lean.y * p.parallax
+        let x = at.x * cssW + lean.x * p.parallax
+        let y = at.y * cssH + lean.y * p.parallax
+        if (cam && home) {
+          // Depth parallax: a layer follows the camera by its own share, and the field wraps so it never runs out.
+          const depth = DUST_DEPTH[p.layer] ?? 0
+          const shift = parallaxOffset(cam, home, depth)
+          const grow = (cam.zoom / home.zoom) ** depth
+          x = wrapAround(cssW / 2 + (x - cssW / 2) * grow + shift.x, cssW)
+          y = wrapAround(cssH / 2 + (y - cssH / 2) * grow + shift.y, cssH)
+        }
         const reach = dustReach(p)
         ctx.globalAlpha = p.alpha
         ctx.drawImage(sprites[p.layer][p.tint], x - reach, y - reach, reach * 2, reach * 2)
@@ -155,16 +171,19 @@ export function DustCanvas({ reduced, tints = DEFAULT_TINTS }: DustCanvasProps) 
         : null
     observer?.observe(canvas)
     io?.observe(canvas)
+    // The loop redraws every frame; the still field (reduced motion) redraws when the camera moves.
+    const unsubscribe = reduced ? camera?.subscribe(() => draw(0)) : undefined
 
     return () => {
       stop()
+      unsubscribe?.()
       observer?.disconnect()
       io?.disconnect()
       window.removeEventListener("resize", onResize)
       window.removeEventListener("pointermove", onPointerMove)
       document.removeEventListener("visibilitychange", onVisibility)
     }
-  }, [reduced, tints])
+  }, [reduced, tints, camera])
 
   return <canvas ref={ref} aria-hidden="true" className="pointer-events-none absolute inset-0 size-full" />
 }

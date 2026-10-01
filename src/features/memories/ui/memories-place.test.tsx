@@ -1,9 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
 import { VOID_GLOWS } from "./void-glows"
+
+// The glass view picks WebGL or CSS from this probe: jsdom has no WebGL, so the CSS glass is what these tests see.
+vi.mock("@/features/onboarding/gpu-probe", () => ({ probeRenderer: () => ({ webgl2: false }) }))
 
 afterEach(() => {
   cleanup()
@@ -28,6 +31,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   orbColor: "#8ab4ff",
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
+  audio: null,
   ...over,
 })
 
@@ -221,12 +225,72 @@ describe("MemoriesPlace points", () => {
   })
 })
 
-describe("MemoriesPlace viewer", () => {
-  const open = (name: RegExp | string) => fireEvent.click(screen.getByRole("button", { name }))
+// ---- the approach: the camera flies to the orb, which opens into the glass -------------------------------------
 
-  it("opens the photo, caption and date when a point is clicked", () => {
+let frames: Array<(now: number) => void> = []
+let clock = 0
+
+/** Drives the rAF loops by hand: the camera flies from the constellation loop's frames. */
+function stubFrames() {
+  frames = []
+  clock = performance.now() + 100
+  vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
+  vi.stubGlobal("cancelAnimationFrame", () => {})
+}
+function advance(count: number, ms = 100) {
+  for (let i = 0; i < count; i++) {
+    const batch = frames
+    frames = []
+    clock += ms
+    act(() => batch.forEach((cb) => cb(clock)))
+  }
+}
+function advanceUntil(done: () => boolean, max = 60) {
+  for (let i = 0; i < max && !done(); i++) advance(1)
+  expect(done()).toBe(true)
+}
+
+// Radix hides the rest of the stage from the accessibility tree while the glass is open, so find it by its data.
+const stage = () => document.querySelector("[data-approach]") as HTMLElement
+const phase = () => stage().getAttribute("data-approach")
+const dialogOpen = () => screen.queryByRole("dialog") !== null
+const orbAt = (name: RegExp | string) => screen.getByRole("button", { name, hidden: true }) as HTMLElement
+const transformOf = (name: RegExp | string) => orbAt(name).parentElement?.style.transform
+
+describe("MemoriesPlace approach", () => {
+  beforeEach(stubFrames)
+
+  /** Opens a memory by clicking its orb and flying until the glass is open. */
+  function openGlass(name: RegExp | string) {
+    fireEvent.click(orbAt(name))
+    advanceUntil(dialogOpen)
+  }
+
+  it("flies the camera to the orb when it is clicked, and only opens the glass on arrival", () => {
     render(<MemoriesPlace state={three} />)
-    open(/Una tarde de lluvia/)
+    expect(phase()).toBe("idle")
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    expect(phase()).toBe("flying")
+    expect(dialogOpen()).toBe(false)
+    advance(2)
+    expect(phase()).toBe("flying")
+    expect(dialogOpen()).toBe(false)
+    advanceUntil(dialogOpen)
+    expect(phase()).toBe("open")
+  })
+
+  it("takes about a second to arrive, slowly at first", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    // 8 frames of 100 ms: still on the way (the flight lasts at least 0.9 s).
+    advance(8)
+    expect(dialogOpen()).toBe(false)
+    advanceUntil(dialogOpen, 8)
+  })
+
+  it("opens the photo, caption and date in the glass", () => {
+    render(<MemoriesPlace state={three} />)
+    openGlass(/Una tarde de lluvia/)
     const dialog = screen.getByRole("dialog", { name: "Una tarde de lluvia" })
     expect(within(dialog).getByText("12 de marzo de 2024")).toBeTruthy()
     const img = within(dialog).getByRole("img") as HTMLImageElement
@@ -234,133 +298,282 @@ describe("MemoriesPlace viewer", () => {
     expect(img.alt).toBe("Una tarde de lluvia")
   })
 
-  it("reserves the photo's aspect ratio so nothing jumps when it loads", () => {
-    render(<MemoriesPlace state={ready(view("a", "Uno", { width: 1200, height: 800 }))} />)
-    open(/Uno/)
-    const frame = screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
-    expect(frame.style.aspectRatio).toBe("1200 / 800")
-  })
-
-  it("shows the place name under the date, small and quiet, when the memory has one", () => {
+  it("shows the place name under the date, and not the coordinates", () => {
     const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
     render(<MemoriesPlace state={ready(view("a", "Uno", { place }))} />)
-    open(/Uno/)
+    openGlass(/Uno/)
     const dialog = within(screen.getByRole("dialog"))
-    const date = dialog.getByText("12 de marzo de 2024")
-    const name = dialog.getByText("Palermo, Buenos Aires")
-    expect(date.nextElementSibling).toBe(name)
-    // The coordinates are not shown: only the name.
+    expect(dialog.getByText("Palermo, Buenos Aires")).toBeTruthy()
     expect(screen.getByRole("dialog").textContent).not.toMatch(/34\.59|58\.42/)
-  })
-
-  it("shows no place line when there is no place, or the place has no name", () => {
-    render(
-      <MemoriesPlace
-        state={ready(view("a", "Uno"), view("b", "Dos", { place: { lat: -34.59, lng: -58.42, name: null } }))}
-      />,
-    )
-    for (const caption of [/Uno/, /Dos/]) {
-      open(caption)
-      const date = within(screen.getByRole("dialog")).getByText("12 de marzo de 2024")
-      expect(date.nextElementSibling).toBeNull()
-      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
-    }
   })
 
   it("says a pending memory is waiting for approval", () => {
     render(<MemoriesPlace state={ready(view("a", "Mío", { status: "pending" }))} />)
-    open(/Mío/)
+    openGlass(/Mío/)
     expect(within(screen.getByRole("dialog")).getByText("Pendiente de aprobación")).toBeTruthy()
   })
 
-  it("closes with Escape and returns focus to the point", async () => {
+  it("holds the orb it flies to still, so it arrives where the glass opens", () => {
     render(<MemoriesPlace state={three} />)
-    const point = screen.getByRole("button", { name: /Una tarde de lluvia/ })
-    point.focus()
-    fireEvent.click(point)
-    expect(screen.getByRole("dialog")).toBeTruthy()
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
-    expect(screen.queryByRole("dialog")).toBeNull()
-    // The dialog hands focus back on the next tick.
-    await waitFor(() => expect(document.activeElement).toBe(point))
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    expect(orbAt(/Una tarde de lluvia/).getAttribute("data-link")).toBe("self")
+    advanceUntil(dialogOpen)
+    // The orb sits at the glass anchor: the middle of the screen, a little above the center.
+    const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(transformOf(/Una tarde de lluvia/) ?? "")!
+    expect(Number(m[1])).toBeCloseTo(window.innerWidth / 2, 0)
+    expect(Number(m[2])).toBeGreaterThan(window.innerHeight * 0.3)
+    expect(Number(m[2])).toBeLessThan(window.innerHeight * 0.6)
   })
 
-  it("takes the points out of the magnetic cursor's reach while the viewer is open, and gives them back on close", async () => {
+  it("flies back with Escape, restores focus to the orb and ends idle", async () => {
+    render(<MemoriesPlace state={three} />)
+    openGlass(/Una tarde de lluvia/)
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    expect(phase()).toBe("leaving")
+    advanceUntil(() => phase() === "idle")
+    expect(dialogOpen()).toBe(false)
+    await waitFor(() => expect(document.activeElement).toBe(orbAt(/Una tarde de lluvia/)))
+  })
+
+  it("flies back with the close button too", () => {
+    render(<MemoriesPlace state={three} />)
+    openGlass(/primer viaje/)
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cerrar" }))
+    expect(phase()).toBe("leaving")
+    advanceUntil(() => phase() === "idle")
+  })
+
+  it("flies back when the visitor zooms out, and not when zooming in", () => {
+    render(<MemoriesPlace state={three} />)
+    openGlass(/Una tarde de lluvia/)
+    const sphere = screen.getByRole("dialog").querySelector("[data-glass-sphere]")!
+    fireEvent.wheel(sphere, { deltaY: -120 })
+    expect(phase()).toBe("open")
+    fireEvent.wheel(sphere, { deltaY: 120 })
+    expect(phase()).toBe("leaving")
+  })
+
+  it("can be closed mid-flight, and the camera heads back", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advance(3)
+    fireEvent.keyDown(stage(), { key: "Escape" })
+    expect(phase()).toBe("leaving")
+    advanceUntil(() => phase() === "idle")
+    expect(dialogOpen()).toBe(false)
+  })
+
+  it("takes the orbs out of the magnetic cursor's reach while the glass is open, and gives them back on close", () => {
     render(<MemoriesPlace state={three} />)
     const points = () => Array.from(document.querySelectorAll<HTMLElement>("[data-memory-id]"))
-    // The cursor skips targets under an aria-hidden or inert ancestor, so the orbs behind the viewer cannot
-    // capture it or show their label over the dialog.
+    // The cursor skips targets under an aria-hidden or inert ancestor, so the orbs behind the glass cannot capture it
+    // or show their label over the dialog.
     const covered = (el: HTMLElement) => el.closest("[aria-hidden='true'],[inert]") !== null
     expect(points().some(covered)).toBe(false)
-    open(/Una tarde de lluvia/)
+    openGlass(/Una tarde de lluvia/)
     expect(points()).toHaveLength(3)
     expect(points().every(covered)).toBe(true)
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
-    await waitFor(() => expect(points().some(covered)).toBe(false))
+    advanceUntil(() => phase() === "idle")
+    expect(points().some(covered)).toBe(false)
   })
 
-  it("closes with the close button", () => {
+  it("does not pan or zoom the space while the glass is open", () => {
     render(<MemoriesPlace state={three} />)
-    open(/primer viaje/)
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cerrar" }))
-    expect(screen.queryByRole("dialog")).toBeNull()
+    openGlass(/Una tarde de lluvia/)
+    const before = transformOf(/El primer viaje/)
+    fireEvent.keyDown(stage(), { key: "ArrowLeft" })
+    fireEvent.wheel(stage(), { deltaY: -200 })
+    expect(transformOf(/El primer viaje/)).toBe(before)
   })
+})
 
-  it("moves to the next and previous memory with the arrow keys", () => {
+const CAPTIONS = ["El primer viaje", "Una tarde de lluvia", "La casa nueva"]
+
+describe("MemoriesPlace previous and next", () => {
+  beforeEach(stubFrames)
+  const glass = () => screen.getByRole("dialog")
+  const open = (name: RegExp | string) => {
+    fireEvent.click(orbAt(name))
+    advanceUntil(dialogOpen)
+  }
+  /** Waits for the glass to be open on this caption (the camera flew to the neighbour). */
+  const arriveAt = (caption: string) => advanceUntil(() => screen.queryByRole("dialog", { name: caption }) !== null)
+
+  it("flies to the next and previous memory with the arrow keys", () => {
     render(<MemoriesPlace state={three} />)
     open(/Una tarde de lluvia/)
-    const dialog = () => screen.getByRole("dialog")
-    fireEvent.keyDown(dialog(), { key: "ArrowRight" })
-    expect(within(dialog()).getByText("La casa nueva")).toBeTruthy()
-    fireEvent.keyDown(dialog(), { key: "ArrowLeft" })
-    fireEvent.keyDown(dialog(), { key: "ArrowLeft" })
-    expect(within(dialog()).getByText("El primer viaje")).toBeTruthy()
+    fireEvent.keyDown(glass(), { key: "ArrowRight" })
+    expect(phase()).toBe("flying")
+    expect(dialogOpen()).toBe(false)
+    arriveAt("La casa nueva")
+    fireEvent.keyDown(glass(), { key: "ArrowLeft" })
+    arriveAt("Una tarde de lluvia")
+    fireEvent.keyDown(glass(), { key: "ArrowLeft" })
+    arriveAt("El primer viaje")
+  })
+
+  it("follows date order, not list order", () => {
+    const list = ready(
+      view("late", "Tarde", { happenedOn: "2024-09-01" }),
+      view("early", "Temprano", { happenedOn: "2022-01-01" }),
+      view("mid", "Medio", { happenedOn: "2023-05-05" }),
+    )
+    render(<MemoriesPlace state={list} />)
+    open(/Medio/)
+    fireEvent.keyDown(glass(), { key: "ArrowRight" })
+    arriveAt("Tarde")
+    fireEvent.keyDown(glass(), { key: "ArrowLeft" })
+    arriveAt("Medio")
+    fireEvent.keyDown(glass(), { key: "ArrowLeft" })
+    arriveAt("Temprano")
   })
 
   it("stops at the ends instead of wrapping", () => {
     render(<MemoriesPlace state={three} />)
     open(/primer viaje/)
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" })
-    const dialog = within(screen.getByRole("dialog"))
-    expect(dialog.getByText("El primer viaje")).toBeTruthy()
-    expect((dialog.getByRole("button", { name: "Anterior" }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.keyDown(glass(), { key: "ArrowLeft" })
+    expect(phase()).toBe("open")
+    expect((within(glass()).getByRole("button", { name: "Anterior" }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it("navigates with the on-screen buttons too, and returns focus to the point being viewed", async () => {
+  it("flies with the on-screen buttons too, and returns focus to the orb being viewed", async () => {
     render(<MemoriesPlace state={three} />)
     open(/primer viaje/)
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Siguiente" }))
-    expect(within(screen.getByRole("dialog")).getByText("Una tarde de lluvia")).toBeTruthy()
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
-    await waitFor(() =>
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Una tarde de lluvia/ })),
-    )
+    fireEvent.click(within(glass()).getByRole("button", { name: "Siguiente" }))
+    arriveAt("Una tarde de lluvia")
+    fireEvent.keyDown(glass(), { key: "Escape" })
+    advanceUntil(() => phase() === "idle")
+    await waitFor(() => expect(document.activeElement).toBe(orbAt(/Una tarde de lluvia/)))
+  })
+
+  it("returns to where the camera was before the first approach, however far it stepped", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+    render(<MemoriesPlace state={three} />)
+    const before = CAPTIONS.map((c) => transformOf(new RegExp(c)))
+    fireEvent.click(orbAt(/El primer viaje/))
+    return waitFor(() => expect(dialogOpen()).toBe(true)).then(async () => {
+      fireEvent.keyDown(glass(), { key: "ArrowRight" })
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Una tarde de lluvia" })).not.toBeNull())
+      fireEvent.keyDown(glass(), { key: "Escape" })
+      await waitFor(() => expect(phase()).toBe("idle"))
+      const after = CAPTIONS.map((c) => transformOf(new RegExp(c)))
+      expect(after).toEqual(before)
+    })
+  })
+
+  it("turns the page on a swipe", () => {
+    render(<MemoriesPlace state={three} />)
+    open(/Una tarde de lluvia/)
+    const sphere = glass().querySelector("[data-glass-sphere]")!
+    fireEvent.pointerDown(sphere, { pointerType: "touch", clientX: 300, clientY: 400 })
+    fireEvent.pointerUp(sphere, { pointerType: "touch", clientX: 180, clientY: 410 })
+    expect(phase()).toBe("flying")
+    arriveAt("La casa nueva")
   })
 })
 
-describe("MemoriesPlace viewer swipe", () => {
-  const swipe = (target: Element, from: number, to: number) => {
-    fireEvent.pointerDown(target, { pointerType: "touch", clientX: from, clientY: 400 })
-    fireEvent.pointerUp(target, { pointerType: "touch", clientX: to, clientY: 410 })
-  }
+describe("MemoriesPlace camera", () => {
+  const reducedMotion = () =>
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
 
-  it("moves to the next memory on a swipe to the left and back on a swipe to the right", () => {
+  it("is a focusable space with its keys named", () => {
     render(<MemoriesPlace state={three} />)
-    fireEvent.click(screen.getByRole("button", { name: /Una tarde de lluvia/ }))
-    const frame = () => screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
-    swipe(frame(), 300, 180)
-    expect(within(screen.getByRole("dialog")).getByText("La casa nueva")).toBeTruthy()
-    swipe(frame(), 100, 240)
-    expect(within(screen.getByRole("dialog")).getByText("Una tarde de lluvia")).toBeTruthy()
+    const space = stage()
+    expect(space.getAttribute("role")).toBe("group")
+    expect(space.getAttribute("aria-label")).toMatch(/Recuerdos/)
+    expect(space.getAttribute("aria-label")).toMatch(/flechas/i)
+    expect(space.tabIndex).toBe(0)
   })
 
-  it("does nothing on a tap, and stays on the first memory when swiping right", () => {
+  it("pans with the arrow keys while the space has focus", () => {
+    reducedMotion()
     render(<MemoriesPlace state={three} />)
-    fireEvent.click(screen.getByRole("button", { name: /El primer viaje/ }))
-    const frame = screen.getByRole("dialog").querySelector("[data-photo-frame]") as HTMLElement
-    swipe(frame, 200, 205)
-    swipe(frame, 100, 240)
-    expect(within(screen.getByRole("dialog")).getByText("El primer viaje")).toBeTruthy()
+    const before = transformOf(/El primer viaje/)
+    fireEvent.keyDown(stage(), { key: "ArrowLeft" })
+    expect(transformOf(/El primer viaje/)).not.toBe(before)
+  })
+
+  it("keeps the title and the add control fixed while the camera moves", () => {
+    reducedMotion()
+    render(<MemoriesPlace state={three} action={<button type="button">Agregar recuerdo</button>} />)
+    const title = screen.getByRole("heading", { name: "Recuerdos" })
+    fireEvent.keyDown(stage(), { key: "ArrowLeft" })
+    fireEvent.keyDown(stage(), { key: "+" })
+    expect(title.style.transform).toBe("")
+    expect(stage().querySelector("[data-world]")?.contains(title)).toBe(false)
+    expect(stage().querySelector("[data-world]")?.contains(screen.getByRole("button", { name: "Agregar recuerdo" }))).toBe(false)
+  })
+
+  it("zooms with the wheel, toward the pointer", () => {
+    reducedMotion()
+    render(<MemoriesPlace state={three} />)
+    const before = transformOf(/El primer viaje/)
+    fireEvent.wheel(stage(), { deltaY: -240, clientX: 200, clientY: 200 })
+    expect(transformOf(/El primer viaje/)).not.toBe(before)
+  })
+
+  it("fits everything again with 0", async () => {
+    reducedMotion()
+    render(<MemoriesPlace state={three} />)
+    const before = transformOf(/El primer viaje/)
+    fireEvent.keyDown(stage(), { key: "+" })
+    fireEvent.keyDown(stage(), { key: "+" })
+    expect(transformOf(/El primer viaje/)).not.toBe(before)
+    fireEvent.keyDown(stage(), { key: "0" })
+    // A fit is a camera move: under reduced motion it cuts, with a short fade.
+    await waitFor(() => expect(transformOf(/El primer viaje/)).toBe(before))
+  })
+
+  it("gives the dust and the glows depth: the glow layers sit apart from the orbs", () => {
+    render(<MemoriesPlace state={three} />)
+    const layers = stage().querySelectorAll("[data-parallax]")
+    expect(layers).toHaveLength(VOID_GLOWS.length)
+  })
+
+  it("moves the glows less than the camera moves, and in the same direction as the world drifts", () => {
+    reducedMotion()
+    render(<MemoriesPlace state={three} />)
+    const layers = Array.from(stage().querySelectorAll<HTMLElement>("[data-parallax]"))
+    fireEvent.keyDown(stage(), { key: "ArrowRight" })
+    const x = (el: HTMLElement) => Number(/translate3d\((-?[\d.]+)px/.exec(el.style.transform)?.[1] ?? 0)
+    // The camera moved right, so the world (and the glows) slide left, the nearer layer more.
+    expect(x(layers[0])).toBeLessThan(0)
+    expect(Math.abs(x(layers[2]))).toBeGreaterThan(Math.abs(x(layers[0])))
+  })
+})
+
+describe("MemoriesPlace reduced motion", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+  })
+
+  it("cuts to the orb with a short fade instead of flying, and opens the glass", async () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    await waitFor(() => expect(dialogOpen()).toBe(true))
+    expect(phase()).toBe("open")
+  })
+
+  it("fades the world out around the cut", async () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    expect(stage().getAttribute("data-cut")).toBe("out")
+    await waitFor(() => expect(dialogOpen()).toBe(true))
+    await waitFor(() => expect(stage().hasAttribute("data-cut")).toBe(false))
+  })
+
+  it("has no inertia: a flick stops where it lets go", () => {
+    render(<MemoriesPlace state={three} />)
+    const before = transformOf(/El primer viaje/)
+    fireEvent.pointerDown(stage(), { pointerType: "mouse", pointerId: 1, clientX: 500, clientY: 300, button: 0 })
+    fireEvent.pointerMove(stage(), { pointerType: "mouse", pointerId: 1, clientX: 560, clientY: 300 })
+    fireEvent.pointerUp(stage(), { pointerType: "mouse", pointerId: 1, clientX: 560, clientY: 300 })
+    const moved = transformOf(/El primer viaje/)
+    expect(moved).not.toBe(before)
+    return new Promise((resolve) => setTimeout(resolve, 80)).then(() => {
+      expect(transformOf(/El primer viaje/)).toBe(moved)
+    })
   })
 })
 
