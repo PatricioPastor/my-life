@@ -434,6 +434,83 @@
   .mem-viewer[data-state="closed"] {
     animation: mem-viewer-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
+  /* The glass view: the sphere opens out of the orb, the caption and the controls fade in after it. */
+  .mem-glass[data-state="open"] .mem-glass-sphere {
+    animation: mem-glass-in 380ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+  .mem-glass[data-state="open"] > *:not(.mem-glass-sphere) {
+    animation: fade 320ms ease 140ms both;
+  }
+  .mem-glass[data-state="closed"] {
+    animation: mem-fade-out 200ms ease-out both;
+  }
+  .mem-glass-sphere[data-reduced="true"] {
+    animation-name: fade !important;
+    animation-duration: 160ms !important;
+  }
+  /* Without WebGL the glass is drawn in CSS: a dark body, a clipped photo, a highlight and a rim in the orb color.
+     The voice sets --glow (light) and --warp (a small breath) every frame. */
+  .mem-glass-css {
+    --glow: 0;
+    --warp: 0;
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 50%, color-mix(in oklab, var(--pc) 22%, #07080f) 0%, #05060c 78%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+      inset 0 -18px 40px rgba(0, 0, 0, 0.45),
+      inset 0 0 60px rgba(0, 0, 0, 0.35),
+      0 0 calc(40px + var(--glow) * 90px) calc(var(--glow) * 14px)
+        color-mix(in oklab, var(--pc) calc(18% + var(--glow) * 50%), transparent);
+    transform: scale(calc(1 + var(--warp) * 0.03));
+  }
+  .mem-glass-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  .mem-glass-voice {
+    position: absolute;
+    inset: 14%;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in oklab, var(--pc) 88%, white) 0%,
+      color-mix(in oklab, var(--pc) 58%, transparent) 32%,
+      transparent 70%
+    );
+    filter: blur(6px);
+    opacity: calc(0.35 + var(--glow) * 0.65);
+    transform: scale(calc(0.8 + var(--glow) * 0.45));
+  }
+  .mem-glass-shine {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.6;
+    background:
+      radial-gradient(ellipse 38% 26% at 30% 22%, rgba(255, 255, 255, 0.55), transparent 70%),
+      radial-gradient(circle at 50% 50%, transparent 58%, color-mix(in oklab, var(--pc) 40%, white) 100%);
+  }
+  .mem-glass-play {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: color-mix(in oklab, var(--pc) 18%, rgba(8, 8, 16, 0.72));
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 24px color-mix(in oklab, var(--pc) 30%, transparent);
+  }
+  .mem-glass-play[data-state="playing"] {
+    box-shadow: 0 0 40px color-mix(in oklab, var(--pc) 60%, transparent);
+  }
+  .mem-glass-play:disabled {
+    opacity: 0.45;
+  }
   /* On phones the add-memory dialog is a bottom sheet: it rises from the bottom edge instead of scaling out of a corner. */
   @media (max-width: 767px) {
     .mem-sheet[data-state="open"] {
@@ -468,6 +545,9 @@
     }
     .mem-viewer[data-state="closed"] {
       animation-name: mem-fade-out;
+    }
+    .mem-glass-css {
+      transform: none;
     }
     .sky,
     .shift,
@@ -1399,6 +1479,16 @@
   to {
     opacity: 0;
     transform: translateY(24px);
+  }
+}
+@keyframes mem-glass-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes mem-viewer-in {
