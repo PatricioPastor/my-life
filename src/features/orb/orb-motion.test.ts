@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { createOrbMotion, orbMetrics, stepRate } from "./orb-motion"
+import { createOrbMotion, orbMetrics, stepRate, type OrbFrame, type OrbMotion } from "./orb-motion"
+import { summonDuration, summonLanding } from "./orb-summon"
 import { LENS_SHARE, PEEK_MAX_SCALE } from "./orb-peek"
-import type { Rect } from "./orb-path"
+import { distanceToRect, type Point, type Rect } from "./orb-path"
 
 const DT = 1 / 60
 const keepOut: Rect[] = [
@@ -255,5 +256,281 @@ describe("the peek", () => {
     expect(parked.peek).toBe(0)
     expect(Math.hypot(parked.x - before.x, parked.y - before.y)).toBeLessThan(20)
     expect(parked.rate).toBeLessThan(0.01)
+  })
+})
+
+describe("summon", () => {
+  const W = 1440
+  const H = 900
+  const m = orbMetrics(W, H)
+  const landingFor = (pointer: Point) =>
+    summonLanding({ pointer, width: W, height: H, keepOut, radius: m.radius, clearance: m.clearance, margin: m.margin })
+  const pos = (f: OrbFrame): Point => ({ x: f.x, y: f.y })
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
+
+  /** Steps `seconds` of frames, collecting them. `pointerAt` may change the pointer per frame. */
+  function run(
+    motion: OrbMotion,
+    seconds: number,
+    input: Partial<Parameters<OrbMotion["step"]>[1]> = {},
+    pointerAt?: (t: number) => Point | null,
+  ): OrbFrame[] {
+    const frames: OrbFrame[] = []
+    const n = Math.round(seconds * 60)
+    for (let i = 0; i < n; i++) {
+      const pointer = pointerAt ? pointerAt(i / 60) : input.pointer
+      frames.push(motion.step(DT, { held: false, active: true, ...input, pointer }))
+    }
+    return frames
+  }
+  const warm = (reduced = false) => {
+    const motion = make(reduced)
+    run(motion, 5)
+    return motion
+  }
+  const POINTER: Point = { x: 1000, y: 620 }
+
+  it("flies reluctantly, then fast, then settles exactly next to the cursor", () => {
+    const motion = warm()
+    const start = pos(run(motion, 1 / 60)[0])
+    const target = landingFor(POINTER)
+    const total = dist(start, target)
+    const D = summonDuration(total)
+    motion.summon()
+    const frames = run(motion, D + 0.4, { pointer: POINTER })
+    const at = (s: number) => dist(start, pos(frames[Math.round(s * 60) - 1]))
+    expect(at(D * 0.25)).toBeLessThan(total * 0.15)
+    expect(at(D * 0.7) - at(D * 0.3)).toBeGreaterThan(total * 0.55)
+    const last = frames.at(-1)!
+    expect(dist(pos(last), target)).toBeLessThan(0.01)
+    expect(last.summon).toBe("holding")
+  })
+
+  it("never overshoots: the distance to the landing only shrinks", () => {
+    const motion = warm()
+    motion.summon()
+    const frames = run(motion, 2, { pointer: POINTER })
+    const target = landingFor(POINTER)
+    let prev = Infinity
+    for (const f of frames) {
+      const d = dist(pos(f), target)
+      expect(d).toBeLessThanOrEqual(prev + 0.5)
+      prev = d
+    }
+  })
+
+  it("moves from the very first frame without a jump", () => {
+    const motion = warm()
+    const before = pos(run(motion, 1 / 60)[0])
+    motion.summon()
+    const frames = run(motion, 0.5, { pointer: POINTER })
+    let prev = before
+    for (const f of frames) {
+      expect(dist(pos(f), prev)).toBeLessThan(14)
+      prev = pos(f)
+    }
+  })
+
+  it("follows a cursor that moves mid-flight, with no jump and a continuous velocity", () => {
+    const motion = warm()
+    motion.summon()
+    const a: Point = { x: 1000, y: 620 }
+    const b: Point = { x: 1300, y: 420 }
+    // The cursor jumps at 0.5 s, mid-flight: a worst case, far above what a hand does.
+    const frames = run(motion, 2, {}, (t) => (t < 0.5 ? a : b))
+    let maxStep = 0
+    let maxAccel = 0
+    let prevV: Point | null = null
+    for (let i = 1; i < frames.length; i++) {
+      const v = { x: frames[i].x - frames[i - 1].x, y: frames[i].y - frames[i - 1].y }
+      maxStep = Math.max(maxStep, Math.hypot(v.x, v.y))
+      if (prevV) maxAccel = Math.max(maxAccel, Math.hypot(v.x - prevV.x, v.y - prevV.y))
+      prevV = v
+    }
+    // Per frame: far from a teleport, and the speed never changes abruptly.
+    expect(maxStep).toBeLessThan(45)
+    expect(maxAccel).toBeLessThan(4)
+    expect(dist(pos(frames.at(-1)!), landingFor(b))).toBeLessThan(0.5)
+  })
+
+  it("lands on the final spot of the cursor even if it only moved late in the flight", () => {
+    const motion = warm()
+    motion.summon()
+    const b: Point = { x: 400, y: 700 }
+    const frames = run(motion, 2.5, {}, (t) => (t < 0.9 ? POINTER : b))
+    expect(dist(pos(frames.at(-1)!), landingFor(b))).toBeLessThan(0.5)
+  })
+
+  it("ignores a second summon in flight: same arrival, no restart", () => {
+    const one = warm()
+    const two = warm()
+    one.summon()
+    two.summon()
+    const a = run(one, 2, { pointer: POINTER })
+    const b: OrbFrame[] = []
+    for (let i = 0; i < 120; i++) {
+      if (i === 30) two.summon()
+      b.push(two.step(DT, { held: false, active: true, pointer: POINTER }))
+    }
+    for (let i = 0; i < 120; i++) expect(b[i]).toEqual(a[i])
+  })
+
+  it("parks near the cursor for about four seconds from arrival, however the cursor moves", () => {
+    const motion = warm()
+    motion.summon()
+    const landed = run(motion, 2, { pointer: POINTER }).at(-1)!
+    const frames = run(motion, 2.5, {}, (t) => ({ x: 300 + t * 100, y: 200 }))
+    for (const f of frames) {
+      expect(f.summon).toBe("holding")
+      expect(dist(pos(f), pos(landed))).toBeLessThan(0.5)
+    }
+  })
+
+  it("stays parked while hovered or captured, and the four seconds start over after", () => {
+    const motion = warm()
+    motion.summon()
+    run(motion, 2, { pointer: POINTER })
+    const held = run(motion, 10, { pointer: POINTER, held: true })
+    expect(held.every((f) => f.summon === "holding")).toBe(true)
+    const after = run(motion, 3.5, { pointer: POINTER })
+    expect(after.every((f) => f.summon === "holding")).toBe(true)
+    const later = run(motion, 1, { pointer: POINTER })
+    expect(later.at(-1)!.summon).not.toBe("holding")
+  })
+
+  it("peeks if the cursor then holds it, without moving", () => {
+    const motion = warm()
+    motion.summon()
+    const landed = run(motion, 2, { pointer: POINTER }).at(-1)!
+    const frames = run(motion, 1, { pointer: POINTER, held: true })
+    expect(frames.at(-1)!.peek).toBeGreaterThan(0.97)
+    expect(dist(pos(frames.at(-1)!), pos(landed))).toBeLessThan(0.01)
+  })
+
+  it("resumes wandering from where it is: no jump back to the old track, then back on the path", () => {
+    const motion = warm()
+    motion.summon()
+    run(motion, 2, { pointer: POINTER })
+    const frames = run(motion, 4 + 12, { pointer: POINTER })
+    const resume = frames.findIndex((f) => f.summon !== "holding")
+    expect(resume).toBeGreaterThan(0)
+    let prev = pos(frames[resume - 1])
+    let maxStep = 0
+    for (const f of frames.slice(resume)) {
+      maxStep = Math.max(maxStep, dist(pos(f), prev))
+      prev = pos(f)
+    }
+    // A wander is a few px/s; the blend back may speed up but never snaps (well under a frame of the flight).
+    expect(maxStep).toBeLessThan(6)
+    expect(frames.at(-1)!.summon).toBe("idle")
+    expect(frames.at(-1)!.x).toBeGreaterThan(0)
+  })
+
+  it("starts the blend back from rest: the first frames barely move", () => {
+    const motion = warm()
+    motion.summon()
+    run(motion, 2, { pointer: POINTER })
+    const frames = run(motion, 4.5, { pointer: POINTER })
+    const resume = frames.findIndex((f) => f.summon !== "holding")
+    expect(dist(pos(frames[resume + 2]), pos(frames[resume - 1]))).toBeLessThan(1)
+  })
+
+  it("can be summoned again while parked, from where it is", () => {
+    const motion = warm()
+    motion.summon()
+    const first = run(motion, 2, { pointer: POINTER }).at(-1)!
+    motion.summon()
+    const other: Point = { x: 300, y: 650 }
+    const frames = run(motion, 2.5, { pointer: other })
+    expect(dist(pos(frames[0]), pos(first))).toBeLessThan(2)
+    expect(dist(pos(frames.at(-1)!), landingFor(other))).toBeLessThan(0.01)
+  })
+
+  it("can be summoned again while it is blending back", () => {
+    const motion = warm()
+    motion.summon()
+    run(motion, 2, { pointer: POINTER })
+    const mid = run(motion, 5, { pointer: POINTER }).at(-1)!
+    expect(mid.summon).toBe("returning")
+    motion.summon()
+    const frames = run(motion, 2.5, { pointer: POINTER })
+    expect(dist(pos(frames[0]), pos(mid))).toBeLessThan(6)
+    expect(dist(pos(frames.at(-1)!), landingFor(POINTER))).toBeLessThan(0.01)
+  })
+
+  it("lands in the middle of the screen when there is no pointer yet", () => {
+    const motion = warm()
+    motion.summon()
+    const frames = run(motion, 2, { pointer: null })
+    expect(dist(pos(frames.at(-1)!), landingFor({ x: W / 2, y: H / 2 }))).toBeLessThan(0.01)
+  })
+
+  it("lands clear of the keep-out boxes even with the cursor on one", () => {
+    const motion = warm()
+    motion.summon()
+    const last = run(motion, 2, { pointer: { x: 400, y: 380 } }).at(-1)!
+    for (const box of keepOut) expect(distanceToRect(pos(last), box)).toBeGreaterThanOrEqual(m.clearance - 0.5)
+  })
+
+  it("cancelling mid-flight stops it where it is, with no jump, and it wanders on from there", () => {
+    const motion = warm()
+    motion.summon()
+    const mid = run(motion, 0.6, { pointer: POINTER }).at(-1)!
+    motion.cancelSummon()
+    const next = run(motion, 1 / 60, { pointer: POINTER, held: true })[0]
+    expect(dist(pos(next), pos(mid))).toBeLessThan(0.5)
+    const later = run(motion, 3, { pointer: POINTER, held: true }).at(-1)!
+    expect(dist(pos(later), pos(mid))).toBeLessThan(0.5)
+    const free = run(motion, 20, { pointer: POINTER })
+    expect(free.at(-1)!.summon).toBe("idle")
+  })
+
+  it("does not leave a stale summoned state after being cancelled and parked for a trip", () => {
+    const motion = warm()
+    motion.summon()
+    run(motion, 2, { pointer: POINTER })
+    motion.cancelSummon()
+    run(motion, 3, { parked: true })
+    const frames = run(motion, 15, {})
+    expect(frames.at(-1)!.summon).toBe("idle")
+  })
+
+  describe("under reduced motion", () => {
+    it("does not fly: it fades out, appears at the landing and fades back in", () => {
+      const motion = warm(true)
+      const start = pos(run(motion, 1 / 60)[0])
+      const target = landingFor(POINTER)
+      motion.summon()
+      const frames = run(motion, 2, { pointer: POINTER })
+      for (const f of frames) expect(Math.min(dist(pos(f), start), dist(pos(f), target))).toBeLessThan(5)
+      expect(Math.min(...frames.map((f) => f.energy))).toBeLessThan(0.02)
+      expect(frames.at(-1)!.energy).toBeGreaterThan(0.8)
+      expect(dist(pos(frames.at(-1)!), target)).toBeLessThan(0.01)
+      expect(frames.at(-1)!.summon).toBe("holding")
+    })
+
+    it("moves only while it is invisible", () => {
+      const motion = warm(true)
+      motion.summon()
+      const frames = run(motion, 2, { pointer: POINTER })
+      for (let i = 1; i < frames.length; i++) {
+        if (dist(pos(frames[i]), pos(frames[i - 1])) > 5) {
+          expect(frames[i].energy).toBeLessThan(0.02)
+          expect(frames[i - 1].energy).toBeLessThan(0.02)
+        }
+      }
+    })
+
+    it("goes back to its track with a fade too, not a glide", () => {
+      const motion = warm(true)
+      motion.summon()
+      run(motion, 2, { pointer: POINTER })
+      const frames = run(motion, 6, { pointer: POINTER })
+      expect(frames.at(-1)!.summon).toBe("idle")
+      for (let i = 1; i < frames.length; i++) {
+        if (dist(pos(frames[i]), pos(frames[i - 1])) > 5) expect(frames[i].energy).toBeLessThan(0.02)
+      }
+      expect(frames.at(-1)!.energy).toBeGreaterThan(0.8)
+    })
   })
 })

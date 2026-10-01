@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, type RefObject } from "react"
 import { createOrbMotion, type OrbFrame, type OrbMotion } from "./orb-motion"
-import type { Rect } from "./orb-path"
+import type { Point, Rect } from "./orb-path"
+import { isSummonKeyEvent, summonBlocked } from "./orb-summon"
 
 /** The cursor id the journey reads to know the orb is captured. */
 export const ORB_CURSOR_ID = "memory-orb"
 const LABEL = "Agregar recuerdo"
-const CONTEXT = "Deja un recuerdo en este universo."
+const CONTEXT = "Deja un recuerdo en este universo. Pulsa R para llamarlo."
 const DESCRIPTION_ID = "memory-orb-description"
 
 // Every visit paints the same wander. Fixed, so a path that is checked once is checked for good.
@@ -56,6 +57,8 @@ export interface OrbProps {
   onOpen: (at: { x: number; y: number }) => void
   /** Draws a plain CSS glow in the button, for a sky that has no WebGL to paint one. */
   fallbackGlow?: boolean
+  /** The visitor pressed R and the orb is on its way to the cursor: once per summon. */
+  onSummon?: () => void
 }
 
 function place(mover: HTMLElement, frame: OrbFrame) {
@@ -70,19 +73,37 @@ function place(mover: HTMLElement, frame: OrbFrame) {
  * The memory orb: a color-shifting glow that wanders the whole sky, with a real button riding on it.
  * The sky paints the glow (so it shares the halftone texture); this owns the motion and the hit target.
  */
-export function Orb({ active, interactive, held, parked = false, sky, keepOut, onOpen, fallbackGlow = false }: OrbProps) {
+export function Orb({
+  active,
+  interactive,
+  held,
+  parked = false,
+  sky,
+  keepOut,
+  onOpen,
+  fallbackGlow = false,
+  onSummon,
+}: OrbProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const moverRef = useRef<HTMLDivElement | null>(null)
   const frameRef = useRef<OrbFrame | null>(null)
   const sizeRef = useRef({ width: 1, height: 1 })
   const touchRef = useRef({ hover: false, focus: false })
   const wakeRef = useRef<(() => void) | null>(null)
-  const live = useRef({ active, held, parked, keepOut })
+  const motionRef = useRef<OrbMotion | null>(null)
+  // The cursor in the orb's own coordinates; null until it has moved (a touch-only visitor never has one).
+  const pointerRef = useRef<Point | null>(null)
+  const live = useRef({ active, held, parked, keepOut, interactive, onSummon })
 
   useEffect(() => {
-    live.current = { active, held, parked, keepOut }
+    live.current = { active, held, parked, keepOut, interactive, onSummon }
     wakeRef.current?.()
   })
+
+  // Leaving the sky (a facet, the portal) drops a summon where the orb is, so it is never stale when it returns.
+  useEffect(() => {
+    if (!interactive) motionRef.current?.cancelSummon()
+  }, [interactive])
 
   // The button is removed while the portal opens, with no mouseleave or blur to say the pointer or focus left it;
   // forget them, or a stale hover would keep the orb stopped and peeking when it comes back.
@@ -95,6 +116,7 @@ export function Orb({ active, interactive, held, parked = false, sky, keepOut, o
     if (!root) return
     const reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
     const motion: OrbMotion = createOrbMotion({ seed: ORB_SEED, reduced })
+    motionRef.current = motion
     let raf = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = performance.now()
@@ -120,7 +142,12 @@ export function Orb({ active, interactive, held, parked = false, sky, keepOut, o
       const startedAt = now
       const { active: on, held: isHeld, parked: isParked } = live.current
       const touch = touchRef.current
-      const frame = motion.step(dt, { held: isHeld || touch.hover || touch.focus, active: on, parked: isParked })
+      const frame = motion.step(dt, {
+        held: isHeld || touch.hover || touch.focus,
+        active: on,
+        parked: isParked,
+        pointer: pointerRef.current,
+      })
       frameRef.current = frame
       if (moverRef.current) place(moverRef.current, frame)
       if (frame.energy > 0) {
@@ -169,12 +196,29 @@ export function Orb({ active, interactive, held, parked = false, sky, keepOut, o
 
     measure()
     wake()
+    const onPointerMove = (e: PointerEvent | MouseEvent) => {
+      const box = root.getBoundingClientRect()
+      pointerRef.current = { x: e.clientX - box.left, y: e.clientY - box.top }
+    }
+    // R calls the orb to the cursor, on the sky only and never while typing or with a dialog open.
+    const onKeyDown = (e: KeyboardEvent) => {
+      const { active: on, interactive: onSky, onSummon: report } = live.current
+      if (!on || !onSky || e.defaultPrevented || !isSummonKeyEvent(e) || summonBlocked(document)) return
+      motion.summon()
+      wake()
+      report?.()
+    }
+    window.addEventListener("pointermove", onPointerMove)
+    window.addEventListener("keydown", onKeyDown)
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null
     ro?.observe(root)
 
     return () => {
       alive = false
       wakeRef.current = null
+      motionRef.current = null
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("keydown", onKeyDown)
       cancelAnimationFrame(raf)
       clearTimeout(timer)
       ro?.disconnect()

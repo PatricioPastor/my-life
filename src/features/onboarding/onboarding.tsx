@@ -45,7 +45,7 @@ export function Onboarding({ story, state, dispatch }: OnboardingProps) {
   const leaving = phase === "done"
 
   return (
-    <div ref={rootRef} className="ob ui" data-phase={phase} data-leaving={leaving ? "true" : "false"}>
+    <div ref={rootRef} className="ob ui" data-blocks-shortcuts data-phase={phase} data-leaving={leaving ? "true" : "false"}>
       <div className="ob-stage">
         <div className="ob-lines" aria-live="polite">
           {lines.map((text, i) => (

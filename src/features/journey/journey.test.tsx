@@ -324,6 +324,38 @@ describe("Journey memory orb", () => {
     expect(orbCalls).toEqual([["memory_orb_opened"]])
   })
 
+  it("tracks memory_orb_summoned once per R on the sky, with no props", async () => {
+    await toSky()
+    fireEvent.keyDown(window, { key: "r" })
+    fireEvent.keyDown(window, { key: "R" })
+    fireEvent.keyDown(window, { key: "r", repeat: true })
+    fireEvent.keyDown(window, { key: "r", ctrlKey: true })
+    const calls = track.mock.calls.filter((c) => c[0] === "memory_orb_summoned")
+    expect(calls).toEqual([["memory_orb_summoned"], ["memory_orb_summoned"]])
+  })
+
+  it("never summons at the gate, typing the handle, or inside a facet", async () => {
+    render(<Journey />)
+    const input = screen.getByLabelText("Ingresa con tu Instagram")
+    fireEvent.keyDown(input, { key: "r" })
+    fireEvent.keyDown(window, { key: "r" })
+    cleanup()
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
+    fireEvent.keyDown(window, { key: "r" })
+    expect(track.mock.calls.filter((c) => c[0] === "memory_orb_summoned")).toEqual([])
+  })
+
+  it("does not summon while the intro layer is replaying over the sky", async () => {
+    await toSky()
+    const layer = document.createElement("div")
+    layer.setAttribute("data-blocks-shortcuts", "")
+    document.body.appendChild(layer)
+    fireEvent.keyDown(window, { key: "r" })
+    layer.remove()
+    expect(track.mock.calls.filter((c) => c[0] === "memory_orb_summoned")).toEqual([])
+  })
+
   it("keeps the facet journey working after a round trip to the memories", async () => {
     await toSky()
     fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))

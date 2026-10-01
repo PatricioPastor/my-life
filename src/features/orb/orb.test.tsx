@@ -40,7 +40,7 @@ describe("Orb", () => {
     expect(button.dataset.magnetic).toBe("strong")
     expect(button.dataset.cursorId).toBe("memory-orb")
     expect(button.dataset.cursorLabel).toBe("Agregar recuerdo")
-    expect(button.dataset.cursorContext).toBe("Deja un recuerdo en este universo.")
+    expect(button.dataset.cursorContext).toBe("Deja un recuerdo en este universo. Pulsa R para llamarlo.")
   })
 
   it("can be reached by keyboard", () => {
@@ -207,6 +207,160 @@ describe("Orb", () => {
       expect(glow.peek).toBe(1)
       expect(glow.lens).toBeCloseTo(rest.lens, 3)
       expect(mover().style.getPropertyValue("--orb-zoom")).toBe("1.000")
+    })
+  })
+
+  describe("summoning with R", () => {
+    const last = (orb: ReturnType<typeof setup>["orb"]) => orb.mock.calls.at(-1)![0]
+    const move = (x: number, y: number) => fireEvent.pointerMove(window, { clientX: x, clientY: y })
+    const press = (init: KeyboardEventInit = {}, target: Window | Element = window) =>
+      fireEvent.keyDown(target, { key: "r", ...init })
+    const near = (glow: { x: number; y: number }, x: number, y: number) => Math.hypot(glow.x - x, glow.y - y)
+
+    it("brings the orb next to the cursor and reports it once", async () => {
+      const onSummon = vi.fn()
+      const { orb } = setup({ onSummon })
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      move(700, 500)
+      press()
+      expect(onSummon).toHaveBeenCalledTimes(1)
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      const glow = last(orb)
+      // Next to the cursor (its radius plus the gap), toward the middle of the screen: never under it.
+      expect(near(glow, 700, 500)).toBeGreaterThan(glow.radius)
+      expect(near(glow, 700, 500)).toBeLessThan(glow.radius + 40)
+    })
+
+    it("takes R as well as r, and R again while it is parked reports again", async () => {
+      const onSummon = vi.fn()
+      setup({ onSummon })
+      await act(() => vi.advanceTimersByTimeAsync(500))
+      press({ key: "R" })
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      press()
+      expect(onSummon).toHaveBeenCalledTimes(2)
+    })
+
+    it("flies: it is neither already there on the first frame nor jumping", async () => {
+      const { orb } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1500))
+      const before = last(orb)
+      move(800, 600)
+      press()
+      await act(() => vi.advanceTimersByTimeAsync(100))
+      const early = last(orb)
+      expect(Math.hypot(early.x - before.x, early.y - before.y)).toBeLessThan(20)
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      expect(near(last(orb), 800, 600)).toBeLessThan(80)
+    })
+
+    it("lands in the middle of the screen when there is no pointer yet", async () => {
+      const { orb } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(500))
+      press()
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      expect(near(last(orb), 512, 384)).toBeLessThan(80)
+    })
+
+    it("ignores other keys, modifiers and a key held down", async () => {
+      const onSummon = vi.fn()
+      setup({ onSummon })
+      press({ key: "e" })
+      press({ ctrlKey: true })
+      press({ metaKey: true })
+      press({ altKey: true })
+      press({ repeat: true })
+      expect(onSummon).not.toHaveBeenCalled()
+    })
+
+    it("ignores it while typing in a field", async () => {
+      const onSummon = vi.fn()
+      setup({ onSummon })
+      const input = document.createElement("input")
+      document.body.appendChild(input)
+      input.focus()
+      press({}, input)
+      input.remove()
+      expect(onSummon).not.toHaveBeenCalled()
+    })
+
+    it("ignores it while a dialog is open", async () => {
+      const onSummon = vi.fn()
+      setup({ onSummon })
+      const dialog = document.createElement("div")
+      dialog.setAttribute("role", "dialog")
+      document.body.appendChild(dialog)
+      press()
+      dialog.remove()
+      expect(onSummon).not.toHaveBeenCalled()
+    })
+
+    it("ignores it when the orb is not on the sky (not interactive, or not active)", async () => {
+      const onSummon = vi.fn()
+      const { view } = setup({ onSummon, interactive: false })
+      press()
+      view.unmount()
+      setup({ onSummon, active: false })
+      press()
+      expect(onSummon).not.toHaveBeenCalled()
+    })
+
+    it("stops listening when it unmounts", async () => {
+      const onSummon = vi.fn()
+      const { view } = setup({ onSummon })
+      view.unmount()
+      press()
+      expect(onSummon).not.toHaveBeenCalled()
+    })
+
+    it("drops the summoned state when the sky is left, so it is not stale when it comes back", async () => {
+      const { orb, view, sky } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(500))
+      move(800, 600)
+      press()
+      await act(() => vi.advanceTimersByTimeAsync(2500))
+      view.rerender(
+        <div style={{ width: 1024, height: 768 }}>
+          <Orb active interactive={false} held sky={sky} keepOut={keepOut} onOpen={vi.fn()} />
+        </div>,
+      )
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      expect(near(last(orb), 800, 600)).toBeLessThan(80)
+      view.rerender(
+        <div style={{ width: 1024, height: 768 }}>
+          <Orb active interactive held={false} sky={sky} keepOut={keepOut} onOpen={vi.fn()} />
+        </div>,
+      )
+      await act(() => vi.advanceTimersByTimeAsync(30000))
+      const a = last(orb)
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      const b = last(orb)
+      // Back on its wander: it moves again, a little each second.
+      expect(near(a, b.x, b.y)).toBeGreaterThan(0)
+      expect(near(a, b.x, b.y)).toBeLessThan(60)
+    })
+
+    it("under reduced motion does not fly: it fades and reappears next to the cursor", async () => {
+      vi.stubGlobal(
+        "matchMedia",
+        (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }),
+      )
+      const { orb } = setup()
+      await act(() => vi.advanceTimersByTimeAsync(1000))
+      move(700, 500)
+      press()
+      const seen: { x: number; y: number; energy: number }[] = []
+      for (let i = 0; i < 12; i++) {
+        await act(() => vi.advanceTimersByTimeAsync(250))
+        const glow = orb.mock.calls.map((c) => c[0]).filter(Boolean).at(-1)
+        if (glow) seen.push(glow)
+      }
+      // Whenever it is clearly visible it is at the start or at the landing, never in between.
+      const start = seen[0]
+      for (const g of seen.filter((g) => g.energy > 0.2)) {
+        expect(near(g, 700, 500) < 80 || near(g, start.x, start.y) < 60).toBe(true)
+      }
+      expect(near(last(orb), 700, 500)).toBeLessThan(80)
     })
   })
 })

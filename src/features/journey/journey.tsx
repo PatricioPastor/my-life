@@ -220,6 +220,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
               sky={skyRef}
               keepOut={keepOut}
               fallbackGlow={skyFailed}
+              onSummon={() => track("memory_orb_summoned")}
               onOpen={(at) => {
                 track("memory_orb_opened")
                 dispatch({ type: "orbOpened", ...at })
