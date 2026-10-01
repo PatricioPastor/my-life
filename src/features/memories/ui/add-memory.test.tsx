@@ -1090,3 +1090,48 @@ describe("AddMemory layout", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
   })
 })
+
+describe("AddMemory with a virtual keyboard", () => {
+  it("shrinks the sheet to the part of the page the keyboard leaves free, so the focused field and the submit stay visible", () => {
+    const visual = new EventTarget() as EventTarget & { height: number; offsetTop: number }
+    visual.height = window.innerHeight - 300
+    visual.offsetTop = 0
+    vi.stubGlobal("visualViewport", visual)
+    setup()
+    open()
+    const content = screen.getByTestId("memory-card").parentElement as HTMLElement
+    expect(content.style.paddingBottom).toBe("300px")
+  })
+
+  it("brings the field being typed in into view when the keyboard opens", () => {
+    const visual = new EventTarget() as EventTarget & { height: number; offsetTop: number }
+    visual.height = window.innerHeight
+    visual.offsetTop = 0
+    vi.stubGlobal("visualViewport", visual)
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    setup()
+    open()
+    const caption = screen.getByLabelText("¿Qué recuerdas?")
+    caption.focus()
+    act(() => {
+      visual.height = window.innerHeight - 300
+      visual.dispatchEvent(new Event("resize"))
+    })
+    expect(scrollIntoView).toHaveBeenCalled()
+    expect(scrollIntoView.mock.contexts).toContain(caption)
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView")
+  })
+
+  it("uses the whole page when there is no keyboard", () => {
+    setup()
+    open()
+    const content = screen.getByTestId("memory-card").parentElement as HTMLElement
+    expect(content.style.paddingBottom).toBe("")
+  })
+
+  it("makes the control to open it at least 44 px tall on a phone", () => {
+    setup()
+    expect(screen.getByRole("button", { name: "Agregar recuerdo" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+  })
+})

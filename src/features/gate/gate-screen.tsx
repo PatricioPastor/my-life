@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react"
 import { rgba } from "@/shared/lib/color"
+import { useKeyboardInset } from "@/shared/lib/use-keyboard-inset"
 import { cn } from "@/shared/lib/utils"
 import { OWNER_HANDLE, buildAccessRequest, copyToClipboard } from "./access/access-request"
 import { AsciiTunnel } from "./ascii-tunnel"
@@ -40,6 +41,8 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
   const { status, handle, copied } = state
   const refused = status === "invalid" || status === "denied"
   const request = buildAccessRequest(handle)
+  // The keyboard covers the lower part of the page on a phone: the form rides just above it while it is open.
+  const keyboard = useKeyboardInset()
 
   // The link navigates on its own; the copy is best effort and never blocks it.
   const askForAccess = () => {
@@ -59,10 +62,15 @@ export function GateScreen({ state, onTyped, onSubmit, onRequestInvite }: GateSc
         className="pointer-events-none absolute top-[70%] left-1/2 h-[460px] w-[min(760px,100%)] -translate-x-1/2 -translate-y-1/2"
         style={{ background: `radial-gradient(closest-side, ${rgba(PORTAL.deep, 0.88)}, transparent)` }}
       />
-      <p className={cn("absolute top-10 left-12 m-0 text-xs tracking-[0.12em] text-ink-muted", SHADOW)}>
+      <p className={cn("absolute top-[max(2.5rem,calc(env(safe-area-inset-top)+0.75rem))] left-12 m-0 text-xs tracking-[0.12em] text-ink-muted", SHADOW)}>
         patriciopastor
       </p>
-      <div className="absolute inset-x-0 top-[58%] flex flex-col items-center px-6">
+      <div
+        data-gate-form
+        // Phones keep the form below the tunnel's ring, so the label and the field never sit on its glyphs.
+        className="absolute inset-x-0 top-[58%] flex flex-col items-center px-6 max-sm:top-[68%]"
+        style={keyboard > 0 ? { top: "auto", bottom: `${keyboard + 16}px` } : undefined}
+      >
         {status !== "granted" ? (
           <form onSubmit={submit} className="rise flex max-w-full flex-col items-center gap-[18px]">
             <label htmlFor="ig-handle" className="text-xs tracking-[0.08em] text-ink-muted">

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react"
 import { Dialog } from "radix-ui"
 import { track } from "@/shared/analytics"
+import { useKeyboardInset } from "@/shared/lib/use-keyboard-inset"
 import { cn } from "@/shared/lib/utils"
 import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
 import type { MemoryView } from "../memory-view"
@@ -412,6 +413,12 @@ function MemoryForm({
 export function AddMemory(props: AddMemoryProps) {
   const [open, setOpen] = useState(false)
   const [locked, setLocked] = useState(false)
+  // On a phone the keyboard covers the bottom of the page: the sheet is lifted onto the part that stays visible.
+  const keyboard = useKeyboardInset()
+  // The sheet shrinks as the keyboard opens; the field being typed in is kept in view inside it.
+  useEffect(() => {
+    if (keyboard > 0) document.activeElement?.scrollIntoView?.({ block: "nearest" })
+  }, [keyboard])
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next || !locked) && setOpen(next)}>
@@ -420,7 +427,7 @@ export function AddMemory(props: AddMemoryProps) {
           type="button"
           data-magnetic="light"
           data-cursor-label="Agregar recuerdo"
-          className="press t-label flex h-10 items-center gap-2.5 rounded-full md:h-11 border border-[#a8c8ff]/35 bg-[#07061a]/70 px-5 text-[#e6edff] shadow-[0_0_28px_rgba(140,170,255,0.14)] backdrop-blur-sm transition-colors duration-200 hover:border-[#a8c8ff]/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+          className="press t-label flex h-11 items-center gap-2.5 rounded-full border border-[#a8c8ff]/35 bg-[#07061a]/70 px-5 text-[#e6edff] shadow-[0_0_28px_rgba(140,170,255,0.14)] backdrop-blur-sm transition-colors duration-200 hover:border-[#a8c8ff]/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
@@ -433,7 +440,11 @@ export function AddMemory(props: AddMemoryProps) {
         <Dialog.Content
           className="mem-viewer mem-sheet absolute inset-0 flex items-end justify-center overscroll-contain p-0 outline-none md:items-center md:p-6"
           // The card is the only part that takes pointers: a press on the empty stage falls through to the scrim and closes.
-          style={{ transformOrigin: "calc(100% - 120px) calc(100% - 90px)", pointerEvents: "none" }}
+          style={{
+            transformOrigin: "calc(100% - 120px) calc(100% - 90px)",
+            pointerEvents: "none",
+            paddingBottom: keyboard > 0 ? `${keyboard}px` : undefined,
+          }}
         >
           <div
             data-testid="memory-card"

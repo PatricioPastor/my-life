@@ -237,7 +237,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
 
       {screen === "sky" && (
         <h1
-          className={`rise pointer-events-none absolute top-10 left-12 m-0 text-xs font-normal tracking-[0.12em] text-ink-muted ${SHADOW}`}
+          className={`rise pointer-events-none absolute top-[max(2.5rem,calc(env(safe-area-inset-top)+0.75rem))] left-12 m-0 text-xs font-normal tracking-[0.12em] text-ink-muted ${SHADOW}`}
         >
           patriciopastor
         </h1>
@@ -260,7 +260,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
       {screen === "entry" && facet && (
         <div className="absolute inset-0">
           <BackButton label={facet.name} hint={`Volver a ${facet.name}`} onClick={() => dispatch({ type: "back" })} />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+          <div className="pointer-events-none absolute inset-0 flex justify-center overflow-y-auto overscroll-contain px-6 [@media(max-height:520px)]:pt-[76px]">
             <Reader
               meta={entry.meta}
               title={entry.title}

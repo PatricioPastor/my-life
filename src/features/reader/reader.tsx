@@ -36,13 +36,13 @@ export function Reader({ meta, title, page, onPrev, onNext }: ReaderProps) {
   const pageButton = "press flex size-12 items-center justify-center border border-ink-faint"
 
   return (
-    <article className="rise-late pointer-events-auto flex w-[640px] max-w-full flex-col gap-7">
+    <article className="rise-late pointer-events-auto flex my-auto w-[640px] max-w-full flex-col gap-7 [@media(max-height:520px)]:gap-4">
       <p className="m-0 text-xs tracking-[0.06em] text-ink-muted">{meta}</p>
-      <h1 className="m-0 font-display text-[40px] leading-[0.95] font-black tracking-[-0.01em] text-ink md:text-[64px]">
+      <h1 className="m-0 font-display text-[40px] leading-[0.95] font-black tracking-[-0.01em] text-ink md:text-[64px] [@media(max-height:520px)]:text-[28px]">
         {title}
       </h1>
       {/* Fixed height: pages turn in place, nothing scrolls. */}
-      <div className="h-[272px] font-serif text-[21px] leading-[1.62] text-ink">
+      <div className="h-[272px] font-serif text-[21px] leading-[1.62] text-ink [@media(max-height:520px)]:h-[150px] [@media(max-height:520px)]:text-[18px]">
         <div key={page} className="turn flex flex-col gap-5">
           {READER_PAGES[page].map((p) => (
             <p key={p.text} className={cn("m-0", p.italic && "text-ink-muted italic")}>

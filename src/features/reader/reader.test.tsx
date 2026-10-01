@@ -44,3 +44,15 @@ describe("Reader", () => {
     expect(screen.getByRole("heading", { name: "[Título de la historia]" })).toBeTruthy()
   })
 })
+
+describe("Reader in a short landscape viewport", () => {
+  const short = "[@media(max-height:520px)]"
+
+  it("compacts the title and the page so the whole entry fits a phone turned sideways", () => {
+    const { container } = render(<Reader meta="2024" title="Una historia" page={0} onPrev={() => {}} onNext={() => {}} />)
+    expect(screen.getByRole("heading", { level: 1 }).className).toContain(`${short}:text-[28px]`)
+    const body = container.querySelector(".turn")?.parentElement as HTMLElement
+    expect(body.className).toContain(`${short}:h-[150px]`)
+    expect(body.className).toContain(`${short}:text-[18px]`)
+  })
+})

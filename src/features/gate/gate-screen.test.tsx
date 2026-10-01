@@ -95,3 +95,28 @@ describe("GateScreen", () => {
     expect(screen.queryByRole("button", { name: "Entrar" })).toBeNull()
   })
 })
+
+describe("GateScreen with a virtual keyboard", () => {
+  function openKeyboard(px: number) {
+    const target = new EventTarget() as EventTarget & { height: number; offsetTop: number }
+    target.height = window.innerHeight - px
+    target.offsetTop = 0
+    vi.stubGlobal("visualViewport", target)
+    return target
+  }
+
+  it("keeps the form where it is while there is no keyboard", () => {
+    setup({ status: "idle", handle: "" })
+    const column = screen.getByLabelText("Ingresa con tu Instagram").closest("[data-gate-form]") as HTMLElement
+    expect(column.style.bottom).toBe("")
+    expect(column.style.top).toBe("")
+  })
+
+  it("lifts the form above the keyboard, so the field being typed in stays visible", () => {
+    openKeyboard(300)
+    setup({ status: "idle", handle: "" })
+    const column = screen.getByLabelText("Ingresa con tu Instagram").closest("[data-gate-form]") as HTMLElement
+    expect(column.style.top).toBe("auto")
+    expect(column.style.bottom).toBe("316px")
+  })
+})

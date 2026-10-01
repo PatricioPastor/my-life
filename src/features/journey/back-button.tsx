@@ -7,7 +7,7 @@ interface BackButtonProps {
 
 export function BackButton({ label, hint, onClick }: BackButtonProps) {
   return (
-    <div className="rise absolute top-7 left-9">
+    <div className="rise absolute top-[max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))] left-[max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))]">
       <button
         type="button"
         onClick={onClick}

@@ -87,7 +87,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
       </div>
       <DustCanvas reduced={reduced} />
       <h1
-        className="t-title rise-late pointer-events-none absolute bottom-[72px] left-6 m-0 text-[length:var(--type-display)] leading-[0.9] md:left-20"
+        className="t-title rise-late pointer-events-none absolute bottom-[calc(72px+env(safe-area-inset-bottom))] left-6 m-0 text-[length:var(--type-display)] leading-[0.9] md:left-20"
         style={{
           color: PORCELAIN,
           textShadow: `0 0 36px color-mix(in oklab, ${accent ?? "#a8c8ff"} 22%, transparent)`,
@@ -117,7 +117,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
           onOpen={(id, origin) => setViewing({ id, origin })}
         />
       )}
-      {action && <div className="absolute right-6 bottom-[72px] max-md:bottom-[128px]">{typeof action === "function" ? action(root) : action}</div>}
+      {action && <div className="absolute right-6 bottom-[calc(72px+env(safe-area-inset-bottom))] max-md:bottom-[calc(128px+env(safe-area-inset-bottom))]">{typeof action === "function" ? action(root) : action}</div>}
       <MemoryViewer
         memories={memories}
         openId={viewing.id}
