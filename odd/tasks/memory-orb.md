@@ -62,7 +62,7 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - A transaction helper that sets the visitor handle for the policies.
   - The owner-role guard.
   - Code only: no remote operations.
-- [ ] **T2 — Visitor session.**
+- [x] **T2 — Visitor session.**
   - The gate sets a signed `httpOnly` cookie on success.
   - A `currentVisitor()` server helper.
   - Expiry and tamper checks.
@@ -113,13 +113,19 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
     - Fixed in `36f2623` (route: inline, one file plus its test). The client is now cached in every environment, covered by `client.test.ts`. RED was observed on the production case.
     - Targeted validation approved; lineage `review-44f696e6128708f0` acknowledged. Reviewed boundary: `36f2623`.
 
+- 2026-10-01: T2 done (route: delegated writer, 2+ non-trivial files).
+  - `src/shared/session` (`server-only`): `signSession` and `verifySession` (HMAC-SHA256, constant-time compare, strict payload `{ h, exp }`, handle checked with the gate's `isValidHandle`), `getSessionSecret` (at least 32 decoded bytes, else not configured), cookie constants and options, and `currentVisitor()`, which also re-checks the handle against `AccessPolicy` so removing it from the whitelist revokes the session.
+  - Cookie `ml_visitor`: `httpOnly`, `secure` in production, `sameSite: "lax"`, `path: "/"`, 30 days.
+  - The gate action now goes through `admitVisitor` (`src/features/gate/access/admit-visitor.ts`). A denied or invalid handle gets no cookie. With no valid `SESSION_SECRET` it still admits, skips the cookie and logs one handle-free warning.
+
 ## T6 checklist (run only after the user authorizes remote operations)
 
 1. As the owner (`DIRECT_URL`), run `prisma migrate deploy`. It creates the tables, `app_user` (no login) and the policies.
 2. As the owner, run `ALTER ROLE app_user LOGIN PASSWORD '<generated secret>';` with SQL. The password never goes in the repo.
 3. Build the pooled `app_user` URL (same host, `app_user` and the new password) and set it as `DATABASE_URL` in `.env.local` and Vercel. `DIRECT_URL` stays the owner's unpooled URL. The runtime guard throws if `DATABASE_URL` uses the owner.
-4. Check with `app_user`: it reads only approved rows, inserts only pending rows under its own handle, and cannot update or delete.
+4. Generate the session secret with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and add it as `SESSION_SECRET` to `.env.local` and Vercel. The user does this, not an agent. Without it the gate still admits, but sets no session cookie.
+5. Check with `app_user`: it reads only approved rows, inserts only pending rows under its own handle, and cannot update or delete.
 
 ## Next step
 
-T2: visitor session.
+T3: orb.
