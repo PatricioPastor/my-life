@@ -108,6 +108,10 @@ About 1,600 authored changed lines (T1 ~300, T2 ~200, T3 ~350, T4 ~400, T5 ~400)
   - Migration `20261001000000_init`: enum and `memories` table (snake_case), the `app_user` role (`NOLOGIN NOBYPASSRLS`, idempotent), column-level `INSERT` grant, `ENABLE` + `FORCE` RLS with a select and an insert policy, and `_prisma_migrations` locked down. It was generated offline; nothing touched Neon.
   - `src/features/memories`: domain, `validateNewMemory`, `MemoryRepository` port and the Prisma adapter. `src/shared/db`: lazy client, `withVisitor`, `assertRuntimeRole`, plus static lints for the migration SQL and `schema.prisma`.
   - Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` pass; `/` stays static.
+  - Commit `f0d981f`. The RDD review (medium; the slice budget was reached) was granted.
+    - It found one critical issue: `getPrisma()` never cached the client in production, so every repository call opened a new client and WebSocket pool.
+    - Fixed in `36f2623` (route: inline, one file plus its test). The client is now cached in every environment, covered by `client.test.ts`. RED was observed on the production case.
+    - Targeted validation approved; lineage `review-44f696e6128708f0` acknowledged. Reviewed boundary: `36f2623`.
 
 ## T6 checklist (run only after the user authorizes remote operations)
 
