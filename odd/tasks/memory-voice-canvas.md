@@ -76,7 +76,7 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - Built against the DTO contract with fixtures.
 - [x] **T3 — Integrate.** Merge `feat/memory-canvas`, run the full checks and RDD.
 - [x] **T4 — Mobile pass** for the canvas gestures, the glass view and recording.
-- [ ] **T5 — Deliver.** Apply the migration after authorization, run a live check (photo, audio-only, both), then fast-forward main.
+- [x] **T5 — Deliver.** Apply the migration after authorization, run a live check (photo, audio-only, both), then fast-forward main.
 
 ## Progress
 
@@ -133,6 +133,34 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - **Integration** (`a86d0cc..5558147`): lineage `review-f3bd90be4b105ea7`.
   - Reviewed boundary: `5558147`.
 
+- 2026-10-01 (T5), Live check: with the user's authorization ("1 y pusheá todo a main") migration `20261003000000_memory_audio` was applied to Neon `main` and `main` was pushed. Then a read-only catalog check as the owner and a temporary vitest harness (outside the committed code, deleted afterwards; `jpeg-js` and `piexifjs` in the scratchpad) ran the real modules against Cloudinary, Neon as `app_user` and Nominatim, for three memories under `smoke_test`: (a) a geotagged 64x48 JPEG, (b) a 3 s WAV, (c) a JPEG plus a 2.5 s WAV. All checks passed.
+
+  **Catalog (owner, read-only):**
+  - `public_id`, `width` and `height` are nullable; `audio_public_id`, `audio_format`, `audio_bytes` and `audio_duration_ms` exist and are nullable; `audio_public_id` is unique.
+  - CHECKs present: `memories_has_media`, `memories_photo_paired`, `memories_audio_paired`, `memories_audio_duration_range` (1 to 125000 ms) and `memories_audio_bytes_range` (1 to 15728640), beside the earlier ones.
+  - RLS is enabled and forced; the two policies (`memories_select`, `memories_insert`, for `app_user`) are unchanged.
+  - `app_user` has table-level `SELECT` only. Column `INSERT` on 22 columns (the earlier 18 plus the 4 audio ones); none on `id`, `status` or `created_at`; no UPDATE or DELETE.
+  - All six migrations are recorded as finished, none rolled back.
+
+  | # | Check | Result | Evidence |
+  |---|-------|--------|----------|
+  | 1 | Catalog | PASS | As listed above. |
+  | 2 | Signed audio upload | PASS | `video/upload` answered 200, type `authenticated`, resource type `video`, and `is_audio: true` is in the upload answer. The Admin API gives `isAudio` true, format `wav`, duration 3 and 2.5 s; `verifyAudio` accepts both, and `verifyAsset` accepts the photo. |
+  | 3 | Rows | PASS | (a) has width 64 and height 48 and null audio columns; location stored at 6 decimals, `place_name` "Monserrat, Buenos Aires". (b) has null `public_id`, `width` and `height`, and audio `wav`, 132,344 bytes, 3000 ms. (c) has both (2500 ms). All `pending`. |
+  | 4 | DTOs | PASS | (b): `thumbUrl`, `fullUrl`, `width` and `height` null, `audio.url` plus `durationMs` 3000, `orbColor` the default `#8ab4ff`. (c) has both. `place` is `{ lat: -34.61, lng: -58.37, name }` and no exact coordinate appears anywhere in the DTO JSON. The Nominatim fetch ran once. |
+  | 5 | Audio delivery | PASS | The signed `f_mp3` URL answers 200, `audio/mpeg`, 9,145 bytes starting with an ID3 header (`49443304`). Unsigned 401, `video/upload` type 404, bad signature 401, signed-without-transform 401. |
+  | 6 | CORS | PASS | See below. |
+  | 7 | Validation | PASS | No photo and no audio: `media_missing` and `prepareUpload` `invalid`. Fake audio info: 130 s `audio_too_long`, 15 MiB + 1 `audio_too_large`, a non-audio `audio_type`; exactly 120 s and 15 MiB pass. |
+  | 8 | Cleanup | PASS | Admin API answers 404 for all four assets (2 images, 2 audios); `smoke_test` rows are 0; `git status` is clean after the harness was deleted. |
+
+  - **CORS:** with `Origin: https://example.com`, the signed image (`fullUrl` and `thumbUrl`) and the signed audio (`audio.url`) all answer `Access-Control-Allow-Origin: *`. So WebGL can read the photo and Web Audio can analyse the audio with `crossOrigin="anonymous"`. The audio response exposes `Content-Length,Server-Timing`.
+  - **Checks:** `pnpm test` 148 files and 2255 tests passed.
+  - **Watch on a real iPhone (T4):** the transcoded mp3 answers `Accept-Ranges: none`. Safari is picky about byte ranges for `<audio>`; the 3 s clip is a single 9 KB body, so it is probably fine, but a longer clip (up to 2 minutes) on a real iPhone is the first thing to try. The harness used WAV uploads only; webm/opus and m4a from a real MediaRecorder were not uploaded.
+  - **Not exercised:** the browser flow against production, a real phone, MediaRecorder containers.
+
 ## Next step
 
-T1 to T4 are done. T5 (deliver): apply migration `20261003000000_memory_audio` after the user authorizes; a live check of photo, audio-only and both, including CORS on the signed photo and audio URLs for WebGL and Web Audio; then fast-forward main.
+Delivered. Migration `20261003000000_memory_audio` was applied to Neon `main` and `main` was pushed on 2026-10-01, at the user's request. The live check passed 8/8. Follow-ups:
+- Test recording and playback on a real iPhone (Safari records `audio/mp4`; the mp3 delivery has `Accept-Ranges: none`) and a longer clip.
+- Upload a real webm/opus and m4a recording once, to confirm the `f_mp3` transcode for those containers.
+- Clean up orphan Cloudinary assets (a photo that went up before a failed audio upload).
