@@ -95,10 +95,10 @@ A color-shifting orb floats across the whole galaxy. Clicking it ("Agregar recue
   - When a photo is picked, read its GPS in the browser, round it, and suggest the place by name with a link to verify it on the map.
   - If the place is wrong, or the photo has no GPS, the visitor pastes a Google Maps link instead.
   - The copy reads "where the photo was taken", never the visitor's own location. The location is still approximate and only stored with consent.
-- [ ] **T6 — Remote setup (needs authorization).**
+- [x] **T6 — Remote setup (needs authorization).**
   - Create `app_user` with SQL and run the migrations on Neon.
   - The user swaps `DATABASE_URL` to `app_user` and adds the variables to Vercel.
-- [ ] **T7 — Deliver.**
+- [x] **T7 — Deliver.**
   - Full checks and RDD per slice.
   - Fast-forward main and push after the user approves.
 
@@ -280,4 +280,4 @@ Progress:
 
 ## Next step
 
-T6: remote setup, which needs the user explicit authorization first: migrate Neon and create `app_user` (steps 1 to 5), apply the T5b and T5c migrations (steps 7 and 8), set the Cloudinary and session variables (steps 4 and 6), and run the end-to-end smoke test (step 10). Then T7: deliver (full checks, fast-forward main after the user approves).
+Delivered. `main` was fast-forwarded to `f3df65b` and pushed, along with `feat/memory-orb`, on 2026-10-01 after the user said "mandale mecha" and the live smoke test passed all 8 checks. Set `NEXT_PUBLIC_SITE_URL` in Vercel so the Nominatim User-Agent carries the real site URL. Follow-ups that were not exercised live: HEIC files, Google short links, the browser flow end to end, the rate-limit and replay refusals, and a cleanup of orphan assets.
