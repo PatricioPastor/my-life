@@ -65,7 +65,7 @@ Make the memories dimension feel alive and personal. Memories float and interact
   - On the home sky, R brings the memory orb to the cursor: a slow, reluctant start, a fast approach, and a precise settle.
   - It is ignored while typing, and has a reduced-motion fallback.
 - [x] **T6 — Mobile pass.** Audit every screen at 390x844 and 360x740 (onboarding, gate, sky, orb, memories, viewer, upload) and fix what's poor.
-- [ ] **T7 — Deliver.**
+- [x] **T7 — Deliver.**
   - Apply the migrations after authorization, run a live check, then the full checks and RDD.
   - Migrations to apply, in order, with `prisma migrate deploy` as the owner (`DIRECT_URL`), after the user authorizes:
     - `20261002000000_memory_exact_location` (T1): widens the position to `numeric(9,6)`, renames `approx_latitude`/`approx_longitude` to `latitude`/`longitude` and their three CHECKs, restates `app_user` INSERT on the two columns. Existing rows keep their 2-decimal values.
@@ -179,4 +179,8 @@ Make the memories dimension feel alive and personal. Memories float and interact
 
 ## Next step
 
-T7 (deliver): apply the two migrations after the user authorizes, a live check (including the keyboard and the safe areas on a real phone), then fast-forward main. T1 to T6 are done.
+Delivered. `main` was fast-forwarded to `c287733` and pushed on 2026-10-01, at the user's request ("Sí, subilo a main nomás"), right after the two migrations were applied. The renamed location columns needed the new code in production. The live check then passed 7/7 (`9fccc3b`). Follow-ups:
+- Test on a real phone: the iOS Safari keyboard and safe areas, a HEIC palette, and the swatch picker on a real photo.
+- The orb tag can sit near a facet label.
+- Hit areas overlap slightly when orbs are closer than 44 px.
+- Clean up orphan Cloudinary assets.
