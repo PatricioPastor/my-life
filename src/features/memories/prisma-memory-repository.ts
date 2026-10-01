@@ -3,7 +3,7 @@ import type { Memory as MemoryRow, PrismaClient } from "@/generated/prisma/clien
 import { getPrisma } from "@/shared/db/client"
 import { withVisitor } from "@/shared/db/with-visitor"
 import type { Memory, NewMemory } from "./memory"
-import type { MemoryRepository } from "./memory-repository"
+import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 
 /** The most memories one listing returns. */
 export const MEMORY_LIST_LIMIT = 300
@@ -47,18 +47,29 @@ export class PrismaMemoryRepository implements MemoryRepository {
 
   async createPending(handle: string, input: NewMemory): Promise<Memory> {
     // Only the columns app_user may insert; id, status and created_at come from DB defaults.
-    const row = await withVisitor(this.getDb(), handle, (tx) =>
-      tx.memory.create({
-        data: {
-          handle,
-          publicId: input.publicId,
-          caption: input.caption,
-          happenedOn: input.happenedOn,
-          width: input.width,
-          height: input.height,
-        },
-      }),
-    )
-    return toDomain(row)
+    try {
+      const row = await withVisitor(this.getDb(), handle, (tx) =>
+        tx.memory.create({
+          data: {
+            handle,
+            publicId: input.publicId,
+            caption: input.caption,
+            happenedOn: input.happenedOn,
+            width: input.width,
+            height: input.height,
+          },
+        }),
+      )
+      return toDomain(row)
+    } catch (error) {
+      // P2002 is the unique-constraint violation code; public_id is the only unique column a visitor sets.
+      if ((error as { code?: unknown } | null)?.code === "P2002") throw new DuplicatePublicIdError()
+      throw error
+    }
+  }
+
+  async countRecentBy(handle: string, since: Date): Promise<number> {
+    // Row-level security lets a visitor see their own rows of every status, which is what the limit counts.
+    return withVisitor(this.getDb(), handle, (tx) => tx.memory.count({ where: { handle, createdAt: { gte: since } } }))
   }
 }

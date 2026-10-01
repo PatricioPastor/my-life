@@ -20,6 +20,7 @@ function deps(over: Partial<ListMemoriesDeps> = {}, rows: Memory[] = [memory()])
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(async () => rows),
     createPending: vi.fn(),
+    countRecentBy: vi.fn(),
   }
   const full: ListMemoriesDeps = {
     currentVisitor: async () => ({ handle: "ana" }),
@@ -94,6 +95,7 @@ describe("listMemoriesWith", () => {
           throw new Error("DATABASE_URL uses ana's owner role")
         },
         createPending: vi.fn(),
+    countRecentBy: vi.fn(),
       }),
     })
     expect(await listMemoriesWith(full)).toEqual({ ok: false, reason: "unavailable" })

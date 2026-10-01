@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
 import { MEMORY_LIST_LIMIT, PrismaMemoryRepository } from "./prisma-memory-repository"
+import { DuplicatePublicIdError } from "./memory-repository"
 import type { NewMemoryInput } from "./memory"
 
 const row = {
@@ -34,6 +35,10 @@ function fakeDb(rows: unknown[] = [row]) {
       findMany: vi.fn(async (arg: unknown) => {
         calls.push({ name: "findMany", args: [arg] })
         return rows
+      }),
+      count: vi.fn(async (arg: unknown) => {
+        calls.push({ name: "count", args: [arg] })
+        return 3
       }),
     },
   }
@@ -123,6 +128,41 @@ describe("PrismaMemoryRepository", () => {
       expect(
         await new PrismaMemoryRepository(() => db as never).createPending("ana", input),
       ).toEqual(row)
+    })
+  })
+  describe("createPending duplicates", () => {
+    it("turns a unique violation on public_id into a typed error", async () => {
+      const { db, tx } = fakeDb()
+      tx.memory.create.mockRejectedValueOnce(Object.assign(new Error("Unique constraint failed"), { code: "P2002" }))
+      await expect(new PrismaMemoryRepository(() => db as never).createPending("ana", input)).rejects.toBeInstanceOf(
+        DuplicatePublicIdError,
+      )
+    })
+
+    it("lets any other error through untouched", async () => {
+      const { db, tx } = fakeDb()
+      const boom = Object.assign(new Error("boom"), { code: "P1001" })
+      tx.memory.create.mockRejectedValueOnce(boom)
+      await expect(new PrismaMemoryRepository(() => db as never).createPending("ana", input)).rejects.toBe(boom)
+    })
+  })
+
+  describe("countRecentBy", () => {
+    const since = new Date("2026-09-30T12:00:00.000Z")
+
+    it("runs in one transaction that sets the handle before counting", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).countRecentBy("ana", since)
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+      expect(calls.map((c) => c.name)).toEqual(["setConfig", "count"])
+      expect((calls[0].args as [string, string])[1]).toBe("ana")
+    })
+
+    it("counts the visitor's own rows of any status created since the cutoff", async () => {
+      const { db, tx } = fakeDb()
+      const count = await new PrismaMemoryRepository(() => db as never).countRecentBy("ana", since)
+      expect(tx.memory.count).toHaveBeenCalledWith({ where: { handle: "ana", createdAt: { gte: since } } })
+      expect(count).toBe(3)
     })
   })
 })

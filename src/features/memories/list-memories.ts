@@ -12,7 +12,8 @@ export interface ListMemoriesDeps {
   log: (message: string) => void
 }
 
-function toView(memory: Memory, cloudName: string): MemoryView | null {
+/** The DTO of a memory the visitor may see; rejected ones have none. */
+export function toMemoryView(memory: Memory, cloudName: string): MemoryView | null {
   if (memory.status === "rejected") return null
   return {
     id: memory.id,
@@ -41,7 +42,7 @@ export async function listMemoriesWith(deps: ListMemoriesDeps): Promise<ListMemo
     }
     const cloudName = deps.cloudName
     const rows = await deps.repository().listForVisitor(visitor.handle)
-    const memories = rows.flatMap((row) => toView(row, cloudName) ?? [])
+    const memories = rows.flatMap((row) => toMemoryView(row, cloudName) ?? [])
     return { ok: true, memories }
   } catch (error) {
     // The name only: messages from the database layer can carry query parameters.
