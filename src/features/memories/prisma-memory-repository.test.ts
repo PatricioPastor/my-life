@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}))
 
 import { MEMORY_LIST_LIMIT, PrismaMemoryRepository } from "./prisma-memory-repository"
 import { DuplicatePublicIdError } from "./memory-repository"
-import type { NewMemoryInput } from "./memory"
+import type { NewMemory } from "./memory"
 
 const row = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -17,6 +17,15 @@ const row = {
   height: 20,
   status: "approved" as const,
   createdAt: new Date("2026-10-01T00:00:00.000Z"),
+  kind: "image" as const,
+  format: "jpg",
+  bytes: 123_456,
+  takenAt: new Date("2024-06-15T12:00:00.000Z"),
+  dominantColor: "#112233",
+  palette: [{ color: "#112233", share: 40 }],
+  metadata: { Make: "Apple" },
+  approxLatitude: 40.71,
+  approxLongitude: -74.01,
 }
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
@@ -48,12 +57,21 @@ function fakeDb(rows: unknown[] = [row]) {
   return { db, tx, calls }
 }
 
-const input: NewMemoryInput = {
+const input: NewMemory = {
   publicId: "memories/abc",
   caption: "hello",
   happenedOn: new Date("2024-06-15T00:00:00.000Z"),
   width: 10,
   height: 20,
+  kind: "image",
+  format: "jpg",
+  bytes: 123_456,
+  takenAt: new Date("2024-06-15T12:00:00.000Z"),
+  dominantColor: "#112233",
+  palette: [{ color: "#112233", share: 40 }],
+  metadata: { Make: "Apple" },
+  approxLatitude: 40.71,
+  approxLongitude: -74.01,
 }
 
 describe("PrismaMemoryRepository", () => {
@@ -108,7 +126,7 @@ describe("PrismaMemoryRepository", () => {
       expect(sql).not.toContain("ana")
     })
 
-    it("inserts only the visitor-controlled columns", async () => {
+    it("inserts only the columns app_user may write: visitor-supplied and server-computed", async () => {
       const { db, tx } = fakeDb()
       await new PrismaMemoryRepository(() => db as never).createPending("ana", input)
       expect(tx.memory.create).toHaveBeenCalledWith({
@@ -119,8 +137,48 @@ describe("PrismaMemoryRepository", () => {
           happenedOn: input.happenedOn,
           width: 10,
           height: 20,
+          kind: "image",
+          format: "jpg",
+          bytes: 123_456,
+          takenAt: input.takenAt,
+          dominantColor: "#112233",
+          palette: [{ color: "#112233", share: 40 }],
+          metadata: { Make: "Apple" },
+          approxLatitude: 40.71,
+          approxLongitude: -74.01,
         },
       })
+    })
+
+    it("stores no location when there is none", async () => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).createPending("ana", {
+        ...input,
+        takenAt: null,
+        approxLatitude: null,
+        approxLongitude: null,
+      })
+      expect(tx.memory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ takenAt: null, approxLatitude: null, approxLongitude: null }),
+      })
+    })
+
+    it("reads decimal columns and JSON back as plain numbers, a clean palette and whitelisted metadata", async () => {
+      const decimal = (n: number) => ({ valueOf: () => String(n), toString: () => String(n) })
+      const { db } = fakeDb([
+        {
+          ...row,
+          approxLatitude: decimal(40.71),
+          approxLongitude: decimal(-74.01),
+          palette: [{ color: "#112233", share: 40 }, "junk"],
+          metadata: { Make: "Apple", GPSLatitude: "1", SerialNumber: "x" },
+        },
+      ])
+      const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(memory.approxLatitude).toBe(40.71)
+      expect(memory.approxLongitude).toBe(-74.01)
+      expect(memory.palette).toEqual([{ color: "#112233", share: 40 }])
+      expect(memory.metadata).toEqual({ Make: "Apple" })
     })
 
     it("maps the created row to the domain", async () => {

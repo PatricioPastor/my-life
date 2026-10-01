@@ -21,6 +21,12 @@ export function readCloudinaryConfig(env: Record<string, string | undefined> = p
 
 type Fetch = typeof fetch
 
+function recordOrUndefined(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
 function toAssetInfo(body: unknown): AssetInfo {
   const b = body as Record<string, unknown> | null
   if (
@@ -43,6 +49,9 @@ function toAssetInfo(body: unknown): AssetInfo {
     bytes: b.bytes,
     width: b.width,
     height: b.height,
+    // The key is `image_metadata` in the documented upload answer and `media_metadata` in some others.
+    imageMetadata: recordOrUndefined(b.image_metadata ?? b.media_metadata),
+    colors: b.colors,
   }
 }
 
@@ -66,7 +75,7 @@ export class CloudinaryAdminAssets implements CloudinaryAssets {
     if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error("Invalid Cloudinary public id.")
     const path = segments.map(encodeURIComponent).join("/")
     const response = await this.fetchFn(
-      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}/${path}`,
+      `${API}/${encodeURIComponent(this.config.cloudName)}/resources/image/${DELIVERY_TYPE}/${path}?media_metadata=true&colors=true`,
       { headers: this.headers() },
     )
     if (response.status === 404) return null

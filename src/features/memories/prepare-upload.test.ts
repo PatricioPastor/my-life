@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { signCloudinaryParams } from "./cloudinary-signature"
+import { createHash } from "node:crypto"
+import { serializeParams, signCloudinaryParams } from "./cloudinary-signature"
 import { prepareUploadWith, type PrepareUploadDeps } from "./prepare-upload"
 import type { MemoryRepository } from "./memory-repository"
 import { verifyUploadTicket } from "./upload-ticket"
@@ -90,11 +91,33 @@ describe("prepareUploadWith", () => {
       overwrite: "false",
       // Authenticated, so the untransformed original (with its EXIF and GPS) is never publicly fetchable.
       type: "authenticated",
+      // Embedded EXIF and the predominant colors, read back on the server by createMemory.
+      media_metadata: "true",
+      colors: "true",
     })
     // The signature covers every field but the API key and itself, with the API secret.
     const { api_key: apiKey, signature, ...signed } = upload.fields
     expect(apiKey).toBe("123456")
     expect(signature).toBe(signCloudinaryParams(signed, API_SECRET))
+  })
+
+  it("signs exactly the documented parameter string, with the new fields, as Cloudinary expects", async () => {
+    const { full } = deps()
+    const result = await prepareUploadWith(full)
+    if (!result.ok) throw new Error("expected ok")
+    const { signature, api_key, ...signed } = result.upload.fields
+    expect(api_key).toBe("123456")
+    const toSign = [
+      "allowed_formats=jpg,png,webp,heic,heif",
+      "colors=true",
+      "media_metadata=true",
+      "overwrite=false",
+      `public_id=my-life/memories/${ID}`,
+      `timestamp=${NOW_MS / 1000}`,
+      "type=authenticated",
+    ].join("&")
+    expect(serializeParams(signed)).toBe(toSign)
+    expect(signature).toBe(createHash("sha256").update(`${toSign}${API_SECRET}`).digest("hex"))
   })
 
   it("returns a ticket bound to the handle and the public id, valid for 15 minutes", async () => {

@@ -16,11 +16,43 @@ describe("CloudinaryAdminAssets.describe", () => {
       json(200, { public_id: ID, resource_type: "image", type: "authenticated", format: "jpg", bytes: 1234, width: 800, height: 600, secret: "x" }),
     )
     const info = await new CloudinaryAdminAssets(config, fetchMock as never).describe(ID)
-    expect(info).toEqual({ publicId: ID, resourceType: "image", type: "authenticated", format: "jpg", bytes: 1234, width: 800, height: 600 })
+    expect(info).toEqual({
+      publicId: ID,
+      resourceType: "image",
+      type: "authenticated",
+      format: "jpg",
+      bytes: 1234,
+      width: 800,
+      height: 600,
+      imageMetadata: undefined,
+      colors: undefined,
+    })
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`https://api.cloudinary.com/v1_1/demo/resources/image/authenticated/my-life/memories/3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f`)
+    expect(url).toBe(`https://api.cloudinary.com/v1_1/demo/resources/image/authenticated/my-life/memories/3f2b8c1e-6d4a-4f3b-9c1d-0a1b2c3d4e5f?media_metadata=true&colors=true`)
     expect((init.headers as Record<string, string>).Authorization).toBe(`Basic ${Buffer.from("key:secret").toString("base64")}`)
     expect(init.method ?? "GET").toBe("GET")
+  })
+
+  it("asks for the embedded metadata and the colors, and returns them from the original", async () => {
+    const colors = [["#112233", 40]]
+    const metadata = { Make: "Apple", GPSLatitude: "40 deg 42' 46.08\" N" }
+    const base = { public_id: ID, resource_type: "image", type: "authenticated", format: "jpg", bytes: 1, width: 2, height: 3 }
+    const a = await new CloudinaryAdminAssets(config, (async () => json(200, { ...base, image_metadata: metadata, colors })) as never).describe(ID)
+    expect(a).toMatchObject({ imageMetadata: metadata, colors })
+    // The response key is `media_metadata` in some answers; either is read.
+    const b = await new CloudinaryAdminAssets(config, (async () => json(200, { ...base, media_metadata: metadata })) as never).describe(ID)
+    expect(b).toMatchObject({ imageMetadata: metadata })
+  })
+
+  it("ignores metadata that is not an object", async () => {
+    const base = { public_id: ID, resource_type: "image", type: "authenticated", format: "jpg", bytes: 1, width: 2, height: 3 }
+    const info = await new CloudinaryAdminAssets(config, (async () => json(200, { ...base, image_metadata: "x" })) as never).describe(ID)
+    expect(info?.imageMetadata).toBeUndefined()
+  })
+
+  it("never puts the metadata in an error", async () => {
+    const fetchMock = vi.fn(async () => json(500, { image_metadata: { GPSLatitude: "40.1" } }))
+    await expect(new CloudinaryAdminAssets(config, fetchMock as never).describe(ID)).rejects.not.toThrow(/GPS/)
   })
 
   it("is null when the asset does not exist", async () => {

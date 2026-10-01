@@ -8,6 +8,7 @@ import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import { MAX_UPLOAD_BYTES } from "./upload-limits"
+import type { CreateMemoryInput } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
 
 const SECRET = Buffer.alloc(32, 7).toString("base64url")
@@ -38,6 +39,15 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   height: 3024,
   status: "pending",
   createdAt: new Date(NOW_MS),
+  kind: "image",
+  format: "jpg",
+  bytes: 1_000_000,
+  takenAt: null,
+  dominantColor: null,
+  palette: [],
+  metadata: {},
+  approxLatitude: null,
+  approxLongitude: null,
   ...over,
 })
 
@@ -64,12 +74,34 @@ function setup(over: Partial<CreateMemoryDeps> = {}, opts: { recent?: number; in
   return { full, repository, assets }
 }
 
-const input = (over: Partial<{ ticket: string; caption: string; happenedOn: string }> = {}) => ({
+const input = (
+  over: Partial<{ ticket: string; caption: string; happenedOn: string; shareLocation: unknown }> = {},
+) => ({
   ticket: ticketFor(),
   caption: "Una tarde",
   happenedOn: "2024-03-12",
+  shareLocation: false,
   ...over,
-})
+}) as CreateMemoryInput
+
+// What Cloudinary returns for a phone photo with GPS, serials and an owner name embedded.
+const exif = {
+  Make: "Apple",
+  Model: "iPhone 15",
+  DateTimeOriginal: "2024:03:12 14:05:09",
+  OffsetTimeOriginal: "+02:00",
+  SerialNumber: "SECRET-SERIAL",
+  CameraOwnerName: "Ana Perez",
+  GPSLatitude: `40 deg 42' 46.08" N`,
+  GPSLatitudeRef: "N",
+  GPSLongitude: `74 deg 0' 21.6" W`,
+  GPSLongitudeRef: "W",
+}
+const COLORS = [
+  ["#112233", 40],
+  ["#ffffff", 10],
+]
+const photo = () => asset({ imageMetadata: exif, colors: COLORS })
 
 describe("createMemoryWith: who and what", () => {
   it("answers no_session without touching Cloudinary or the database", async () => {
@@ -183,6 +215,15 @@ describe("createMemoryWith: rate limit and insert", () => {
       happenedOn: new Date("2024-03-12T00:00:00.000Z"),
       width: 640,
       height: 480,
+      kind: "image",
+      format: "jpg",
+      bytes: 1_000_000,
+      takenAt: null,
+      dominantColor: null,
+      palette: [],
+      metadata: {},
+      approxLatitude: null,
+      approxLongitude: null,
     })
     expect(assets.destroy).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
@@ -200,6 +241,9 @@ describe("createMemoryWith: rate limit and insert", () => {
         status: "pending",
         width: 4032,
         height: 3024,
+        kind: "image",
+        takenAt: null,
+        dominantColor: null,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
       },
@@ -207,6 +251,29 @@ describe("createMemoryWith: rate limit and insert", () => {
     const json = JSON.stringify(result)
     expect(json).not.toContain('"handle"')
     expect(json).not.toContain("publicId")
+  })
+
+  it("answers with kind, takenAt and dominantColor, but never the location, palette or metadata", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    vi.mocked(repository.createPending).mockResolvedValueOnce(
+      stored({
+        takenAt: new Date("2024-03-12T12:05:09.000Z"),
+        dominantColor: "#112233",
+        palette: [{ color: "#112233", share: 40 }],
+        metadata: { Make: "Apple" },
+        approxLatitude: 40.71,
+        approxLongitude: -74.01,
+      }),
+    )
+    const result = await createMemoryWith(full, input({ shareLocation: true }))
+    if (!result.ok) throw new Error("expected ok")
+    expect(result.memory).toMatchObject({
+      kind: "image",
+      takenAt: "2024-03-12T12:05:09.000Z",
+      dominantColor: "#112233",
+    })
+    const json = JSON.stringify(result)
+    expect(json).not.toMatch(/latitude|longitude|approx|palette|metadata|Apple|40\.71|74\.01|GPS/i)
   })
 
   it("answers duplicate, and keeps the asset, when the public id is already stored", async () => {
@@ -224,5 +291,65 @@ describe("createMemoryWith: rate limit and insert", () => {
     expect(await createMemoryWith(full, input())).toEqual({ ok: false, reason: "unavailable" })
     expect(log).toHaveBeenCalledTimes(1)
     expect(String(log.mock.calls[0][0])).not.toContain("ana")
+  })
+})
+
+describe("createMemoryWith: photo details", () => {
+  it("persists format, bytes, taken date, colors and a whitelisted metadata, never GPS, serials or owner names", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    await createMemoryWith(full, input())
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({
+      kind: "image",
+      format: "jpg",
+      bytes: 1_000_000,
+      takenAt: new Date("2024-03-12T12:05:09.000Z"),
+      dominantColor: "#112233",
+      palette: [
+        { color: "#112233", share: 40 },
+        { color: "#ffffff", share: 10 },
+      ],
+      metadata: { Make: "Apple", Model: "iPhone 15", DateTimeOriginal: "2024:03:12 14:05:09", OffsetTimeOriginal: "+02:00" },
+    })
+    expect(JSON.stringify(saved)).not.toMatch(/GPS|SECRET-SERIAL|Ana Perez|Serial|Owner/)
+  })
+
+  it("stores only an approximate location (2 decimals) when the visitor opted in", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    await createMemoryWith(full, input({ shareLocation: true }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: 40.71, approxLongitude: -74.01 })
+    // The exact coordinates (40.7128 / -74.006) appear nowhere in what is stored.
+    expect(JSON.stringify(saved)).not.toMatch(/40\.712|74\.006|42' 46|21\.6/)
+  })
+
+  it.each([
+    ["not opted in", false],
+    ["a value that is not the boolean true", "true"],
+    ["a truthy number", 1],
+    ["missing", undefined],
+  ])("stores no location when the visitor is %s, even though the photo has GPS", async (_name, shareLocation) => {
+    const { full, repository } = setup({}, { info: photo() })
+    await createMemoryWith(full, input({ shareLocation }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null })
+  })
+
+  it("stores no location when the visitor opted in but the photo has no valid GPS", async () => {
+    const { full, repository } = setup(
+      {},
+      { info: asset({ imageMetadata: { Make: "Apple", GPSLatitude: "95" }, colors: COLORS }) },
+    )
+    await createMemoryWith(full, input({ shareLocation: true }))
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ approxLatitude: null, approxLongitude: null })
+  })
+
+  it("never logs coordinates or metadata, even when saving fails", async () => {
+    const log = vi.fn()
+    const { full, repository } = setup({ log }, { info: photo() })
+    vi.mocked(repository.createPending).mockRejectedValueOnce(new Error("40.7128,-74.006 boom"))
+    await createMemoryWith(full, input({ shareLocation: true }))
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/40\.7|74\.0|GPS|Apple/)
   })
 })

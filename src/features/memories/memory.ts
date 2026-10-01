@@ -1,3 +1,5 @@
+import type { MediaKind, MetadataValue, PaletteColor, PhotoDetails } from "./photo-details"
+
 export type MemoryStatus = "pending" | "approved" | "rejected"
 
 /** A photo, a short caption and the date it happened, uploaded by an admitted visitor. */
@@ -14,10 +16,23 @@ export interface Memory {
   height: number
   status: MemoryStatus
   createdAt: Date
+  kind: MediaKind
+  /** Null only for rows stored before photo details existed. */
+  format: string | null
+  bytes: number | null
+  /** When the photo was taken (EXIF); null when unknown. */
+  takenAt: Date | null
+  dominantColor: string | null
+  palette: PaletteColor[]
+  /** A whitelist of non-identifying camera fields: never GPS, serials or owner names. */
+  metadata: Record<string, MetadataValue>
+  /** Rounded to 2 decimals (about 1 km), stored only when the visitor opted in. Never sent to the client. */
+  approxLatitude: number | null
+  approxLongitude: number | null
 }
 
 /** What a visitor submits. The handle comes from the session, never from this input. */
-export interface NewMemory {
+export interface MemoryCore {
   publicId: string
   caption: string
   happenedOn: Date
@@ -25,8 +40,11 @@ export interface NewMemory {
   height: number
 }
 
-/** Unvalidated input, same shape as {@link NewMemory}. */
-export type NewMemoryInput = NewMemory
+/** Unvalidated input, same shape as {@link MemoryCore}. */
+export type NewMemoryInput = MemoryCore
+
+/** What is stored for a new memory: the validated submission plus what the server learned from the photo. */
+export type NewMemory = MemoryCore & PhotoDetails
 
 export const CAPTION_MAX_LENGTH = 140
 export const EARLIEST_MEMORY_DATE = new Date("1900-01-01T00:00:00.000Z")

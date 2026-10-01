@@ -10,6 +10,10 @@ export interface AssetInfo {
   bytes: number
   width: number
   height: number
+  /** Embedded EXIF, IPTC and XMP, read from the original. Raw and sensitive (GPS): never log or send it. */
+  imageMetadata?: Record<string, unknown>
+  /** Cloudinary's `colors`: `[hex, share]` pairs. Raw; `photo-details` sanitizes it. */
+  colors?: unknown
 }
 
 /** Port: the Cloudinary calls the server makes. The adapter is the only code that touches the network. */

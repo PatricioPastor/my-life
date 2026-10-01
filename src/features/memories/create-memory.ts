@@ -1,7 +1,8 @@
 import "server-only"
-import { type CloudinaryAssets, verifyAsset } from "./cloudinary-assets"
+import { type AssetInfo, type CloudinaryAssets, verifyAsset } from "./cloudinary-assets"
 import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
+import { extractPhotoDetails } from "./photo-details"
 import { validateNewMemory } from "./validate-new-memory"
 import { RATE_LIMIT } from "./upload-limits"
 import { verifyUploadTicket } from "./upload-ticket"
@@ -86,6 +87,13 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
       return { ok: false, reason: "invalid", errors: validation.errors }
     }
 
+    const photo = info as AssetInfo // verified above, so it exists
+    // Only an explicit `true` opts in. The details keep an approximate location only with that consent.
+    const details = extractPhotoDetails(
+      { format: photo.format, bytes: photo.bytes, imageMetadata: photo.imageMetadata, colors: photo.colors },
+      { shareLocation: input.shareLocation === true },
+    )
+
     const repository = deps.repository()
     const recent = await repository.countRecentBy(visitor.handle, new Date(nowMs - RATE_LIMIT.windowMs))
     if (recent >= RATE_LIMIT.max) {
@@ -94,7 +102,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     }
 
     try {
-      const memory = await repository.createPending(visitor.handle, validation.value)
+      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details })
       const view = toMemoryView(memory, deps.cloudinary)
       if (!view) throw new Error("The new memory has no view.")
       return { ok: true, memory: view }

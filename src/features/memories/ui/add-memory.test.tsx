@@ -31,6 +31,9 @@ const MEMORY: MemoryView = {
   status: "pending",
   width: 800,
   height: 600,
+  kind: "image",
+  takenAt: null,
+  dominantColor: null,
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
 }
@@ -264,7 +267,7 @@ describe("AddMemory submit", () => {
     await act(async () => finishUpload({ ok: true }))
     const saving = await screen.findByRole("button", { name: "Guardando…" })
     expect((saving as HTMLButtonElement).disabled).toBe(true)
-    expect(create).toHaveBeenCalledWith({ ticket: "ticket-1", caption: "Una tarde de lluvia", happenedOn: "2024-03-12" })
+    expect(create).toHaveBeenCalledWith({ ticket: "ticket-1", caption: "Una tarde de lluvia", happenedOn: "2024-03-12", shareLocation: false })
 
     await act(async () => finishCreate({ ok: true, memory: MEMORY }))
     expect((await screen.findByRole("status")).textContent).toBe("Listo. Tu recuerdo quedó pendiente de aprobación.")
@@ -415,5 +418,63 @@ describe("AddMemory closing", () => {
     expect(screen.getByRole("dialog")).toBeTruthy()
     await act(async () => finishCreate({ ok: true, memory: MEMORY }))
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+  })
+})
+
+describe("AddMemory location consent", () => {
+  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar desde dónde fue" }) as HTMLInputElement
+
+  it("offers an unchecked checkbox to keep where the photo was taken", () => {
+    setup()
+    open()
+    expect(checkbox().checked).toBe(false)
+  })
+
+  it("explains, through aria-describedby, that only an approximate location is kept", () => {
+    setup()
+    open()
+    const id = checkbox().getAttribute("aria-describedby")
+    expect(id).toBeTruthy()
+    const help = document.getElementById(id!.split(" ")[0])
+    expect(help?.textContent).toBe("Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.")
+  })
+
+  it("sends shareLocation false when left unchecked", async () => {
+    const { create } = setup()
+    filled()
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
+  })
+
+  it("sends shareLocation true once the visitor ticks it", async () => {
+    const { create } = setup()
+    filled()
+    fireEvent.click(checkbox())
+    expect(checkbox().checked).toBe(true)
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: true }))
+  })
+
+  it("can be unticked again before saving", async () => {
+    const { create } = setup()
+    filled()
+    fireEvent.click(checkbox())
+    fireEvent.click(checkbox())
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
+  })
+
+  it("locks the checkbox while saving", async () => {
+    let finish!: (r: UploadResult) => void
+    const upload = vi.fn(() => new Promise<UploadResult>((resolve) => (finish = resolve)))
+    setup({ upload: upload as never })
+    filled()
+    submit()
+    await screen.findByRole("button", { name: /Subiendo/ })
+    expect(checkbox().disabled).toBe(true)
+    await act(async () => finish({ ok: true }))
   })
 })

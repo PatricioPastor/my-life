@@ -4,6 +4,7 @@ import { getPrisma } from "@/shared/db/client"
 import { withVisitor } from "@/shared/db/with-visitor"
 import type { Memory, NewMemory } from "./memory"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
+import { storedPaletteOf, whitelistMetadata } from "./photo-details"
 
 /** The most memories one listing returns. */
 export const MEMORY_LIST_LIMIT = 300
@@ -21,6 +22,17 @@ function toDomain(row: MemoryRow): Memory {
     height: row.height,
     status: row.status,
     createdAt: row.createdAt,
+    kind: row.kind,
+    format: row.format,
+    bytes: row.bytes,
+    takenAt: row.takenAt,
+    dominantColor: row.dominantColor,
+    // JSON columns are re-sanitized on the way out, so a hand-edited row cannot leak a field.
+    palette: storedPaletteOf(row.palette),
+    metadata: whitelistMetadata(row.metadata),
+    // Decimal columns arrive as Prisma.Decimal; the domain holds plain numbers.
+    approxLatitude: row.approxLatitude === null ? null : Number(row.approxLatitude),
+    approxLongitude: row.approxLongitude === null ? null : Number(row.approxLongitude),
   }
 }
 
@@ -46,7 +58,7 @@ export class PrismaMemoryRepository implements MemoryRepository {
   }
 
   async createPending(handle: string, input: NewMemory): Promise<Memory> {
-    // Only the columns app_user may insert; id, status and created_at come from DB defaults.
+    // Only the columns app_user may insert (column-level grants); id, status and created_at come from DB defaults.
     try {
       const row = await withVisitor(this.getDb(), handle, (tx) =>
         tx.memory.create({
@@ -57,6 +69,15 @@ export class PrismaMemoryRepository implements MemoryRepository {
             happenedOn: input.happenedOn,
             width: input.width,
             height: input.height,
+            kind: input.kind,
+            format: input.format,
+            bytes: input.bytes,
+            takenAt: input.takenAt,
+            dominantColor: input.dominantColor,
+            palette: input.palette,
+            metadata: input.metadata,
+            approxLatitude: input.approxLatitude,
+            approxLongitude: input.approxLongitude,
           },
         }),
       )

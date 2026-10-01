@@ -22,6 +22,9 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   status: "approved",
   width: 800,
   height: 600,
+  kind: "image",
+  takenAt: null,
+  dominantColor: null,
   thumbUrl: `https://res.cloudinary.com/demo/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/f/${id}`,
   ...over,
@@ -67,7 +70,7 @@ describe("MemoriesSpace adding a memory", () => {
     fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: "2024-03-12" } })
     fireEvent.click(screen.getByRole("button", { name: "Guardar recuerdo" }))
 
-    await waitFor(() => expect(createMemory).toHaveBeenCalledWith({ ticket: "t", caption: "Una tarde de lluvia", happenedOn: "2024-03-12" }))
+    await waitFor(() => expect(createMemory).toHaveBeenCalledWith({ ticket: "t", caption: "Una tarde de lluvia", happenedOn: "2024-03-12", shareLocation: false }))
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), { timeout: 3000 })
     const orb = screen.getByRole("button", { name: /Una tarde de lluvia.*pendiente/i })
     expect(orb.getAttribute("data-pending")).toBe("true")

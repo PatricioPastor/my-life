@@ -58,6 +58,8 @@ function MemoryForm({
   const [dragging, setDragging] = useState(false)
   const [caption, setCaption] = useState("")
   const [date, setDate] = useState("")
+  // Off by default: the visitor opts in to keeping an approximate place for this photo.
+  const [shareLocation, setShareLocation] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
   const [phase, setPhase] = useState<Phase>({ kind: "idle" })
   const controller = useRef<AbortController | null>(null)
@@ -137,6 +139,7 @@ function MemoryForm({
         ticket: prepared.upload.ticket,
         caption: caption.trim(),
         happenedOn: date,
+        shareLocation,
       })
       if (abort.signal.aborted) return
       if (!created.ok) return fail(messageForFailure(created))
@@ -268,6 +271,26 @@ function MemoryForm({
             {errors.date}
           </p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="memory-location" className="flex cursor-pointer items-center gap-3 text-ink">
+          <input
+            id="memory-location"
+            type="checkbox"
+            checked={shareLocation}
+            onChange={(e) => setShareLocation(e.target.checked)}
+            disabled={busy || phase.kind === "done"}
+            aria-describedby="memory-location-help"
+            data-magnetic="light"
+            data-cursor-label="Guardar ubicación"
+            className="h-4 w-4 shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+          />
+          <span className="t-body text-[length:var(--type-1)]">Guardar desde dónde fue</span>
+        </label>
+        <p id="memory-location-help" className="m-0 pl-7 text-xs tracking-[0.04em] text-ink-faint">
+          Solo guardamos una ubicación aproximada (unos 1 km), nunca la exacta.
+        </p>
       </div>
 
       {errors.form && (

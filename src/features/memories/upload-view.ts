@@ -18,6 +18,11 @@ export interface CreateMemoryInput {
   caption: string
   /** `YYYY-MM-DD`, the visitor calendar date. */
   happenedOn: string
+  /**
+   * The visitor ticked "Guardar desde dónde fue". Only an explicit `true` counts; the server alone decides what
+   * is stored (an approximate location, and only when the photo has valid GPS).
+   */
+  shareLocation: boolean
 }
 
 export type CreateMemoryFailure =

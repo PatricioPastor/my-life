@@ -16,6 +16,15 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   height: 600,
   status: "approved",
   createdAt: new Date("2026-10-01T00:00:00.000Z"),
+  kind: "image",
+  format: "jpg",
+  bytes: 1000,
+  takenAt: new Date("2024-03-12T12:05:09.000Z"),
+  dominantColor: "#112233",
+  palette: [{ color: "#112233", share: 40 }],
+  metadata: { Make: "Apple" },
+  approxLatitude: 40.71,
+  approxLongitude: -74.01,
   ...over,
 })
 
@@ -56,6 +65,9 @@ describe("listMemoriesWith", () => {
           status: "approved",
           width: 800,
           height: 600,
+          kind: "image",
+          takenAt: "2024-03-12T12:05:09.000Z",
+          dominantColor: "#112233",
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
         },
@@ -69,6 +81,18 @@ describe("listMemoriesWith", () => {
     const json = JSON.stringify(result)
     expect(json).not.toContain("ana")
     expect(json).not.toContain("publicId")
+  })
+
+  it("never sends the location, the palette or the metadata to the client", async () => {
+    const { full } = deps()
+    const json = JSON.stringify(await listMemoriesWith(full))
+    expect(json).not.toMatch(/latitude|longitude|approx|palette|metadata|Apple|40\.71|74\.01/i)
+  })
+
+  it("has a null taken date and color when the photo had none", async () => {
+    const { full } = deps({}, [memory({ takenAt: null, dominantColor: null })])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories[0]).toMatchObject({ takenAt: null, dominantColor: null })
   })
 
   it("keeps the repository's order and marks pending ones", async () => {

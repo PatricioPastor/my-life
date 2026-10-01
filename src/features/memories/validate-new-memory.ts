@@ -1,7 +1,7 @@
 import {
   CAPTION_MAX_LENGTH,
   EARLIEST_MEMORY_DATE,
-  type NewMemory,
+  type MemoryCore,
   type NewMemoryInput,
 } from "./memory"
 
@@ -16,7 +16,7 @@ export type MemoryValidationError =
   | "height_invalid"
 
 export type ValidationResult =
-  | { ok: true; value: NewMemory }
+  | { ok: true; value: MemoryCore }
   | { ok: false; errors: MemoryValidationError[] }
 
 const isPositiveInteger = (n: number) => Number.isInteger(n) && n > 0

@@ -1,11 +1,18 @@
 /**
  * Static rules for SQL migrations, enforced by `migration-lint.test.ts`:
  *  - every created table has ENABLE and FORCE ROW LEVEL SECURITY and at least one policy;
- *  - every created identifier (table, column, type, index) is snake_case.
+ *  - every created identifier (table, column, type, index) is snake_case, including columns added later;
+ *  - row-level security is never turned off or un-forced;
+ *  - nothing is granted to PUBLIC, app_user never gets UPDATE, DELETE or ALL, and no INSERT grant covers a
+ *    column the database fills itself (id, status, created_at).
  * `_prisma_migrations` is created by Prisma itself and is exempt from the table rules.
  */
 
 export const SNAKE_CASE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/
+
+/** Columns the runtime role must never write: the database fills them. */
+const DB_FILLED_COLUMNS = ["id", "status", "created_at"]
+const FORBIDDEN_PRIVILEGES = /\b(UPDATE|DELETE|ALL|TRUNCATE|REFERENCES|TRIGGER)\b/i
 
 const PRISMA_TABLE = "_prisma_migrations"
 const IDENT = String.raw`(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?`
@@ -83,6 +90,29 @@ export function lintMigration(rawSql: string): string[] {
     }
     if (!new RegExp(String.raw`CREATE\s+POLICY\s+\S+\s+ON\s+(?:public\.)?"?${table}"?\s`, "i").test(sql)) {
       problems.push(`table "${table}" has no CREATE POLICY`)
+    }
+  }
+
+  for (const m of sql.matchAll(/ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([A-Za-z_][A-Za-z0-9_]*)"?/gi)) {
+    checkSnake("added column", m[1], problems)
+  }
+
+  for (const m of sql.matchAll(/ALTER\s+TABLE\s+[^;]*?\b(DISABLE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY/gi)) {
+    problems.push(`${m[1].toUpperCase().replace(/\s+/g, " ")} ROW LEVEL SECURITY is not allowed`)
+  }
+
+  for (const statement of sql.split(";")) {
+    const grant = /^\s*GRANT\s+([\s\S]+?)\s+ON\s+[\s\S]+?\s+TO\s+([\s\S]+)$/i.exec(statement)
+    if (!grant) continue
+    const privileges = grant[1]
+    const roles = grant[2].split(",").map((r) => r.trim().replace(/"/g, "").toLowerCase())
+    if (roles.includes("public")) problems.push("a GRANT to PUBLIC is not allowed")
+    if (FORBIDDEN_PRIVILEGES.test(privileges.replace(/\([^)]*\)/g, ""))) {
+      problems.push(`app_user must not get ${privileges.replace(/\s+/g, " ").trim()}`)
+    }
+    const insertColumns = /INSERT\s*\(([^)]*)\)/i.exec(privileges)?.[1] ?? ""
+    for (const column of insertColumns.split(",").map((c) => c.trim().replace(/"/g, ""))) {
+      if (DB_FILLED_COLUMNS.includes(column)) problems.push(`INSERT grant includes "${column}", which the database fills`)
     }
   }
 

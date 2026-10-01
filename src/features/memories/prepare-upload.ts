@@ -45,6 +45,9 @@ export async function prepareUploadWith(deps: PrepareUploadDeps): Promise<Prepar
     // `overwrite=false` so a signature that outlives the ticket cannot replace the photo after approval.
     const signed = {
       allowed_formats: ALLOWED_FORMATS_PARAM,
+      // Embedded EXIF and the predominant colors, read back on the server by createMemory.
+      colors: "true",
+      media_metadata: "true",
       overwrite: "false",
       public_id: publicId,
       timestamp: String(timestamp),

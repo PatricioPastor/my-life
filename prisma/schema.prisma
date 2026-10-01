@@ -21,6 +21,13 @@ enum MemoryStatus {
   @@map("memory_status")
 }
 
+/// What kind of media a memory holds. Only photos for now; audio and video come later.
+enum MediaKind {
+  image
+
+  @@map("media_kind")
+}
+
 /// A photo, a short caption and the date it happened, uploaded by an admitted visitor.
 /// Stays `pending` until the owner approves it with a manual UPDATE.
 model Memory {
@@ -35,6 +42,22 @@ model Memory {
   height     Int
   status     MemoryStatus @default(dbgenerated("'pending'::memory_status"))
   createdAt  DateTime     @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz(3)
+
+  /// Server-computed from Cloudinary's answer (never from the browser). Nullable ones can be missing.
+  kind           MediaKind @default(image)
+  format         String?
+  bytes          Int?
+  /// EXIF DateTimeOriginal (plus OffsetTimeOriginal), when present and valid.
+  takenAt        DateTime? @map("taken_at") @db.Timestamptz(3)
+  /// `#rrggbb` of the most prominent color.
+  dominantColor  String?   @map("dominant_color") @db.VarChar(7)
+  /// The top few colors: [{ "color": "#rrggbb", "share": 12.3 }]. Not sent to the client.
+  palette        Json      @default("[]")
+  /// Whitelisted, non-identifying EXIF fields. Never GPS, serials or owner names. Not sent to the client.
+  metadata       Json      @default("{}")
+  /// Approximate location, rounded to 2 decimals (about 1 km). Set only when the visitor opted in. Never exact.
+  approxLatitude  Decimal? @map("approx_latitude") @db.Decimal(5, 2)
+  approxLongitude Decimal? @map("approx_longitude") @db.Decimal(5, 2)
 
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")

@@ -8,6 +8,11 @@ export interface MemoryView {
   status: "approved" | "pending"
   width: number
   height: number
+  kind: "image"
+  /** ISO 8601 UTC from the photo's EXIF, or null when unknown. */
+  takenAt: string | null
+  /** `#rrggbb`, or null. */
+  dominantColor: string | null
   thumbUrl: string
   fullUrl: string
 }

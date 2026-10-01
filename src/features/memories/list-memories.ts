@@ -28,6 +28,9 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     status: memory.status,
     width: memory.width,
     height: memory.height,
+    kind: memory.kind,
+    takenAt: memory.takenAt ? memory.takenAt.toISOString() : null,
+    dominantColor: memory.dominantColor,
     thumbUrl: cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
   }
