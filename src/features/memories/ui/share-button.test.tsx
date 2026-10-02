@@ -55,6 +55,8 @@ afterEach(() => {
 
 const click = async (share = okShare(), m: MemoryView = memory) => {
   render(<ShareButton memory={m} share={share} />)
+  // The link was asked for when the button appeared and has arrived by the time anyone presses it.
+  await act(async () => {})
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Compartir" }))
   })
@@ -184,5 +186,62 @@ describe("ShareButton", () => {
     expect(button.getAttribute("aria-busy")).toBe("true")
     await act(async () => resolve({ ok: true, url: URL_SHARED }))
     expect(button.getAttribute("aria-busy")).toBeNull()
+  })
+
+  describe("prefetching the link, to keep the user gesture", () => {
+    it("asks for the link when it appears, once per memory, however often it renders", async () => {
+      onPhone()
+      const share = okShare()
+      const { rerender } = render(<ShareButton memory={memory} share={share} />)
+      rerender(<ShareButton memory={memory} share={share} />)
+      await act(async () => {})
+      expect(share).toHaveBeenCalledTimes(1)
+      expect(share).toHaveBeenCalledWith(memory.id)
+    })
+
+    it("never asks for a pending memory", async () => {
+      onPhone()
+      const share = okShare()
+      render(<ShareButton memory={{ ...memory, status: "pending" }} share={share} />)
+      await act(async () => {})
+      expect(share).not.toHaveBeenCalled()
+    })
+
+    it("opens the share sheet inside the click itself when the link is cached: no await in between", async () => {
+      onPhone()
+      const share = okShare()
+      render(<ShareButton memory={memory} share={share} />)
+      await act(async () => {})
+      fireEvent.click(screen.getByRole("button", { name: "Compartir" }))
+      // Nothing was awaited since the click: the sheet is already open.
+      expect(webShare).toHaveBeenCalledWith({ title: "Una tarde de lluvia", text: "Un recuerdo de patriciopastor", url: URL_SHARED })
+      expect(share).toHaveBeenCalledTimes(1)
+      await act(async () => {})
+      expect(track).toHaveBeenCalledWith("memory_shared")
+    })
+
+    it("falls back to copying once the link arrives when it was not ready at click time", async () => {
+      onPhone()
+      let resolve: (value: ShareMemoryResult) => void = () => {}
+      const share = asks(() => new Promise<ShareMemoryResult>((r) => (resolve = r)))
+      render(<ShareButton memory={memory} share={share} />)
+      fireEvent.click(screen.getByRole("button", { name: "Compartir" }))
+      expect(webShare).not.toHaveBeenCalled()
+      await act(async () => resolve({ ok: true, url: URL_SHARED }))
+      expect(writeText).toHaveBeenCalledWith(URL_SHARED)
+      expect(share).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole("status").textContent).toBe("Enlace copiado")
+    })
+
+    it("asks again at click time when the prefetch failed", async () => {
+      onDesktop()
+      const share = asks(async () => ({ ok: false, reason: "unavailable" }))
+      render(<ShareButton memory={memory} share={share} />)
+      await act(async () => {})
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Compartir" }))
+      })
+      expect(share).toHaveBeenCalledTimes(2)
+    })
   })
 })

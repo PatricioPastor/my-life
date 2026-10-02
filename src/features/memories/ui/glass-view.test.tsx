@@ -762,4 +762,30 @@ describe("GlassView share control", () => {
     mount({ share })
     expect(within(dialog()).getByRole("button", { name: "Cerrar" })).toBeTruthy()
   })
+
+  it("does not steal the initial focus: it lands on Cerrar, as before, and Compartir is next in Tab order", () => {
+    mount({ share })
+    expect(document.activeElement).toBe(within(dialog()).getByRole("button", { name: "Cerrar" }))
+    const buttons = within(dialog()).getAllByRole("button")
+    expect(buttons.indexOf(within(dialog()).getByRole("button", { name: "Compartir" }))).toBe(
+      buttons.indexOf(within(dialog()).getByRole("button", { name: "Cerrar" })) + 1,
+    )
+  })
+
+  it("prefetches the link of the memory on open, once per memory for the whole session", async () => {
+    const view = mount({ share })
+    await act(async () => {})
+    expect(share).toHaveBeenCalledTimes(1)
+    expect(share).toHaveBeenCalledWith("p")
+    view.again({ memory: null })
+    view.again({ share, memory: photo })
+    await act(async () => {})
+    expect(share).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not prefetch for a pending memory", async () => {
+    mount({ memory: { ...photo, status: "pending" }, share })
+    await act(async () => {})
+    expect(share).not.toHaveBeenCalled()
+  })
 })

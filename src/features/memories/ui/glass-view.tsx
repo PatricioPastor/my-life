@@ -14,6 +14,7 @@ import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { formatClock } from "./glass-mode"
 import { GlassSphere } from "./glass-orb"
 import type { Lens } from "./lens"
+import { createShareCache } from "./share-cache"
 import { ShareButton } from "./share-button"
 import { swipeStep } from "./swipe"
 import { useAudioLevel } from "./use-audio-level"
@@ -333,6 +334,12 @@ export function GlassView({
   share,
 }: GlassViewProps) {
   const guest = guestExit !== undefined
+  // The share links asked for so far, for the whole session: each memory's link is asked for once, when it opens.
+  // The share function is taken once: it is a server action, or a link the page holds, and does not change.
+  const [shareLinks] = useState(() =>
+    createShareCache((id) => (share ? share(id) : Promise.resolve({ ok: false, reason: "unavailable" }))),
+  )
+
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
   if (memory && memory !== held) setHeld(memory)
@@ -430,8 +437,8 @@ export function GlassView({
         >
           {shown && (
             <>
-              <div className="pointer-events-none absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex items-center">
-                {share && <ShareButton memory={shown} share={share} />}
+              {/* Cerrar comes first in the DOM, so it keeps the dialog's initial focus; the row is reversed to show Compartir before it. */}
+              <div className="pointer-events-none absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex flex-row-reverse items-center">
                 <Dialog.Close
                   data-magnetic="light"
                   data-cursor-label="Cerrar"
@@ -439,6 +446,7 @@ export function GlassView({
                 >
                   Cerrar
                 </Dialog.Close>
+                {share && <ShareButton memory={shown} share={share} cache={shareLinks} />}
               </div>
               <GlassSphere
                 memory={shown}

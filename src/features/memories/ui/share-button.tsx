@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react"
 import { track } from "@/shared/analytics"
 import type { MemoryView } from "../memory-view"
 import type { ShareMemoryResult } from "../share/share-view"
+import { createShareCache, type ShareCache } from "./share-cache"
 
 interface ShareButtonProps {
   memory: MemoryView
   /** Asks for the absolute link of a memory: the server action for a visitor, the link they hold for a guest. */
   share: (id: string) => Promise<ShareMemoryResult>
+  /** The links asked for so far, kept by the glass for the whole session. Without it the button keeps its own. */
+  cache?: ShareCache
 }
 
 /** How long "Enlace copiado" stays: long enough to read, short enough to be gone before the next thing. */
@@ -42,13 +45,21 @@ async function copy(url: string): Promise<boolean> {
  * share sheet on a phone, or copies the link on a desktop (or when the sheet is not there or fails), saying so quietly.
  * Cancelling the sheet is not an error and says nothing. The server builds the link; this only passes it on.
  */
-export function ShareButton({ memory, share }: ShareButtonProps) {
+export function ShareButton({ memory, share, cache }: ShareButtonProps) {
+  const [own] = useState(() => cache ?? createShareCache(share))
+  const links = cache ?? own
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pressed = useRef(false)
 
   useEffect(() => () => clearTimeout(timer.current), [])
+
+  // The link is asked for as soon as the button is there, so the click does not have to wait for the server.
+  const { id, status } = memory
+  useEffect(() => {
+    if (status === "approved") links.prefetch(id)
+  }, [links, id, status])
 
   if (memory.status !== "approved") return null
 
@@ -64,15 +75,14 @@ export function ShareButton({ memory, share }: ShareButtonProps) {
     pressed.current = true
     setBusy(true)
     try {
-      let result: ShareMemoryResult
-      try {
-        result = await share(memory.id)
-      } catch {
-        result = { ok: false, reason: "unavailable" }
-      }
+      // With the link in hand nothing is awaited before the sheet opens, so the click's user gesture is still valid
+      // (iOS Safari refuses the sheet otherwise). Without it, the link is awaited and the copy flow takes over.
+      const cached = links.peek(memory.id)
+      const result = cached ?? (await links.get(memory.id))
       if (!result.ok) return say(COPY.noLink)
 
-      if (prefersShareSheet()) {
+      // A link that had to be awaited has lost the gesture: the sheet would be refused, so it is copied.
+      if (cached && prefersShareSheet()) {
         try {
           await navigator.share({ title: memory.caption, text: SHARE_TEXT, url: result.url })
           track("memory_shared")
