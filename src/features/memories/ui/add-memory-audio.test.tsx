@@ -150,13 +150,39 @@ const audioFile = (over: Partial<{ name: string; type: string; size: number; las
   Object.defineProperty(file, "size", { value: size })
   return file
 }
-const pickPhoto = (file: File) => fireEvent.change(screen.getByLabelText("Foto"), { target: { files: [file] } })
-const pickAudio = (file: File) => fireEvent.change(screen.getByLabelText("Subir audio"), { target: { files: [file] } })
+const step = () => Number(screen.getByTestId("memory-form").getAttribute("data-step"))
+const next = () => fireEvent.click(screen.getByRole("button", { name: "Siguiente" }))
+/** Walks to a step with Siguiente and Atrás, the way the visitor does: Siguiente only moves on from a complete step. */
+function goTo(target: number) {
+  for (let moves = 0; step() !== target; moves++) {
+    if (moves > 3) throw new Error(`Stuck on step ${step()} on the way to step ${target}`)
+    fireEvent.click(screen.getByRole("button", { name: step() < target ? "Siguiente" : "Atrás" }))
+  }
+}
+const photoInput = () => screen.getByLabelText(/^(Elegir|Cambiar) foto$/) as HTMLInputElement
+const pickPhoto = (file: File) => {
+  goTo(1)
+  fireEvent.change(photoInput(), { target: { files: [file] } })
+}
+const pickAudio = (file: File) => {
+  goTo(1)
+  fireEvent.change(screen.getByLabelText("Subir audio"), { target: { files: [file] } })
+}
+/** The words and the date, on the second step: the visitor gets there once there is a photo or a voice. */
 const fill = (caption = "Mi voz", date = "2024-03-12") => {
+  goTo(2)
   fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: caption } })
   fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: date } })
 }
-const submit = () => fireEvent.click(screen.getByRole("button", { name: /Guardar recuerdo|Subiendo|Guardando/ }))
+/** On to the color, the last step. */
+const toColor = () => {
+  fill()
+  goTo(3)
+}
+const submit = () => {
+  goTo(3)
+  fireEvent.click(screen.getByRole("button", { name: /Guardar recuerdo|Subiendo|Guardando/ }))
+}
 const heard = () => screen.findByRole("button", { name: "Escuchar" })
 const group = () => screen.getByRole("group", { name: AUDIO_COPY.label })
 const swatches = () => within(screen.getByRole("radiogroup", { name: ORB_COLOR_COPY.label })).getAllByRole("radio") as HTMLButtonElement[]
@@ -169,21 +195,22 @@ async function record() {
 }
 
 describe("AddMemory: the photo is optional now", () => {
-  it("has a Foto section and an Audio section, both labelled", () => {
+  it("has a photo and a voice on the first step, both labelled", () => {
     setup()
     open()
-    expect(screen.getByLabelText("Foto")).toBeTruthy()
+    expect(photoInput().type).toBe("file")
     expect(group()).toBeTruthy()
+    expect(group().closest("[data-step-panel]")?.getAttribute("data-step-panel")).toBe("1")
   })
 
-  it("asks for a photo or an audio, linked to the audio section, and uploads nothing", () => {
+  it("asks for a photo or the voice before going on, linked to the voice too, and uploads nothing", () => {
     const { prepare, upload } = setup()
     open()
-    fill()
-    submit()
+    next()
     const error = screen.getByText(COPY.media)
-    expect(COPY.media).toBe("Agrega una foto o un audio.")
+    expect(COPY.media).toBe("Agrega una foto o tu voz para seguir.")
     expect(group().getAttribute("aria-describedby")).toContain(error.id)
+    expect(step()).toBe(1)
     expect(prepare).not.toHaveBeenCalled()
     expect(upload).not.toHaveBeenCalled()
   })
@@ -193,9 +220,8 @@ describe("AddMemory: the photo is optional now", () => {
     open()
     const before = screen.getByTestId("photo-drop").className
     pickPhoto(photo({ name: "lluvia.jpg" }))
-    expect(screen.getByText("lluvia.jpg")).toBeTruthy()
+    expect(screen.getByRole("img", { name: "Vista previa" })).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
-    expect(screen.queryByText("lluvia.jpg")).toBeNull()
     expect(screen.queryByRole("img", { name: "Vista previa" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Quitar foto" })).toBeNull()
     expect(screen.getByTestId("photo-drop").className).toBe(before)
@@ -209,10 +235,13 @@ describe("AddMemory: the photo is optional now", () => {
     await heard()
     fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
     expect(screen.getByRole("button", { name: "Escuchar" })).toBeTruthy()
+    next()
+    expect(step()).toBe(2)
+    goTo(1)
     fireEvent.click(screen.getByRole("button", { name: "Quitar audio" }))
-    fill()
-    submit()
+    next()
     expect(screen.getByText(COPY.media)).toBeTruthy()
+    expect(step()).toBe(1)
   })
 })
 
@@ -331,14 +360,15 @@ describe("AddMemory: recording", () => {
     expect(screen.getByText(RECORDER_COPY.errors.unsupported)).toBeTruthy()
   })
 
-  it("does not save while a recording is still going, and says why", async () => {
+  it("does not go on while a recording is still going, says why, and focuses Detener", async () => {
     const { prepare } = setup({ recorderEnv: micEnv() })
     open()
-    fill()
     fireEvent.click(screen.getByRole("button", { name: "Grabar" }))
     await screen.findByRole("timer")
-    submit()
+    next()
     expect(screen.getByText(COPY.audioRecording)).toBeTruthy()
+    expect(step()).toBe(1)
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Detener" }))
     expect(prepare).not.toHaveBeenCalled()
   })
 
@@ -359,8 +389,8 @@ describe("AddMemory: saving with audio", () => {
     open()
     const file = audioFile()
     pickAudio(file)
-    fill()
     await heard()
+    fill()
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(prepare).toHaveBeenCalledWith({ photo: false, audio: true })
@@ -380,8 +410,8 @@ describe("AddMemory: saving with audio", () => {
     open()
     pickPhoto(photo())
     pickAudio(audioFile())
-    fill()
     await heard()
+    fill()
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(prepare).toHaveBeenCalledWith({ photo: true, audio: true })
@@ -393,8 +423,8 @@ describe("AddMemory: saving with audio", () => {
   it("sends a recording under a name with the extension of its container", async () => {
     const { upload, create } = setup({ recorderEnv: micEnv() })
     open()
-    fill()
     await record()
+    fill()
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(upload.mock.calls[0][0]).toMatchObject({ name: "recuerdo.webm", resource: "video" })
@@ -415,8 +445,8 @@ describe("AddMemory: saving with audio", () => {
     open()
     pickPhoto(photo({ size: 3000 }))
     pickAudio(audioFile({ size: 1000 }))
-    fill()
     await heard()
+    fill()
     submit()
     // The photo is done (3000 of 4000 bytes) and the audio is halfway (500 of 1000): 3500 of 4000.
     expect(await screen.findByRole("button", { name: "Subiendo… 88%" })).toBeTruthy()
@@ -431,29 +461,30 @@ describe("AddMemory: saving with audio", () => {
     open()
     pickPhoto(photo())
     pickAudio(audioFile())
-    fill()
     await heard()
+    fill()
     submit()
     expect((await screen.findByRole("alert")).textContent).toBe(COPY.unavailable)
     expect(create).not.toHaveBeenCalled()
   })
 
-  it("shows the server's verdict on the audio next to the audio", async () => {
+  it("shows the server's verdict on the audio next to the audio, back on the first step", async () => {
     setup({ create: async () => ({ ok: false, reason: "audio_too_long" }) })
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    fill()
     submit()
     const error = await screen.findByText(COPY.audioLong)
+    await waitFor(() => expect(step()).toBe(1))
     expect(group().contains(error)).toBe(true)
   })
 
   it("tracks memory_audio_recorded, with no props, for a recording but not for an uploaded file", async () => {
     setup({ recorderEnv: micEnv() })
     open()
-    fill()
     await record()
+    fill()
     submit()
     await waitFor(() => expect(track).toHaveBeenCalledWith("memory_audio_recorded"))
     expect(track.mock.calls.filter(([name]) => name === "memory_audio_recorded")).toHaveLength(1)
@@ -464,8 +495,8 @@ describe("AddMemory: saving with audio", () => {
     setup()
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    fill()
     submit()
     await waitFor(() => expect(track).toHaveBeenCalledWith("memory_submitted"))
     expect(track).not.toHaveBeenCalledWith("memory_audio_recorded")
@@ -475,15 +506,16 @@ describe("AddMemory: saving with audio", () => {
     setup({ upload: () => new Promise<UploadResult>(() => undefined) })
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    fill()
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
+    // The voice is on the first step, out of sight while the last one saves: its controls are locked all the same.
     for (const name of ["Escuchar", "Grabar de nuevo", "Quitar audio"]) {
-      const button = screen.queryByRole("button", { name }) as HTMLButtonElement | null
+      const button = screen.queryByRole("button", { name, hidden: true }) as HTMLButtonElement | null
       if (button) expect(button.disabled).toBe(true)
     }
-    expect((screen.getByRole("button", { name: "Escuchar" }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole("button", { name: "Escuchar", hidden: true }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
@@ -495,6 +527,7 @@ describe("AddMemory: the orb color with and without a photo", () => {
     open()
     pickAudio(audioFile())
     await heard()
+    toColor()
     expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(ORB_HUES)
     expect(checked()).toBe(ORB_HUES[3])
     expect(screen.getByText(ORB_COLOR_COPY.voice)).toBeTruthy()
@@ -509,6 +542,7 @@ describe("AddMemory: the orb color with and without a photo", () => {
     fireEvent.click(screen.getByRole("button", { name: "Quitar audio" }))
     pickAudio(audioFile({ name: "otra.mp3" }))
     await heard()
+    toColor()
     expect(checked()).toBe(ORB_HUES[10])
     expect(random).toHaveBeenCalledTimes(1)
   })
@@ -517,8 +551,8 @@ describe("AddMemory: the orb color with and without a photo", () => {
     const { create } = setup({ random: () => 0 })
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    toColor()
     expect(checked()).toBe(ORB_HUES[0])
     submit()
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[0] })))
@@ -527,8 +561,8 @@ describe("AddMemory: the orb color with and without a photo", () => {
     const again = setup({ random: () => 0.99 })
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    toColor()
     expect(checked()).toBe(ORB_HUES[11])
     submit()
     await waitFor(() => expect(again.create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[11] })))
@@ -538,8 +572,8 @@ describe("AddMemory: the orb color with and without a photo", () => {
     const { create } = setup({ random: () => 0.5 })
     open()
     pickAudio(audioFile())
-    fill()
     await heard()
+    toColor()
     fireEvent.click(swatches()[2])
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
@@ -552,6 +586,7 @@ describe("AddMemory: the orb color with and without a photo", () => {
     pickAudio(audioFile())
     pickPhoto(photo())
     await heard()
+    toColor()
     await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual([...SWATCHES, ...ORB_HUES]))
     expect(checked()).toBe(SWATCHES[0])
     expect(screen.getByText(ORB_COLOR_COPY.fromPhoto)).toBeTruthy()
@@ -563,8 +598,11 @@ describe("AddMemory: the orb color with and without a photo", () => {
     pickPhoto(photo())
     pickAudio(audioFile())
     await heard()
+    toColor()
     await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual([...SWATCHES, ...ORB_HUES]))
+    goTo(1)
     fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
+    goTo(3)
     expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(ORB_HUES)
     expect(checked()).toBe(ORB_HUES[6])
   })
@@ -575,7 +613,7 @@ describe("AddMemory: the orb color with and without a photo", () => {
     pickAudio(audioFile())
     await heard()
     fireEvent.click(screen.getByRole("button", { name: "Quitar audio" }))
-    expect(screen.queryByRole("radiogroup")).toBeNull()
+    expect(screen.getByTestId("orb-swatches").getAttribute("role")).toBeNull()
     expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
   })
 
@@ -586,24 +624,20 @@ describe("AddMemory: the orb color with and without a photo", () => {
     await heard()
     const orb = () => screen.getByTestId("talking-orb")
     expect(orb().style.getPropertyValue("--pc")).toBe(ORB_HUES[0])
+    toColor()
     fireEvent.click(swatches()[1])
     expect(orb().style.getPropertyValue("--pc")).toBe(ORB_HUES[1])
   })
 })
 
 describe("AddMemory: layout of the audio section", () => {
-  it("sits in the left column, between the photo and the orb color, inside the one scroll region", async () => {
+  it("sits on the first step, after the photo, inside the one scroll region", async () => {
     setup()
     open()
-    const columns = screen.getByTestId("memory-columns")
-    const [left] = Array.from(columns.children) as HTMLElement[]
     const audio = group()
-    expect(left.contains(audio)).toBe(true)
+    expect(audio.closest("[data-step-panel]")?.getAttribute("data-step-panel")).toBe("1")
     expect(screen.getByTestId("memory-scroll").contains(audio)).toBe(true)
-    const photoInput = screen.getByLabelText("Foto")
-    const picker = screen.getByText(ORB_COLOR_COPY.label)
-    expect(photoInput.compareDocumentPosition(audio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(audio.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(photoInput().compareDocumentPosition(audio) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it("keeps the audio box the same height before and after an audio is held, so nothing jumps", async () => {
@@ -614,7 +648,8 @@ describe("AddMemory: layout of the audio section", () => {
     pickAudio(audioFile())
     await heard()
     expect(box().className).toBe(before)
-    expect(before).toMatch(/(^|\s)min-h-/)
+    // 44 px controls and the panel padding above and below them.
+    expect(before).toContain("h-[calc(2.75rem+2*var(--panel-pad))]")
   })
 
   it("has no section that scrolls by itself", () => {

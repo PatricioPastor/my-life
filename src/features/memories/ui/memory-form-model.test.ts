@@ -25,7 +25,8 @@ describe("validateForm", () => {
 
   it("asks for a photo or an audio when there is neither", () => {
     expect(validateForm({ ...ok, file: null })).toEqual({ media: COPY.media })
-    expect(COPY.media).toBe("Agrega una foto o un audio.")
+    // Said on the first step, where the photo and the voice are: it is what stands between the visitor and the next one.
+    expect(COPY.media).toBe("Agrega una foto o tu voz para seguir.")
   })
 
   it("refuses the wrong type or size of a photo", () => {
@@ -127,9 +128,9 @@ describe("validateForm: audio", () => {
     expect(validateForm({ ...ok, audio: voice({ durationMs: null }) }).audio).toBeUndefined()
   })
 
-  it("tells the visitor to stop the recording before saving, instead of asking for an audio", () => {
+  it("tells the visitor to stop the recording before going on, instead of asking for an audio", () => {
     expect(validateForm({ ...ok, file: null, audio: null, recording: true })).toEqual({ audio: COPY.audioRecording })
-    expect(COPY.audioRecording).toBe("Detén la grabación antes de guardar.")
+    expect(COPY.audioRecording).toBe("Detén la grabación para seguir.")
   })
 
   it("keeps the caption and date rules for an audio-only memory", () => {

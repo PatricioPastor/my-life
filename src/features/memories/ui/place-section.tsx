@@ -1,16 +1,11 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { cn } from "@/shared/lib/utils"
 import { coordinatesLabel, googleMapsUrl, linkPlaceLabel, PLACE_COPY, suggestionLabel } from "./place-model"
+import { ERROR, HINT, INPUT, LABEL } from "./sheet-styles"
 import type { MapsLinkState } from "./use-maps-link"
 import type { PhotoPlace } from "./use-photo-place"
-
-const LABEL_CLASS = "t-label text-ink-muted"
-const FIELD_CLASS = cn(
-  "border border-[#a8c8ff]/25",
-  "w-full rounded-sm bg-white/[0.04] px-3 py-2.5 text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint",
-  "focus-visible:border-[#a8c8ff]/70 aria-[invalid=true]:border-signal/70",
-)
 
 interface PlaceSectionProps {
   /** What the photo's own GPS says. */
@@ -22,6 +17,10 @@ interface PlaceSectionProps {
   consent: boolean
   onConsentChange: (next: boolean) => void
   disabled: boolean
+  /** Why the form will not go on with this link (still being read, or not understood), shown beside it. */
+  error?: string
+  /** Another way to answer the same question, right under the heading ("Mismo lugar"). */
+  children?: ReactNode
 }
 
 /** The place to show: the link's when it resolved (it replaces the photo's suggestion), else the photo's. */
@@ -65,23 +64,26 @@ function statusText(place: PhotoPlace, link: MapsLinkState): string {
 }
 
 /**
- * "¿Dónde se sacó?": where the PHOTO was taken, suggested from its own GPS (never the visitor's location). The
- * visitor can check the spot on the map, correct it with a Google Maps link, and decides whether to keep it.
+ * "¿Dónde fue?": where the PHOTO was taken, suggested from its own GPS (never the visitor's location). The visitor can
+ * check the spot on the map, correct it with a Google Maps link, and decides whether to keep it. The link field stays
+ * while it holds text, so a link the form will not take can always be fixed or cleared.
  */
-export function PlaceSection({ place, link, onLinkChange, consent, onConsentChange, disabled }: PlaceSectionProps) {
+export function PlaceSection({ place, link, onLinkChange, consent, onConsentChange, disabled, error, children }: PlaceSectionProps) {
   const shown = shownPlace(place, link.state)
-  const asksForLink = place.status === "found" || place.status === "none"
-  const errorId = link.state.status === "error" ? "memory-link-error" : undefined
-  const describedBy = ["memory-place-help", errorId].filter(Boolean).join(" ")
+  const asksForLink = place.status === "found" || place.status === "none" || link.text.trim() !== ""
+  const linkErrorId = link.state.status === "error" ? "memory-link-error" : undefined
+  const blockedId = error ? "memory-place-error" : undefined
+  const describedBy = ["memory-place-help", linkErrorId, blockedId].filter(Boolean).join(" ")
 
   return (
     <div role="group" aria-labelledby="memory-place-label" className="flex flex-col gap-2">
-      <span id="memory-place-label" className={LABEL_CLASS}>
+      <span id="memory-place-label" className={LABEL}>
         {PLACE_COPY.heading}
       </span>
+      {children}
       {/* What the place is, and where to check it, share a line when there is room. */}
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <p id="memory-place-status" aria-live="polite" className="t-body m-0 text-[length:var(--type-1)] text-ink">
+        <p id="memory-place-status" aria-live="polite" className={cn(HINT, "text-[length:var(--type-1)] text-ink")}>
           {statusText(place, link.state)}
         </p>
         {shown && shown.lat !== null && shown.lng !== null && (
@@ -91,19 +93,22 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
             rel="noopener noreferrer"
             data-magnetic="light"
             data-cursor-label="Abrir mapa"
-            className="w-fit text-xs tracking-[0.06em] text-ink-muted underline underline-offset-4 transition-colors duration-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+            className="t-body w-fit text-sm text-ink-muted underline underline-offset-4 transition-colors duration-150 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
           >
             {PLACE_COPY.mapLink}
           </a>
         )}
       </div>
       {shown?.address && (
-        <p id="memory-place-address" className="m-0 text-xs tracking-[0.04em] text-ink-muted [overflow-wrap:anywhere]">
+        <p id="memory-place-address" className={cn(HINT, "[overflow-wrap:anywhere]")}>
           {shown.address}
         </p>
       )}
       {shown && (
-        <label htmlFor="memory-location" className={cn("flex cursor-pointer items-center gap-3 text-ink", disabled && "cursor-default")}>
+        <label
+          htmlFor="memory-location"
+          className={cn("flex min-h-11 cursor-pointer items-center gap-3 text-ink", disabled && "cursor-default")}
+        >
           <input
             id="memory-location"
             type="checkbox"
@@ -113,14 +118,14 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
             aria-describedby="memory-place-help"
             data-magnetic="light"
             data-cursor-label="Guardar lugar"
-            className="h-4 w-4 shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+            className="size-[1.125rem] shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
           />
-          <span className="t-body text-[length:var(--type-1)]">{PLACE_COPY.consent}</span>
+          <span className="t-body text-pretty text-sm leading-snug">{PLACE_COPY.consent}</span>
         </label>
       )}
       {asksForLink && (
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="memory-maps-link" className="t-body text-[length:var(--type-1)] text-ink-muted">
+          <label htmlFor="memory-maps-link" className={cn(HINT, "block")}>
             {place.status === "found" ? PLACE_COPY.linkLabelFound : PLACE_COPY.linkLabelNone}
           </label>
           <input
@@ -134,22 +139,27 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
             disabled={disabled}
             placeholder={PLACE_COPY.linkPlaceholder}
             aria-describedby={describedBy}
-            aria-invalid={errorId ? true : undefined}
-            className={cn(FIELD_CLASS, "text-[length:var(--type-1)]")}
+            aria-invalid={linkErrorId || blockedId ? true : undefined}
+            className={INPUT}
           />
           {link.state.status === "resolving" && (
-            <p role="status" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
+            <p role="status" className={HINT}>
               {PLACE_COPY.linkReading}
             </p>
           )}
           {link.state.status === "error" && (
-            <p id="memory-link-error" className="t-body m-0 text-[length:var(--type-1)] leading-snug text-signal">
+            <p id="memory-link-error" className={ERROR}>
               {link.state.message}
+            </p>
+          )}
+          {error && (
+            <p id="memory-place-error" role="alert" className={ERROR}>
+              {error}
             </p>
           )}
         </div>
       )}
-      <p id="memory-place-help" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
+      <p id="memory-place-help" className={HINT}>
         {PLACE_COPY.help}
       </p>
     </div>

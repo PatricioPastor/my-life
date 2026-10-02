@@ -108,13 +108,32 @@ const photo = (over: Partial<{ name: string; type: string; size: number }> = {})
   Object.defineProperty(file, "size", { value: size })
   return file
 }
-const pick = (file: File) =>
-  fireEvent.change(screen.getByLabelText("Foto"), { target: { files: [file] } })
+const step = () => Number(screen.getByTestId("memory-form").getAttribute("data-step"))
+const next = () => fireEvent.click(screen.getByRole("button", { name: "Siguiente" }))
+const back = () => fireEvent.click(screen.getByRole("button", { name: "Atrás" }))
+/** Walks to a step with Siguiente and Atrás, the way the visitor does: Siguiente only moves on from a complete step. */
+function goTo(target: number) {
+  for (let moves = 0; step() !== target; moves++) {
+    if (moves > 3) throw new Error(`Stuck on step ${step()} on the way to step ${target}`)
+    if (step() < target) next()
+    else back()
+  }
+}
+/** The photo input, named by its tile: "Elegir foto", or "Cambiar foto" once there is one. */
+const photoInput = () => screen.getByLabelText(/^(Elegir|Cambiar) foto$/) as HTMLInputElement
+const pick = (file: File) => {
+  goTo(1)
+  fireEvent.change(photoInput(), { target: { files: [file] } })
+}
 const fill = (caption = "Una tarde de lluvia", date = "2024-03-12") => {
+  goTo(2)
   fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: caption } })
   fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: date } })
 }
-const submit = () => fireEvent.click(screen.getByRole("button", { name: /Guardar recuerdo|Subiendo|Guardando/ }))
+const submit = () => {
+  goTo(3)
+  fireEvent.click(screen.getByRole("button", { name: /Guardar recuerdo|Subiendo|Guardando/ }))
+}
 const filled = () => {
   open()
   pick(photo())
@@ -122,25 +141,26 @@ const filled = () => {
 }
 
 describe("AddMemory dialog", () => {
-  it("opens from the Contribuir control into a titled, described dialog", () => {
+  it("opens from the Contribuir control into a dialog named for what it does", () => {
     setup()
     expect(screen.queryByRole("dialog")).toBeNull()
     open()
     const dialog = screen.getByRole("dialog", { name: "Contribuir con un recuerdo" })
-    expect(dialog.getAttribute("aria-describedby")).toBeTruthy()
-    expect(within(dialog).getByText(/pendiente|aprobad/i)).toBeTruthy()
+    // The steps' headings say what each step is about: there is no paragraph of description to read first.
+    expect(dialog.hasAttribute("aria-describedby")).toBe(false)
+    expect(screen.getByRole("heading", { name: "Contribuir con un recuerdo" }).className).toContain("sr-only")
   })
 
-  it("sets the title in Gambarino through the title role", () => {
+  it("sets each step's heading in Gambarino through the title role", () => {
     setup()
     open()
-    expect(screen.getByRole("heading", { name: "Contribuir con un recuerdo" }).className).toContain("t-title")
+    expect(screen.getByRole("heading", { level: 3 }).className).toContain("t-title")
   })
 
   it("has the three labelled fields", () => {
     setup()
     open()
-    expect(screen.getByLabelText("Foto")).toBeTruthy()
+    expect(photoInput().type).toBe("file")
     expect(screen.getByLabelText("¿Qué recuerdas?")).toBeTruthy()
     expect(screen.getByLabelText("¿Cuándo fue?")).toBeTruthy()
   })
@@ -188,24 +208,46 @@ describe("AddMemory dialog", () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  it("starts empty every time it opens", async () => {
+  it("starts empty, on the first step, every time it opens", async () => {
     setup()
     open()
+    pick(photo())
     fill("algo")
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }))
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
     open()
+    expect(step()).toBe(1)
+    expect(screen.queryByRole("img", { name: "Vista previa" })).toBeNull()
     expect((screen.getByLabelText("¿Qué recuerdas?") as HTMLTextAreaElement).value).toBe("")
   })
 })
 
 describe("AddMemory photo", () => {
-  it("shows a preview and the file name once a good photo is picked", () => {
+  it("shows the picked photo covering its tile, which then offers to change it", () => {
     setup()
     open()
+    expect(screen.getByLabelText("Elegir foto")).toBe(photoInput())
     pick(photo({ name: "lluvia.jpg" }))
-    expect(screen.getByText("lluvia.jpg")).toBeTruthy()
-    expect(screen.getByRole("img", { name: "Vista previa" }).getAttribute("src")).toBe("blob:preview")
+    const preview = screen.getByRole("img", { name: "Vista previa" })
+    expect(preview.getAttribute("src")).toBe("blob:preview")
+    expect(preview.className).toContain("object-cover")
+    // A 1 px white outline at 10%, inset, rounded like the tile that clips it.
+    expect(preview.className).toContain("outline-white/10")
+    expect(preview.className).toContain("rounded-panel")
+    expect(screen.getByLabelText("Cambiar foto")).toBe(photoInput())
+  })
+
+  it("puts the remove control in the tile's corner with a 44 px hit area and a concentric badge", () => {
+    setup()
+    open()
+    pick(photo())
+    const remove = screen.getByRole("button", { name: "Quitar foto" })
+    expect(remove.className).toMatch(/(^|\s)size-11(\s|$)/)
+    const badge = remove.firstElementChild as HTMLElement
+    // 6 px in from the corner, so its radius is the tile's minus 6.
+    expect(badge.className).toContain("top-1.5")
+    expect(badge.className).toContain("right-1.5")
+    expect(badge.className).toContain("rounded-[calc(var(--panel-r)-6px)]")
   })
 
   it("falls back to the file name when the browser cannot draw the photo (HEIC)", () => {
@@ -222,8 +264,8 @@ describe("AddMemory photo", () => {
     open()
     pick(photo({ name: "a.gif", type: "image/gif" }))
     const error = screen.getByText("Elige una foto JPG, PNG, WebP o HEIC.")
-    expect(screen.getByLabelText("Foto").getAttribute("aria-describedby")).toContain(error.id)
-    expect(screen.getByLabelText("Foto").getAttribute("aria-invalid")).toBe("true")
+    expect(photoInput().getAttribute("aria-describedby")).toContain(error.id)
+    expect(photoInput().getAttribute("aria-invalid")).toBe("true")
     expect(screen.queryByRole("img", { name: "Vista previa" })).toBeNull()
   })
 
@@ -240,7 +282,8 @@ describe("AddMemory photo", () => {
     const zone = screen.getByTestId("photo-drop")
     fireEvent.dragOver(zone, { dataTransfer: { files: [], types: ["Files"] } })
     fireEvent.drop(zone, { dataTransfer: { files: [photo({ name: "soltada.jpg" })] } })
-    expect(screen.getByText("soltada.jpg")).toBeTruthy()
+    expect(screen.getByRole("img", { name: "Vista previa" })).toBeTruthy()
+    expect(screen.getByLabelText("Cambiar foto")).toBe(photoInput())
   })
 
   it("clears the error once a good photo replaces a bad one", () => {
@@ -327,12 +370,14 @@ describe("AddMemory date and time", () => {
     expect(timeField().value).toBe("20:15")
   })
 
-  it("keeps a date the visitor typed before the photo was read", async () => {
+  it("keeps a date the visitor typed before another photo was read", async () => {
     const { parsePhotoTime } = setup()
-    parsePhotoTime.mockResolvedValue(TAKEN)
     open()
-    fireEvent.change(dateField(), { target: { value: "2020-05-05" } })
     pick(photo())
+    goTo(2)
+    fireEvent.change(dateField(), { target: { value: "2020-05-05" } })
+    parsePhotoTime.mockResolvedValue(TAKEN)
+    pick(photo({ name: "otra.jpg" }))
     await waitFor(() => expect(timeField().value).toBe("18:42"))
     expect(dateField().value).toBe("2020-05-05")
   })
@@ -374,15 +419,20 @@ describe("AddMemory date and time", () => {
 })
 
 describe("AddMemory submit", () => {
-  it("shows each field error, linked to its field, and uploads nothing", () => {
+  it("shows each step's field errors, linked to their fields, and uploads nothing", () => {
     const { prepare, upload } = setup()
     open()
-    submit()
-    expect(screen.getByText("Agrega una foto o un audio.")).toBeTruthy()
+    next()
+    const media = screen.getByText("Agrega una foto o tu voz para seguir.")
+    expect(photoInput().getAttribute("aria-describedby")).toContain(media.id)
+    pick(photo())
+    next()
+    next()
     const caption = screen.getByText("Escribe entre 1 y 140 caracteres.")
     expect(screen.getByLabelText("¿Qué recuerdas?").getAttribute("aria-describedby")).toContain(caption.id)
     const date = screen.getByText("Elige una fecha entre 1900 y hoy.")
     expect(screen.getByLabelText("¿Cuándo fue?").getAttribute("aria-describedby")).toContain(date.id)
+    expect(step()).toBe(2)
     expect(prepare).not.toHaveBeenCalled()
     expect(upload).not.toHaveBeenCalled()
   })
@@ -392,13 +442,16 @@ describe("AddMemory submit", () => {
     open()
     pick(photo())
     fill("Hola", "2026-10-02")
-    submit()
+    next()
     expect(screen.getByText("La fecha no puede ser futura.")).toBeTruthy()
+    expect(step()).toBe(2)
   })
 
-  it("reads Guardar recuerdo until it starts", () => {
+  it("reads Siguiente until the last step, then Guardar recuerdo until it starts", () => {
     setup()
-    open()
+    filled()
+    expect(screen.getByRole("button", { name: "Siguiente" })).toBeTruthy()
+    goTo(3)
     expect(screen.getByRole("button", { name: "Guardar recuerdo" })).toBeTruthy()
   })
 
@@ -472,10 +525,12 @@ describe("AddMemory failures", () => {
     const alert = await screen.findByText(text)
     expect(track).not.toHaveBeenCalled()
     expect(handles.onCreated).not.toHaveBeenCalled()
-    // The form is usable again, and the error is linked to the submit button.
-    const button = screen.getByRole("button", { name: "Guardar recuerdo" }) as HTMLButtonElement
+    // The form is usable again, and the error is linked to what it is about: the submit button on the last step, or
+    // the photo, back on the first.
+    await waitFor(() => expect(step()).toBe(linkedTo === "photo" ? 1 : 3))
+    const button = screen.getByRole("button", { name: linkedTo === "photo" ? "Siguiente" : "Guardar recuerdo" }) as HTMLButtonElement
     expect(button.disabled).toBe(false)
-    const owner = linkedTo === "photo" ? screen.getByLabelText("Foto") : button
+    const owner = linkedTo === "photo" ? photoInput() : button
     expect(owner.getAttribute("aria-describedby")).toContain(alert.id)
     return handles
   }
@@ -585,7 +640,11 @@ describe("AddMemory closing", () => {
 })
 
 describe("AddMemory place section", () => {
-  const checkbox = () => screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
+  // The place is on the second step: reading its controls walks there.
+  const checkbox = () => {
+    goTo(2)
+    return screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
+  }
   const HELP = "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo."
   // What exifr reports for the photo: exact values, more than 2 decimals.
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
@@ -593,18 +652,23 @@ describe("AddMemory place section", () => {
   const pickWithGps = (file = photo()) => {
     open()
     pick(file)
+    goTo(2)
   }
   // The place is only named once the visitor ticks the consent.
-  const tick = async () => fireEvent.click(await screen.findByRole("checkbox", { name: PLACE_COPY.consent }))
+  const tick = async () => {
+    goTo(2)
+    fireEvent.click(await screen.findByRole("checkbox", { name: PLACE_COPY.consent }))
+  }
   const PLACE = "Parece que fue en Palermo, Buenos Aires"
 
-  it("asks for a photo first, and always shows the helper text", () => {
+  it("asks where it was, with nothing to suggest before a photo, and always shows the helper text", () => {
     setup()
     open()
-    expect(screen.getByText("¿Dónde se sacó?")).toBeTruthy()
+    expect(PLACE_COPY.heading).toBe("¿Dónde fue?")
+    expect(screen.getByText(PLACE_COPY.heading)).toBeTruthy()
     expect(screen.getByText(PLACE_COPY.idle)).toBeTruthy()
     expect(screen.getByText(HELP)).toBeTruthy()
-    expect(screen.queryByRole("checkbox")).toBeNull()
+    expect(document.getElementById("memory-location")).toBeNull()
   })
 
   it("says plainly that the exact place and its address will be seen by the people who can enter", () => {
@@ -849,9 +913,10 @@ describe("AddMemory place section", () => {
     pick(photo())
     fill()
     await screen.findByText(PLACE_COPY.awaitingConsent)
+    const box = checkbox()
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
-    expect(checkbox().disabled).toBe(true)
+    expect(box.disabled).toBe(true)
   })
 
   it("says honestly when the place could not be saved", async () => {
@@ -881,8 +946,14 @@ describe("AddMemory place section", () => {
 describe("AddMemory Google Maps link", () => {
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
   const LINK = "https://maps.app.goo.gl/AbCd"
-  const checkbox = () => screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
-  const input = () => screen.getByRole("textbox", { name: /link de Google Maps/ }) as HTMLInputElement
+  const checkbox = () => {
+    goTo(2)
+    return screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
+  }
+  const input = () => {
+    goTo(2)
+    return screen.getByRole("textbox", { name: /link de Google Maps/ }) as HTMLInputElement
+  }
   const paste = (value: string) => fireEvent.change(input(), { target: { value } })
 
   async function openWithGps(over: Partial<AddMemoryProps> = {}) {
@@ -917,7 +988,7 @@ describe("AddMemory Google Maps link", () => {
   it("does not show the input before a photo is picked", () => {
     setup()
     open()
-    expect(screen.queryByRole("textbox", { name: /link de Google Maps/ })).toBeNull()
+    expect(document.getElementById("memory-maps-link")).toBeNull()
   })
 
   it("links the input to the helper text through aria-describedby", async () => {
@@ -1146,13 +1217,16 @@ describe("AddMemory Google Maps link", () => {
     expect(resolveLink).toHaveBeenCalledWith({ url: "https://maps.app.goo.gl/ABC" })
   })
 
-  it("does not save while the link is unresolved or invalid, and says why", async () => {
+  it("does not go on while the link is unresolved or invalid, and says why beside it", async () => {
     const { resolveLink, create } = await openWithGps()
     resolveLink.mockResolvedValue({ ok: false, reason: "not_maps_link" })
     paste("https://example.com")
     await screen.findByText("Ese link no parece de Google Maps.")
-    submit()
-    expect((await screen.findByRole("alert")).textContent).toBe(PLACE_COPY.linkBlocked)
+    next()
+    const alert = await screen.findByRole("alert")
+    expect(alert.textContent).toBe(PLACE_COPY.linkBlocked)
+    expect(input().getAttribute("aria-describedby")).toContain(alert.id)
+    expect(step()).toBe(2)
     expect(create).not.toHaveBeenCalled()
     paste("")
     submit()
@@ -1172,18 +1246,23 @@ describe("AddMemory Google Maps link", () => {
 
   it("locks the input while saving", async () => {
     await openWithGps({ upload: (() => new Promise<UploadResult>(() => undefined)) as never })
+    const field = input()
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
-    expect(input().disabled).toBe(true)
+    expect(field.disabled).toBe(true)
   })
 })
 
 describe("AddMemory orb color", () => {
   const group = () => screen.getByRole("radiogroup", { name: ORB_COLOR_COPY.label })
   const swatches = () => within(group()).getAllByRole("radio") as HTMLButtonElement[]
-  const ready = async () => screen.findByRole("radiogroup", { name: ORB_COLOR_COPY.label })
+  // The color is the last step: the visitor gets there once the first two are complete.
+  const ready = async () => {
+    goTo(3)
+    return screen.findByRole("radiogroup", { name: ORB_COLOR_COPY.label })
+  }
 
-  it("asks for a photo first, with the preview and the swatch row already in place", () => {
+  it("has nothing to offer before a photo, with the preview and the swatch rows already in place", () => {
     setup()
     open()
     expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
@@ -1196,6 +1275,7 @@ describe("AddMemory orb color", () => {
     open()
     const file = photo()
     pick(file)
+    fill()
     await ready()
     expect(readPalette).toHaveBeenCalledWith(file)
     expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(OFFERED)
@@ -1219,8 +1299,7 @@ describe("AddMemory orb color", () => {
 
   it("shows a live preview in the chosen color", async () => {
     setup()
-    open()
-    pick(photo())
+    filled()
     await ready()
     const orb = () => screen.getByTestId("orb-preview").querySelector(".mem-dot") as HTMLElement
     expect(orb().style.getPropertyValue("--pc")).toBe(SWATCHES[0])
@@ -1230,8 +1309,7 @@ describe("AddMemory orb color", () => {
 
   it("moves the selection with the arrow keys", async () => {
     setup()
-    open()
-    pick(photo())
+    filled()
     await ready()
     swatches()[0].focus()
     fireEvent.keyDown(swatches()[0], { key: "ArrowRight" })
@@ -1290,6 +1368,8 @@ describe("AddMemory orb color", () => {
 
     readPalette.mockResolvedValueOnce({ colors: ["#cf9175", "#8bae78"], fromPhoto: true })
     pick(photo({ name: "dos.jpg" }))
+    fill()
+    await ready()
     await waitFor(() => expect(swatches()).toHaveLength(2 + ORB_HUES.length))
     await act(async () => finishFirst({ colors: SWATCHES, fromPhoto: true }))
     expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(["#cf9175", "#8bae78", ...ORB_HUES])
@@ -1298,11 +1378,10 @@ describe("AddMemory orb color", () => {
 
   it("drops the swatches when the new photo is refused", async () => {
     setup()
-    open()
-    pick(photo())
+    filled()
     await ready()
     pick(photo({ name: "a.gif", type: "image/gif" }))
-    expect(screen.queryByRole("radiogroup")).toBeNull()
+    expect(screen.getByTestId("orb-swatches").getAttribute("role")).toBeNull()
     expect(screen.getByText(ORB_COLOR_COPY.idle)).toBeTruthy()
   })
 
@@ -1340,14 +1419,15 @@ describe("AddMemory layout", () => {
     expect(card.className).toContain("overflow-hidden")
   })
 
-  it("gives the card a fixed height, inside the safe areas, so it never resizes when the preview or the place appear", () => {
+  it("lets a phone's sheet take its own height up to 92% of the screen, and keeps a stable height from md", () => {
     setup()
     open()
     const card = screen.getByTestId("memory-card")
-    // Phones: the sheet's height is the viewport minus the top safe area. Desktop: capped, so it fits 1280x720.
-    expect(card.className).toMatch(/(^|\s)h-\[calc\(100%-max\(0\.5rem,env\(safe-area-inset-top\)\)\)\]/)
+    // Phones: as tall as the step, never past 92dvh nor into the top safe area. Desktop: one height for every step,
+    // capped so it fits 1280x720, so the footer never moves between steps.
+    expect(card.className).toContain("max-h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))))]")
     expect(card.className).toMatch(/md:h-\[min\(100%,\d+px\)\]/)
-    expect(card.className).not.toMatch(/(^|\s)max-h-/)
+    expect(card.className).toContain("md:w-[min(30rem,calc(100vw-2rem))]")
   })
 
   it("keeps the caption counter inside the field, so the caption block does not take an extra row", () => {
@@ -1356,50 +1436,21 @@ describe("AddMemory layout", () => {
     const caption = screen.getByLabelText("¿Qué recuerdas?")
     expect(caption.parentElement?.contains(screen.getByText("0/140"))).toBe(true)
     expect(caption.parentElement?.className).toContain("relative")
+    expect(screen.getByText("0/140").className).toContain("tabular-nums")
   })
 
-  it("keeps every field inside the scroll region and the submit outside it, always reachable", () => {
+  it("keeps every field inside the scroll region and the buttons outside it, always reachable", () => {
     setup()
     open()
-    for (const label of ["Foto", "¿Qué recuerdas?", "¿Cuándo fue?"]) {
-      expect(scroller().contains(screen.getByLabelText(label))).toBe(true)
+    for (const field of [photoInput(), screen.getByLabelText("¿Qué recuerdas?"), screen.getByLabelText("¿Cuándo fue?")]) {
+      expect(scroller().contains(field)).toBe(true)
     }
-    expect(scroller().contains(screen.getByRole("group", { name: PLACE_COPY.heading }))).toBe(true)
+    expect(scroller().contains(document.getElementById("memory-place-label"))).toBe(true)
     const actions = screen.getByTestId("memory-actions")
-    const submitButton = screen.getByRole("button", { name: "Guardar recuerdo" })
-    expect(actions.contains(submitButton)).toBe(true)
+    expect(actions.contains(screen.getByRole("button", { name: "Siguiente" }))).toBe(true)
     expect(scroller().contains(actions)).toBe(false)
     expect(actions.className).toContain("shrink-0")
-    expect(actions.className).toContain("pb-[max(")
-  })
-
-  it("keeps the single phone column as wide as the sheet, whatever the swatches or the hints want (no sideways overflow)", () => {
-    setup()
-    open()
-    expect(screen.getByTestId("memory-columns").className).toContain(" grid-cols-[minmax(0,1fr)] ")
-  })
-
-  it("lays the fields out in two columns on desktop: photo and color on the left, the rest on the right", () => {
-    setup()
-    open()
-    const columns = screen.getByTestId("memory-columns")
-    expect(columns.className).toMatch(/md:grid-cols-/)
-    const [left, right] = Array.from(columns.children) as HTMLElement[]
-    expect(left.contains(screen.getByLabelText("Foto"))).toBe(true)
-    expect(left.contains(screen.getByTestId("orb-preview"))).toBe(true)
-    expect(left.contains(screen.getByText(ORB_COLOR_COPY.label))).toBe(true)
-    expect(right.contains(screen.getByLabelText("¿Qué recuerdas?"))).toBe(true)
-    expect(right.contains(screen.getByLabelText("¿Cuándo fue?"))).toBe(true)
-    expect(right.contains(screen.getByRole("group", { name: PLACE_COPY.heading }))).toBe(true)
-  })
-
-  it("puts the submit under the right column on desktop", () => {
-    setup()
-    open()
-    const actions = screen.getByTestId("memory-actions")
-    expect(actions.className).toMatch(/md:grid-cols-/)
-    const cells = Array.from(actions.children) as HTMLElement[]
-    expect(cells[cells.length - 1].contains(screen.getByRole("button", { name: "Guardar recuerdo" }))).toBe(true)
+    expect(actions.className).toContain("pb-[calc(var(--sheet-pad)+env(safe-area-inset-bottom))]")
   })
 
   it("is a bottom sheet on phones, with a decorative grab handle", () => {
@@ -1466,6 +1517,8 @@ describe("AddMemory with a virtual keyboard", () => {
     Element.prototype.scrollIntoView = scrollIntoView
     setup()
     open()
+    pick(photo())
+    goTo(2)
     const caption = screen.getByLabelText("¿Qué recuerdas?")
     caption.focus()
     act(() => {
@@ -1484,16 +1537,13 @@ describe("AddMemory with a virtual keyboard", () => {
     expect(content.style.paddingBottom).toBe("")
   })
 
-  it("compacts the header and the footer on a short screen (a phone in landscape), so the fields keep most of the card", () => {
+  it("on a short screen (a phone in landscape) shortens only the photo tile, never the padding the corners nest in", () => {
     setup()
     open()
     const short = "[@media(max-height:520px)]"
-    const header = screen.getByRole("heading", { name: "Contribuir con un recuerdo" })
-    expect(header.className).toContain(`${short}:text-`)
-    expect(screen.getByText(/Una foto, un audio o ambos/).className).toContain(`${short}:sr-only`)
-    expect(screen.getByTestId("memory-actions").className).toContain(`${short}:pt-2`)
-    // A shorter photo box lifts the audio section into view without scrolling.
-    expect(screen.getByTestId("photo-drop").className).toContain(`${short}:h-20`)
+    // A shorter photo tile lifts the voice into view without scrolling.
+    expect(screen.getByTestId("photo-drop").className).toContain(`${short}:h-28`)
+    expect(screen.getByTestId("memory-actions").className).not.toContain(short)
   })
 
   it("is a plus and the word Contribuir, with the same label for the magnetic cursor", () => {
@@ -1519,7 +1569,11 @@ describe("AddMemory contributed from a memory", () => {
     place: "UOCRA · Av. Rivadavia 1234, Junín",
   }
   const dialog = () => screen.getByRole("dialog")
-  const sameCheckbox = () => within(dialog()).getByRole("checkbox", { name: /Mismo lugar/ }) as HTMLInputElement
+  // "Mismo lugar" is on the second step, under "¿Dónde fue?".
+  const sameCheckbox = () => {
+    goTo(2)
+    return within(dialog()).getByRole("checkbox", { name: /Mismo lugar/ }) as HTMLInputElement
+  }
   const createdWith = (create: ReturnType<typeof setup>["create"]) => create.mock.calls[0][0]
 
   it("opens straight away when it is controlled open, and reports a close", async () => {
@@ -1540,10 +1594,11 @@ describe("AddMemory contributed from a memory", () => {
 
   it("starts the date at the date of that memory, and the visitor can change it", async () => {
     const { create } = setup({ open: true, related: RELATED })
+    pick(photo())
+    goTo(2)
     const date = screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement
     expect(date.value).toBe("2023-07-04")
     fireEvent.change(date, { target: { value: "2023-07-05" } })
-    pick(photo())
     fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "El día después" } })
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
@@ -1564,16 +1619,18 @@ describe("AddMemory contributed from a memory", () => {
     expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
   })
 
-  it("shows a chip that says what it is related to", () => {
+  it("shows a chip on the first step that says what it is related to", () => {
     setup({ open: true, related: RELATED })
-    expect(within(dialog()).getByText("Relacionado con «La casa nueva»")).toBeTruthy()
+    const chip = screen.getByTestId("related-chip")
+    expect(chip.textContent).toBe("Relacionado con «La casa nueva»")
+    expect(chip.closest("[data-step-panel]")?.getAttribute("data-step-panel")).toBe("1")
   })
 
   it("lets the visitor remove the relation, and then sends none (the date they have stays)", async () => {
     const { create } = setup({ open: true, related: RELATED })
     fireEvent.click(within(dialog()).getByRole("button", { name: "Quitar relación" }))
     expect(within(dialog()).queryByText(/Relacionado con/)).toBeNull()
-    expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    expect(document.getElementById("memory-same-place")).toBeNull()
     expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
     pick(photo())
     fill("Algo", "2023-07-04")
@@ -1583,36 +1640,44 @@ describe("AddMemory contributed from a memory", () => {
     expect(createdWith(create)).not.toHaveProperty("samePlace")
   })
 
-  it("makes the chip's remove control a 44 px target", () => {
+  it("makes the chip's remove control a 40 px target, nested in the chip's padding with the inner radius", () => {
     setup({ open: true, related: RELATED })
-    expect(within(dialog()).getByRole("button", { name: "Quitar relación" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+    const remove = within(dialog()).getByRole("button", { name: "Quitar relación" })
+    expect(remove.className).toMatch(/(^|\s)size-10(\s|$)/)
+    expect(remove.className).toContain("rounded-inner")
+    expect(screen.getByTestId("related-chip").className).toContain("p-panel")
+    expect(screen.getByTestId("related-chip").className).toContain("rounded-panel")
   })
 
   it("has no chip, no Mismo lugar and an empty date for a contribution that starts from nowhere", () => {
     setup()
     open()
     expect(within(dialog()).queryByText(/Relacionado con/)).toBeNull()
-    expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    expect(document.getElementById("memory-same-place")).toBeNull()
     expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("")
-    expect(within(dialog()).getByText(/Tu recuerdo aparecerá en el espacio/)).toBeTruthy()
+    expect(within(dialog()).getByText("Lo verás en el universo cuando sea aprobado.")).toBeTruthy()
   })
 
   describe("Mismo lugar", () => {
-    it("is offered, unticked, with the place of that memory", () => {
+    it("is offered, unticked, under ¿Dónde fue?, with the place of that memory", () => {
       setup({ open: true, related: RELATED })
+      pick(photo())
       expect(sameCheckbox().checked).toBe(false)
+      expect(screen.getByRole("group", { name: PLACE_COPY.heading }).contains(sameCheckbox())).toBe(true)
       expect(within(dialog()).getByText("UOCRA · Av. Rivadavia 1234, Junín")).toBeTruthy()
     })
 
     it("is not offered when that memory has no place", () => {
       setup({ open: true, related: { ...RELATED, place: null } })
+      pick(photo())
+      goTo(2)
       expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
     })
 
     it("asks the server to copy the place when it is ticked, and sends no coordinates", async () => {
       const { create } = setup({ open: true, related: RELATED })
-      fireEvent.click(sameCheckbox())
       pick(photo())
+      fireEvent.click(sameCheckbox())
       fill("Otra vez ahí", "2023-07-04")
       submit()
       await waitFor(() => expect(create).toHaveBeenCalled())
@@ -1632,8 +1697,8 @@ describe("AddMemory contributed from a memory", () => {
     it("is dropped when the photo's own place is kept instead", async () => {
       const { parseGps } = setup({ open: true, related: RELATED })
       parseGps.mockResolvedValue({ latitude: -34.5937, longitude: -58.4215 })
-      fireEvent.click(sameCheckbox())
       pick(photo())
+      fireEvent.click(sameCheckbox())
       const keep = await screen.findByRole("checkbox", { name: PLACE_COPY.consent })
       fireEvent.click(keep)
       expect(sameCheckbox().checked).toBe(false)
@@ -1644,6 +1709,7 @@ describe("AddMemory contributed from a memory", () => {
       const { parseGps } = setup({ open: true, related: RELATED })
       parseGps.mockResolvedValue({ latitude: -34.5937, longitude: -58.4215 })
       pick(photo())
+      goTo(2)
       const keep = (await screen.findByRole("checkbox", { name: PLACE_COPY.consent })) as HTMLInputElement
       fireEvent.click(keep)
       expect(keep.checked).toBe(true)
@@ -1654,8 +1720,8 @@ describe("AddMemory contributed from a memory", () => {
 
     it("is dropped when a pasted Maps link resolves (the link is the visitor choosing another place)", async () => {
       setup({ open: true, related: RELATED })
-      fireEvent.click(sameCheckbox())
       pick(photo())
+      fireEvent.click(sameCheckbox())
       fireEvent.change(await screen.findByRole("textbox", { name: /link de Google Maps/ }), {
         target: { value: "https://maps.app.goo.gl/AbCd" },
       })
@@ -1664,16 +1730,19 @@ describe("AddMemory contributed from a memory", () => {
 
     it("goes with the relation when it is removed", () => {
       setup({ open: true, related: RELATED })
+      pick(photo())
       fireEvent.click(sameCheckbox())
+      goTo(1)
       fireEvent.click(within(dialog()).getByRole("button", { name: "Quitar relación" }))
+      goTo(2)
       expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
     })
 
     it("says so when the place could not be kept", async () => {
       const { create } = setup({ open: true, related: RELATED })
       create.mockResolvedValueOnce({ ok: true, memory: MEMORY, locationSaved: false })
-      fireEvent.click(sameCheckbox())
       pick(photo())
+      fireEvent.click(sameCheckbox())
       fill("Otra vez ahí", "2023-07-04")
       submit()
       await waitFor(() => expect(within(dialog()).getByRole("status").textContent).toContain(PLACE_COPY.notSaved))

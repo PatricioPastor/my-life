@@ -55,9 +55,26 @@ describe("AudioSection: idle", () => {
     expect(screen.getByRole("button", { name: "Grabar" })).toBeTruthy()
     expect(screen.getByLabelText("Subir audio")).toBeTruthy()
     expect(screen.getByText(AUDIO_COPY.hint)).toBeTruthy()
-    expect(AUDIO_COPY.hint).toBe(
-      "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
-    )
+    // One line with the real limits (MAX_AUDIO_MS, MAX_AUDIO_BYTES) and the formats that keep a long voice under them.
+    expect(AUDIO_COPY.hint).toBe("Voz hasta 60 min y 100 MB · mejor MP3, M4A u OGG")
+    expect(AUDIO_COPY.label).toBe("Tu voz")
+  })
+
+  it("offers Grabar and Subir audio as one segmented pair inside a padded panel, each with the inner radius", () => {
+    setup()
+    const box = screen.getByTestId("audio-box")
+    expect(box.className).toContain("rounded-panel")
+    expect(box.className).toContain("p-panel")
+    for (const control of [screen.getByRole("button", { name: "Grabar" }), screen.getByText("Subir audio").closest("label")!]) {
+      expect(control.className).toContain("rounded-inner")
+      expect(control.className).toMatch(/(^|\s)h-11(\s|$)/)
+      expect(control.className).toMatch(/(^|\s)flex-1(\s|$)/)
+    }
+  })
+
+  it("can be described by the form too (an error the form shows beside it)", () => {
+    setup({}, { describedBy: "memory-media-error" })
+    expect(group().getAttribute("aria-describedby")).toContain("memory-media-error")
   })
 
   it("starts recording on Grabar", () => {

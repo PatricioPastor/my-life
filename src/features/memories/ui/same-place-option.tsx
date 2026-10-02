@@ -2,6 +2,7 @@
 
 import { cn } from "@/shared/lib/utils"
 import { RELATED_COPY } from "./related-memory"
+import { HINT } from "./sheet-styles"
 
 interface SamePlaceOptionProps {
   /** The place of the memory this one is contributed from, as one line. The position itself is never here. */
@@ -19,7 +20,7 @@ export function SamePlaceOption({ place, checked, onChange, disabled }: SamePlac
   return (
     <label
       htmlFor="memory-same-place"
-      className={cn("flex cursor-pointer items-start gap-3 text-ink", disabled && "cursor-default")}
+      className={cn("flex min-h-11 cursor-pointer items-start gap-3 py-1 text-ink", disabled && "cursor-default")}
     >
       <input
         id="memory-same-place"
@@ -30,11 +31,11 @@ export function SamePlaceOption({ place, checked, onChange, disabled }: SamePlac
         aria-describedby="memory-same-place-line"
         data-magnetic="light"
         data-cursor-label="Mismo lugar"
-        className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
+        className="mt-0.5 size-[1.125rem] shrink-0 cursor-pointer accent-[#a8c8ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
       />
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="t-body text-[length:var(--type-1)]">{RELATED_COPY.sameLabel}</span>
-        <span id="memory-same-place-line" className="text-xs tracking-[0.04em] text-ink-muted [overflow-wrap:anywhere]">
+        <span className="t-body text-[length:var(--type-1)] leading-snug">{RELATED_COPY.sameLabel}</span>
+        <span id="memory-same-place-line" className={cn(HINT, "[overflow-wrap:anywhere]")}>
           {place}
         </span>
       </span>

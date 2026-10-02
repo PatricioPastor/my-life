@@ -1,7 +1,10 @@
-/** The place section's Spanish copy (neutral, `tú`). It always speaks about where the PHOTO was taken. */
+/**
+ * The place section's Spanish copy (neutral, `tú`). Its suggestions always speak about where the PHOTO was taken (never
+ * where the visitor is); the heading asks where the memory happened, which the photo's place answers.
+ */
 export const PLACE_COPY = {
-  heading: "¿Dónde se sacó?",
-  idle: "Elige una foto para sugerirte dónde se sacó.",
+  heading: "¿Dónde fue?",
+  idle: "Con una foto te sugerimos el lugar.",
   reading: "Buscando la ubicación de la foto…",
   naming: "Buscando el lugar…",
   awaitingConsent: "Esta foto trae ubicación. Marca la casilla para sugerirte el lugar.",

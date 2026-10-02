@@ -231,4 +231,16 @@ describe("OrbColorPicker with the curated hues", () => {
     setup()
     expect(ORB_COLOR_COPY.fromPhoto).toMatch(/primeros colores/i)
   })
+
+  it("says the photo note when at least one swatch is a tone of the photo itself", () => {
+    setup({ colors: [COLORS[0], ...ORB_HUES], value: COLORS[0] })
+    expect(screen.getByText(ORB_COLOR_COPY.fromPhoto)).toBeTruthy()
+  })
+
+  it("does not say it when every tone of the photo was folded into a curated hue (the swatches are all curated)", () => {
+    setup({ colors: ORB_HUES, value: ORB_HUES[1], fromPhoto: true })
+    expect(screen.queryByText(ORB_COLOR_COPY.fromPhoto)).toBeNull()
+    expect(screen.queryByText(ORB_COLOR_COPY.fallback)).toBeNull()
+    expect(screen.getByTestId("orb-note").textContent).toBe("")
+  })
 })

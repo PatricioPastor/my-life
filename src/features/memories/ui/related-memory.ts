@@ -12,10 +12,12 @@ export interface RelatedMemory {
   place: string | null
 }
 
-/** The copy of a contribution that starts from a memory (neutral Spanish, `tú`). */
+/**
+ * The copy of a contribution, and of one that starts from a memory (neutral Spanish, `tú`). The title names the dialog
+ * for screen readers; on screen each step has its own heading (see `memory-steps.ts`).
+ */
 export const RELATED_COPY = {
   title: "Contribuir con un recuerdo",
-  description: "Una foto, un audio o ambos. Tu recuerdo aparecerá en el espacio cuando sea aprobado.",
   removeRelation: "Quitar relación",
   sameLabel: "Mismo lugar",
 } as const

@@ -57,6 +57,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* The add-memory sheet's concentric radii and paddings (values in :root below): `rounded-sheet`, `rounded-panel`,
+     `rounded-inner`, and `p-sheet`, `p-panel` (and every other spacing utility: `px-sheet`, `gap-panel`, `top-sheet`…). */
+  --radius-sheet: var(--sheet-r);
+  --radius-panel: var(--panel-r);
+  --radius-inner: var(--inner-r);
+  --spacing-sheet: var(--sheet-pad);
+  --spacing-panel: var(--panel-pad);
 }
 
 :root {
@@ -135,6 +142,19 @@
   --bottom-pad: calc(var(--page-pad) + env(safe-area-inset-bottom, 0px));
   /* Shared height of every control that sits in the bottom zone, so they share one baseline. */
   --control-h: 48px;
+
+  /*
+   * Concentric surfaces (the add-memory sheet). A rounded surface nested in another, at a padding p from its edge, has
+   * the outer radius minus p, so the two corners share one centre and fit into each other:
+   *   sheet 32, padded 20  ->  panel 32 - 20 = 12 (fields, the photo tile, the audio panel, buttons, the close button)
+   *   panel 12, padded 4   ->  inner 12 - 4 = 8   (controls inside a panel: the audio's segmented buttons, the player)
+   * Only the sheet's radius and the two paddings are chosen; the rest is derived.
+   */
+  --sheet-r: 32px;
+  --sheet-pad: 20px;
+  --panel-r: calc(var(--sheet-r) - var(--sheet-pad));
+  --panel-pad: 4px;
+  --inner-r: calc(var(--panel-r) - var(--panel-pad));
 }
 
 .dark {
@@ -779,6 +799,33 @@
       animation: mem-sheet-out 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
     }
   }
+  /* The add-memory steps. The one coming in slides 8px from the side it comes from (--step-dir: 1 forward, -1 back) in
+     220ms; the one leaving fades 6px the other way in 150ms, laid over the new one so the height follows the new step
+     at once. Transitions, not keyframes: a quick Atrás or Siguiente retargets from where the motion is. */
+  .mem-step {
+    transition-property: opacity, translate;
+    transition-duration: 220ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  .mem-step[data-state="active"] {
+    opacity: 1;
+    translate: 0 0;
+  }
+  @starting-style {
+    .mem-step[data-state="active"] {
+      opacity: 0;
+      translate: calc(var(--step-dir, 1) * 8px) 0;
+    }
+  }
+  .mem-step[data-state="leaving"] {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    opacity: 0;
+    translate: calc(var(--step-dir, 1) * -6px) 0;
+    transition-duration: 150ms;
+    pointer-events: none;
+  }
 
   .gate input::placeholder {
     color: inherit;
@@ -846,6 +893,20 @@
     }
     .shake {
       animation: none;
+    }
+    /* The steps only cross-fade. */
+    .mem-step {
+      transition-property: opacity;
+    }
+    .mem-step[data-state="leaving"] {
+      translate: 0 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    @starting-style {
+      .mem-step[data-state="active"] {
+        translate: 0 0;
+      }
     }
   }
 }

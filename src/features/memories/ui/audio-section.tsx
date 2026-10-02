@@ -4,26 +4,34 @@ import { useId, useState, type ChangeEvent } from "react"
 import { cn } from "@/shared/lib/utils"
 import { MAX_AUDIO_MS } from "../upload-limits"
 import { RECORDER_COPY, formatBytes, formatClock, recordingNotice } from "./audio-recorder-model"
+import { BUTTON_FACE, ERROR, HINT, PANEL } from "./sheet-styles"
 import { TalkingOrb } from "./talking-orb"
 import { useAudioLevel, type LevelEnv } from "./use-audio-level"
 import type { useAudioRecorder } from "./use-audio-recorder"
 
 /** The audio section's Spanish copy (neutral, `tú`). */
 export const AUDIO_COPY = {
-  label: "Audio",
-  hint: "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
+  /** The group's name for screen readers: on screen, Grabar and Subir audio say it. */
+  label: "Tu voz",
+  /** The real limits (`MAX_AUDIO_MS`, `MAX_AUDIO_BYTES`), and the formats that keep a long voice under the size. */
+  hint: "Voz hasta 60 min y 100 MB · mejor MP3, M4A u OGG",
   requesting: "Esperando el micrófono…",
   recording: "Grabando…",
 } as const
 
 const ACCEPT = "audio/*,.webm,.ogg,.oga,.opus,.mp3,.m4a,.mp4,.aac,.wav"
-const RIM = "border border-[#a8c8ff]/25"
-const LABEL_CLASS = "t-label text-ink-muted"
-const ERROR_CLASS = "t-body m-0 text-[length:var(--type-1)] leading-snug text-signal"
-const BUTTON_CLASS =
-  "press t-label inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-sm border border-[#a8c8ff]/35 bg-[#a8c8ff]/[0.06] px-4 text-[#eaf0ff] transition-colors duration-200 hover:bg-[#a8c8ff]/[0.14] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff] disabled:opacity-50"
-const ICON_CLASS =
-  "press inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors duration-200 hover:text-[#eaf0ff] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#a8c8ff] disabled:opacity-50"
+/**
+ * A control inside the audio panel: 44 px tall, with the inner radius (the panel's 12 minus its 4 px padding), so its
+ * corners nest in the panel's. Presses down to 0.96; only the scale and the colors move.
+ */
+const CONTROL = cn(
+  BUTTON_FACE,
+  "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-inner text-[length:var(--type-1)] leading-none text-ink transition-[scale,background-color,color] duration-150 ease-out active:not-disabled:scale-[0.96] motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#a8c8ff] disabled:opacity-50",
+)
+/** One half of the segmented pair, or Detener: a faint fill that brightens under the pointer. */
+const SEGMENT = cn(CONTROL, "bg-white/[0.06] px-4 hover:bg-white/[0.11]")
+/** A square icon control (44 px, the hit area itself). */
+const ICON = cn(CONTROL, "w-11 text-ink-muted hover:bg-white/[0.08] hover:text-ink")
 
 export interface AudioSectionProps {
   /** The recorder the form owns (state, the held clip, and the actions). */
@@ -36,6 +44,10 @@ export interface AudioSectionProps {
   error?: string
   /** A picked audio file (the form checks it and hands it to the recorder). */
   onPickFile: (file: File | undefined) => void
+  /** The group's id, so the form can move the focus into it. */
+  id?: string
+  /** More descriptions for the group: an error the form shows beside it. */
+  describedBy?: string
   /** A seam for tests: the Web Audio the talking orb listens through. */
   levelEnv?: LevelEnv
 }
@@ -46,8 +58,14 @@ const MicIcon = () => (
     <path d="M2.5 7a4.5 4.5 0 0 0 9 0M7 11.5V13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 )
+const UploadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M7 9.5V1.5M3.75 4.75 7 1.5l3.25 3.25M2 12.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+// A triangle's visual centre sits left of its box's: it is nudged 1 px right so it looks centred in its button.
 const PlayIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true" className="translate-x-px">
     <path d="M2.5 1.5v9l8-4.5z" />
   </svg>
 )
@@ -68,13 +86,14 @@ const StopIcon = () => (
 )
 
 /**
- * "Audio": record the voice of a memory or upload a file, and listen to it before saving. Idle it offers Grabar (where
- * the browser can record) and Subir audio; recording it shows the time against the 60 minute cap, the size so far and, from 55 minutes, a quiet warning and a talking orb that
- * listens to the microphone; holding an audio it plays it back with the same orb, in the memory's color, pulsing with the
- * voice. The box keeps its height through every state, so nothing below it jumps. Presentational: the form owns the
- * recorder (`useAudioRecorder`) and the checks.
+ * The voice of a memory: record it or upload a file, and listen to it before saving. Every state lives in one panel
+ * (the panel radius, padded by the panel padding) that keeps its height: idle it is the segmented pair Grabar | Subir
+ * audio (only Subir audio where the browser cannot record); recording it shows a talking orb that listens to the
+ * microphone, the time against the 60 minute cap and the size so far, Detener and Quitar; holding an audio it is a
+ * player whose orb, in the memory's color, pulses with the voice. Presentational: the form owns the recorder
+ * (`useAudioRecorder`) and the checks.
  */
-export function AudioSection({ recorder, color, disabled, error, onPickFile, levelEnv }: AudioSectionProps) {
+export function AudioSection({ recorder, color, disabled, error, onPickFile, id, describedBy, levelEnv }: AudioSectionProps) {
   const { state, supported, clip, stream, sizeBytes, start, stop, discard, playback } = recorder
   const fileId = useId()
   const errorId = `${fileId}-error`
@@ -105,36 +124,39 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
     else element.pause()
   }
 
+  // Said to screen readers only: on screen the talking orb and the running time already show it.
   const status = asking ? AUDIO_COPY.requesting : recording ? AUDIO_COPY.recording : ""
   // Close to the cap: how long is left. Quiet (a status, not an alert): the recording carries on.
   const notice = recording ? recordingNotice(state.elapsedMs) : null
 
   return (
     <div
+      id={id}
       role="group"
       aria-labelledby={`${fileId}-label`}
-      aria-describedby={[hintId, problem && errorId].filter(Boolean).join(" ")}
+      aria-describedby={[hintId, problem && errorId, describedBy].filter(Boolean).join(" ")}
       className="flex flex-col gap-2"
     >
-      <span id={`${fileId}-label`} className={LABEL_CLASS}>
+      <span id={`${fileId}-label`} className="sr-only">
         {AUDIO_COPY.label}
       </span>
 
+      {/* 44 px controls plus the panel padding on both sides: the same height in every state. */}
       <div
         data-testid="audio-box"
-        className={cn(RIM, "flex min-h-[4.5rem] flex-wrap items-center gap-x-3 gap-y-1 rounded-sm bg-white/[0.03] px-3 py-2")}
+        className={cn(PANEL, "flex h-[calc(2.75rem+2*var(--panel-pad))] items-center gap-panel p-panel")}
       >
-        {(recording || held) && (
-          <TalkingOrb color={color} level={level} active={talking} size={26} className="-mx-1.5" />
-        )}
-
         {recording && (
           <>
-            <span role="timer" aria-label="Tiempo grabado" className="t-body min-w-0 flex-1 text-[length:var(--type-1)] whitespace-nowrap tabular-nums text-ink">
-              {formatClock(state.elapsedMs)} / {formatClock(MAX_AUDIO_MS)}
-              <span className="text-ink-muted"> · ~{formatBytes(sizeBytes ?? 0)}</span>
+            <TalkingOrb color={color} level={level} active={talking} size={22} />
+            {/* Two short lines, like the player's: the time against the cap, then the size so far. */}
+            <span role="timer" aria-label="Tiempo grabado" className="t-body flex min-w-0 flex-1 flex-col text-[length:var(--type-1)] leading-tight whitespace-nowrap tabular-nums text-ink">
+              <span className="truncate">
+                {formatClock(state.elapsedMs)} / {formatClock(MAX_AUDIO_MS)}
+              </span>
+              <span className="truncate text-sm text-ink-muted">~{formatBytes(sizeBytes ?? 0)}</span>
             </span>
-            <button type="button" onClick={stop} className={BUTTON_CLASS} data-magnetic="light" data-cursor-label="Detener">
+            <button type="button" onClick={stop} className={cn(SEGMENT, "pr-4 pl-3.5")} data-magnetic="light" data-cursor-label="Detener">
               <StopIcon />
               Detener
             </button>
@@ -144,7 +166,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
               aria-label="Quitar audio"
               data-magnetic="light"
               data-cursor-label="Quitar audio"
-              className={ICON_CLASS}
+              className={ICON}
             >
               <CloseIcon />
             </button>
@@ -170,13 +192,14 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
               aria-label={playing ? "Pausar" : "Escuchar"}
               data-magnetic="light"
               data-cursor-label={playing ? "Pausar" : "Escuchar"}
-              className={cn(BUTTON_CLASS, "w-11 rounded-full px-0")}
+              className={cn(CONTROL, "w-11 bg-[#eaf0ff] text-[#07061a] hover:bg-white")}
             >
               {playing ? <PauseIcon /> : <PlayIcon />}
             </button>
+            <TalkingOrb color={color} level={level} active={talking} size={22} />
             <span className="t-body flex min-w-0 flex-1 flex-col text-[length:var(--type-1)] leading-tight text-ink">
               {state.durationMs !== null && <span className="tabular-nums">{formatClock(state.durationMs)}</span>}
-              {state.source === "file" && <span className="max-w-full truncate text-xs tracking-[0.04em] text-ink-muted">{clip.name}</span>}
+              {state.source === "file" && <span className="max-w-full truncate text-sm text-ink-muted">{clip.name}</span>}
             </span>
             {supported && (
               <button
@@ -186,7 +209,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
                 aria-label="Grabar de nuevo"
                 data-magnetic="light"
                 data-cursor-label="Grabar de nuevo"
-                className={ICON_CLASS}
+                className={ICON}
               >
                 <MicIcon />
               </button>
@@ -198,7 +221,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
               aria-label="Quitar audio"
               data-magnetic="light"
               data-cursor-label="Quitar audio"
-              className={ICON_CLASS}
+              className={ICON}
             >
               <CloseIcon />
             </button>
@@ -214,7 +237,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
                 disabled={disabled || asking}
                 data-magnetic="light"
                 data-cursor-label="Grabar"
-                className={BUTTON_CLASS}
+                className={cn(SEGMENT, "flex-1")}
               >
                 <MicIcon />
                 Grabar
@@ -233,11 +256,12 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
               data-magnetic="light"
               data-cursor-label="Subir audio"
               className={cn(
-                BUTTON_CLASS,
-                "cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#a8c8ff]",
+                SEGMENT,
+                "flex-1 cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-[-2px] peer-focus-visible:outline-[#a8c8ff]",
                 (disabled || asking) && "pointer-events-none opacity-50",
               )}
             >
+              <UploadIcon />
               Subir audio
             </label>
           </>
@@ -245,20 +269,20 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
       </div>
 
       {status && (
-        <p role="status" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
+        <p role="status" className="sr-only">
           {status}
         </p>
       )}
       {notice && (
-        <p role="status" className="m-0 text-xs tracking-[0.04em] text-ink">
+        <p role="status" className={cn(HINT, "text-ink")}>
           {notice}
         </p>
       )}
-      <p id={hintId} className="m-0 text-xs tracking-[0.04em] text-ink-muted">
+      <p id={hintId} className={HINT}>
         {unsupported ? RECORDER_COPY.errors.unsupported : AUDIO_COPY.hint}
       </p>
       {problem && (
-        <p id={errorId} role="alert" className={ERROR_CLASS}>
+        <p id={errorId} role="alert" className={ERROR}>
           {problem}
         </p>
       )}

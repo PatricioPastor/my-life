@@ -79,9 +79,12 @@ describe("MemoriesSpace adding a memory", () => {
     const before = screen.getByRole("button", { name: /El primer viaje/ }).getAttribute("style")
 
     fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
-    fireEvent.change(screen.getByLabelText("Foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
+    // Three steps: the photo, then the words and the date, then the color and Guardar recuerdo.
+    fireEvent.change(screen.getByLabelText("Elegir foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
+    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }))
     fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "Una tarde de lluvia" } })
     fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: "2024-03-12" } })
+    fireEvent.click(screen.getByRole("button", { name: "Siguiente" }))
     fireEvent.click(screen.getByRole("button", { name: "Guardar recuerdo" }))
 
     await waitFor(() =>
@@ -183,6 +186,9 @@ describe("MemoriesSpace contributing from a memory", () => {
     const form = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
     expect((within(form).getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
     expect(within(form).getByText("Relacionado con «La casa nueva»")).toBeTruthy()
+    // "Mismo lugar" is under "¿Dónde fue?", on the second step.
+    fireEvent.change(within(form).getByLabelText("Elegir foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
+    fireEvent.click(within(form).getByRole("button", { name: "Siguiente" }))
     expect(within(form).getByRole("checkbox", { name: /Mismo lugar/ })).toBeTruthy()
   })
 
@@ -197,9 +203,11 @@ describe("MemoriesSpace contributing from a memory", () => {
     await openGlass(/La casa nueva/)
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Contribuir" }))
     const form = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
+    fireEvent.change(within(form).getByLabelText("Elegir foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
+    fireEvent.click(within(form).getByRole("button", { name: "Siguiente" }))
     fireEvent.click(within(form).getByRole("checkbox", { name: /Mismo lugar/ }))
-    fireEvent.change(within(form).getByLabelText("Foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
     fireEvent.change(within(form).getByLabelText("¿Qué recuerdas?"), { target: { value: "El día después" } })
+    fireEvent.click(within(form).getByRole("button", { name: "Siguiente" }))
     fireEvent.click(within(form).getByRole("button", { name: "Guardar recuerdo" }))
     await waitFor(() =>
       expect(createMemory).toHaveBeenCalledWith({

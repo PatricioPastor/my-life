@@ -1,6 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react"
 import { Dialog } from "radix-ui"
 import { track } from "@/shared/analytics"
 import { useKeyboardInset } from "@/shared/lib/use-keyboard-inset"
@@ -15,6 +24,18 @@ import { readAudioDuration, type ReadAudioDuration } from "./audio-duration"
 import { AudioSection } from "./audio-section"
 import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
+import {
+  LAST_STEP,
+  STEPPER_COPY,
+  STEP_COPY,
+  errorsOnStep,
+  firstInvalid,
+  kicker,
+  stepAnnouncement,
+  withoutStep,
+  type ErrorField,
+  type FormStep,
+} from "./memory-steps"
 import { WHEN_COPY, deriveWhen, localWhen, usableWhen, type When, type WhenOverrides } from "./memory-when"
 import { readPhotoTaken, type PhotoTimeParser } from "./photo-exif"
 import type { GpsParser } from "./photo-gps"
@@ -24,6 +45,7 @@ import { PLACE_COPY } from "./place-model"
 import { PlaceSection } from "./place-section"
 import { RELATED_COPY, chipText, type RelatedMemory } from "./related-memory"
 import { SamePlaceOption } from "./same-place-option"
+import { BUTTON_FACE, ERROR, FIELD, FOCUS, HINT, INPUT, LABEL, PANEL, PRESS } from "./sheet-styles"
 import { useMapsLink, type ResolveLink } from "./use-maps-link"
 import type { LevelEnv } from "./use-audio-level"
 import { useAudioRecorder, type RecorderEnv } from "./use-audio-recorder"
@@ -78,31 +100,60 @@ export interface AddMemoryProps {
 }
 
 type Phase = { kind: "idle" } | { kind: "uploading"; percent: number } | { kind: "saving" } | { kind: "done" }
+type StepState = "active" | "leaving" | "idle"
+type StepsStyle = CSSProperties & { "--step-dir": string }
 
 const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-const RIM = "border border-[#a8c8ff]/25"
-const FIELD_CLASS = cn(
-  RIM,
-  "w-full rounded-sm bg-white/[0.04] px-3 py-2.5 text-ink outline-none transition-colors duration-200 placeholder:text-ink-faint",
-  "focus-visible:border-[#a8c8ff]/70 aria-[invalid=true]:border-signal/70",
-)
-const LABEL_CLASS = "t-label text-ink-muted"
-const ERROR_CLASS = "t-body m-0 text-[length:var(--type-1)] leading-snug text-signal"
+const STEPS: readonly FormStep[] = [1, 2, 3]
+/** A footer button: 48 px, in the sheet padding, so it takes the panel radius. */
+const ACTION = cn(PRESS, FOCUS, BUTTON_FACE, "flex h-12 items-center justify-center rounded-panel text-[length:var(--type-1)] leading-none disabled:opacity-60")
+/** Where the focus goes for each field's error: the control itself (the audio's first control, inside its group). */
+const FIELD_ID: Record<Exclude<ErrorField, "form">, string> = {
+  media: "memory-photo",
+  photo: "memory-photo",
+  audio: "memory-audio",
+  caption: "memory-caption",
+  date: "memory-date",
+  time: "memory-time",
+  place: "memory-maps-link",
+}
 
 const browserClock = () => new Date()
 
-function buttonLabel(phase: Phase): string {
+function controlFor(field: ErrorField): HTMLElement | null {
+  if (field === "form") return null
+  const element = document.getElementById(FIELD_ID[field])
+  if (field === "audio") return element?.querySelector<HTMLElement>("button:not(:disabled), input:not(:disabled)") ?? null
+  return element
+}
+
+function buttonLabel(phase: Phase, step: FormStep): string {
   if (phase.kind === "uploading") return `Subiendo… ${phase.percent}%`
   if (phase.kind === "saving") return "Guardando…"
-  return "Guardar recuerdo"
+  return step < LAST_STEP ? STEPPER_COPY.next : STEPPER_COPY.save
 }
+
+const CloseIcon = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+)
+const PhotoIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+    <rect x="2.5" y="4.5" width="17" height="13" rx="3" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="8" cy="9.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M3 15.5l4.6-4.2 3.4 3 2.6-2.3 5.4 4.8" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+)
 
 function MemoryForm({
   props,
+  locked,
   onLockChange,
   onClose,
 }: {
   props: AddMemoryProps
+  locked: boolean
   onLockChange: (locked: boolean) => void
   onClose: () => void
 }) {
@@ -175,6 +226,16 @@ function MemoryForm({
   const timer = useRef<number | undefined>(undefined)
   const previewUrl = useRef<string | null>(null)
 
+  // The steps. The one being left stays on screen (out of reach) while it fades; `dir` tells the motion which way.
+  const [step, setStep] = useState<FormStep>(1)
+  const [leaving, setLeaving] = useState<FormStep | null>(null)
+  const [dir, setDir] = useState<1 | -1>(1)
+  const [announcement, setAnnouncement] = useState("")
+  // Where the focus goes once a step is on screen: its heading, or the first field to fix. A new object each time asks again.
+  const [focusAsk, setFocusAsk] = useState<{ to: ErrorField | "heading" } | null>(null)
+  const headings = useRef<Array<HTMLHeadingElement | null>>([])
+  const scroller = useRef<HTMLDivElement | null>(null)
+
   // Closing the form cancels an upload in flight, drops a photo still being read and frees the preview.
   useEffect(
     () => () => {
@@ -186,7 +247,29 @@ function MemoryForm({
     [],
   )
 
+  // After the step is on screen (its `hidden` is gone), so the focus can land in it.
+  useEffect(() => {
+    if (!focusAsk) return
+    const target = focusAsk.to === "heading" ? headings.current[step - 1] : controlFor(focusAsk.to)
+    target?.focus()
+  }, [focusAsk, step])
+
   const busy = phase.kind === "uploading" || phase.kind === "saving"
+  const settled = busy || phase.kind === "done"
+
+  /** Shows a step and moves the focus to its heading, or to the field to fix. Going to the same step only moves the focus. */
+  function show(next: FormStep, focus: ErrorField | "heading" = "heading") {
+    if (next !== step) {
+      setDir(next > step ? 1 : -1)
+      setLeaving(step)
+      setStep(next)
+      setAnnouncement(stepAnnouncement(next))
+      // A failed save is about the last step; it does not follow the visitor back.
+      setErrors((e) => ({ ...e, form: undefined }))
+      if (scroller.current) scroller.current.scrollTop = 0
+    }
+    setFocusAsk({ to: focus })
+  }
 
   function choose(file: File | undefined) {
     if (!file || busy) return
@@ -299,15 +382,8 @@ function MemoryForm({
     choose(event.dataTransfer?.files?.[0])
   }
 
-  const fail = (found: FormErrors) => {
-    setErrors(found)
-    setPhase({ kind: "idle" })
-    onLockChange(false)
-  }
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (busy || phase.kind === "done") return
+  /** Every check the server would make, plus the link: one still being read, or not understood, cannot stand for the place. */
+  function check(): FormErrors {
     const found = validateForm({
       file: picked?.file ?? null,
       audio:
@@ -320,16 +396,40 @@ function MemoryForm({
       time: when.time,
       today,
     })
-    if (found.media || found.photo || found.audio || found.caption || found.date || found.time) {
-      setErrors(found)
-      return
+    if (link.text.trim() && !linkPlace) found.place = PLACE_COPY.linkBlocked
+    return found
+  }
+
+  /** Puts the errors where they belong: the earliest step with one is shown, its first field focused. */
+  const fail = (found: FormErrors) => {
+    setErrors(found)
+    setPhase({ kind: "idle" })
+    onLockChange(false)
+    const first = firstInvalid(found)
+    if (first) show(first.step, first.field)
+  }
+
+  // Enter in a field submits the form: on the first two steps that is Siguiente, and only the last one saves.
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (settled) return
+    const found = check()
+    if (step < LAST_STEP) {
+      const here = errorsOnStep(found, step)
+      setErrors((e) => ({ ...withoutStep(e, step), ...here }))
+      const first = firstInvalid(here)
+      return first ? show(step, first.field) : show((step + 1) as FormStep)
     }
-    // A link that is still being read, or that failed, must not be silently replaced by the photo's own place.
-    if (link.text.trim() && !linkPlace) {
-      setErrors({ form: PLACE_COPY.linkBlocked })
-      return
+    const first = firstInvalid(found)
+    if (first) {
+      setErrors(found)
+      return show(first.step, first.field)
     }
     setErrors({})
+    void save()
+  }
+
+  async function save() {
     // Consent only counts while there is a place to keep (the photo's, or the link's).
     const share = shareLocation && hasPlace
     // "Mismo lugar" only counts while the memory it copies from is still the related one and has a place.
@@ -417,281 +517,398 @@ function MemoryForm({
   }
 
   const count = [...caption].length
-  const photoDescribedBy = ["memory-photo-hint", errors.photo && "memory-photo-error"].filter(Boolean).join(" ")
-  const captionDescribedBy = ["memory-caption-count", errors.caption && "memory-caption-error"].filter(Boolean).join(" ")
+  const describe = (...ids: Array<string | false | null | undefined>) => ids.filter(Boolean).join(" ") || undefined
+  const photoDescribedBy = describe(
+    !picked && "memory-photo-hint",
+    errors.photo && "memory-photo-error",
+    errors.media && "memory-media-error",
+  )
+  const captionDescribedBy = describe("memory-caption-count", errors.caption && "memory-caption-error")
   const whenHint = when.hint ? "memory-when-hint" : null
-  const dateDescribedBy = [whenHint, errors.date && "memory-date-error"].filter(Boolean).join(" ")
-  const timeDescribedBy = [whenHint, errors.time && "memory-time-error"].filter(Boolean).join(" ")
+  const dateDescribedBy = describe(whenHint, errors.date && "memory-date-error")
+  const timeDescribedBy = describe(whenHint, errors.time && "memory-time-error")
+  const preview = picked && !previewFailed
 
-  return (
-    <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-      {/* The ONE scroll region: phones scroll the fields here and nowhere else; desktop fits and never scrolls. */}
-      <div data-testid="memory-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 md:px-8 md:pb-4">
-        <div data-testid="memory-columns" className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-x-8">
-          {relation && (
-            <div data-testid="related-chip" className="flex min-w-0 max-w-full w-fit items-center gap-1 md:col-start-2 md:row-start-1 rounded-full border border-[#a8c8ff]/30 bg-[#a8c8ff]/[0.07] pl-4 text-ink">
-              <span className="t-body min-w-0 truncate text-[length:var(--type-1)]">{chipText(relation.caption)}</span>
-              <button
-                type="button"
-                aria-label={RELATED_COPY.removeRelation}
-                onClick={removeRelation}
-                disabled={busy || phase.kind === "done"}
-                data-magnetic="light"
-                data-cursor-label={RELATED_COPY.removeRelation}
-                className="press grid h-11 w-11 shrink-0 place-items-center text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#a8c8ff] disabled:opacity-50"
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                  <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-          )}
-          <div className={cn("flex flex-col gap-5 md:gap-4", relation && "md:row-span-2 md:row-start-1")}>
-            <div className="flex flex-col gap-2">
-              <label id="memory-photo-label" htmlFor="memory-photo" className={LABEL_CLASS}>
-                Foto
-              </label>
-              <input
-                id="memory-photo"
-                type="file"
-                accept={ACCEPT}
-                onChange={onPick}
-                disabled={busy || phase.kind === "done"}
-                aria-labelledby="memory-photo-label"
-                aria-describedby={photoDescribedBy}
-                aria-invalid={errors.photo ? true : undefined}
-                className="peer sr-only"
-              />
-              {/* A fixed-height box: the preview fills it, so picking a photo never moves what is below. */}
-              <div className="relative">
-              <label
-                htmlFor="memory-photo"
-                data-testid="photo-drop"
-                data-magnetic="light"
-                data-cursor-label="Elegir foto"
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragging(true)
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={onDrop}
-                className={cn(
-                  RIM,
-                  "flex h-36 cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-sm border-dashed bg-white/[0.03] p-3 text-center transition-colors duration-200 md:h-36 [@media(max-height:520px)]:h-20",
-                  "peer-focus-visible:border-[#a8c8ff]/70 peer-aria-[invalid=true]:border-signal/70",
-                  dragging && "border-[#a8c8ff]/70 bg-[#a8c8ff]/[0.07]",
-                )}
-              >
-                {picked && !previewFailed && (
-                  // A local blob preview of the picked file: nothing to optimize, and `next/image` cannot take a blob.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={picked.url}
-                    alt="Vista previa"
-                    onError={() => setPreviewFailed(true)}
-                    className="min-h-0 w-full flex-1 rounded-sm object-contain"
-                  />
-                )}
-                {picked ? (
-                  <span className="max-w-full shrink-0 truncate text-xs tracking-[0.06em] text-ink-muted">{picked.file.name}</span>
-                ) : (
-                  <span className="t-body text-[length:var(--type-1)] text-ink-muted">
-                    Elige una foto
-                    <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline"> o arrástrala aquí</span>
-                  </span>
-                )}
-              </label>
-              {picked && (
-                <button
-                  type="button"
-                  aria-label="Quitar foto"
-                  onClick={removePhoto}
-                  disabled={busy || phase.kind === "done"}
-                  data-magnetic="light"
-                  data-cursor-label="Quitar foto"
-                  className="press absolute top-0 right-0 grid size-11 place-items-center focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#a8c8ff] disabled:opacity-50"
-                >
-                  <span className="grid size-6 place-items-center rounded-full bg-[#07061a]/80 text-[#eaf0ff] ring-1 ring-[#a8c8ff]/35">
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                      <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                    </svg>
-                  </span>
-                </button>
-              )}
-              </div>
-              <p id="memory-photo-hint" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
-                JPG, PNG, WebP o HEIC, hasta 10 MB.
-              </p>
-              {errors.photo && (
-                <p id="memory-photo-error" className={ERROR_CLASS}>
-                  {errors.photo}
-                </p>
-              )}
-            </div>
-
-            <AudioSection
-              recorder={{ ...recorder, start: startRecording }}
-              color={orbColor ?? DEFAULT_ORB_COLOR}
-              disabled={busy || phase.kind === "done"}
-              error={errors.audio ?? errors.media}
-              onPickFile={(file) => void chooseAudio(file)}
-              levelEnv={props.levelEnv}
-            />
-
-            <OrbColorPicker
-              status={picked ? palette.status : hasAudio ? "ready" : "idle"}
-              colors={swatches}
-              value={orbColor}
-              fromPhoto={palette.status === "ready" ? palette.fromPhoto : true}
-              voice={!picked && hasAudio}
-              disabled={busy || phase.kind === "done"}
-              onChange={setChosenColor}
-            />
-          </div>
-
-          <div className={cn("flex flex-col gap-5 md:gap-4", relation && "md:col-start-2 md:row-start-2")}>
-            <div className="flex flex-col gap-2">
-              <label htmlFor="memory-caption" className={LABEL_CLASS}>
-                ¿Qué recuerdas?
-              </label>
-              {/* The counter sits inside the field's corner: it does not need a row of its own. */}
-              <div className="relative">
-                <textarea
-                  id="memory-caption"
-                  rows={3}
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  disabled={busy || phase.kind === "done"}
-                  aria-describedby={captionDescribedBy}
-                  aria-invalid={errors.caption ? true : undefined}
-                  className={cn(FIELD_CLASS, "t-body resize-none pb-6 text-[length:var(--type-1)] md:h-[5.75rem]")}
-                />
-                <span
-                  id="memory-caption-count"
-                  className={cn(
-                    "pointer-events-none absolute right-3 bottom-2 text-xs tabular-nums tracking-[0.04em]",
-                    count > CAPTION_MAX_LENGTH ? "text-signal" : "text-ink-muted",
-                  )}
-                >
-                  {count}/{CAPTION_MAX_LENGTH}
-                </span>
-              </div>
-              {errors.caption && (
-                <p id="memory-caption-error" className={ERROR_CLASS}>
-                  {errors.caption}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label htmlFor="memory-date" className={LABEL_CLASS}>
-                ¿Cuándo fue?
-              </label>
-              {/* The date, and an optional time beside it. Both fill themselves from the photo or the audio. */}
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)] gap-2">
-                <input
-                  id="memory-date"
-                  type="date"
-                  value={when.date}
-                  min={EARLIEST_MEMORY_DATE.toISOString().slice(0, 10)}
-                  max={today}
-                  onChange={(e) => setTyped((t) => ({ ...t, date: e.target.value }))}
-                  disabled={busy || phase.kind === "done"}
-                  aria-describedby={dateDescribedBy || undefined}
-                  aria-invalid={errors.date ? true : undefined}
-                  className={cn(FIELD_CLASS, "tabular-nums [color-scheme:dark]")}
-                />
-                <input
-                  id="memory-time"
-                  type="time"
-                  aria-label={WHEN_COPY.time}
-                  value={when.time}
-                  onChange={(e) => setTyped((t) => ({ ...t, time: e.target.value }))}
-                  disabled={busy || phase.kind === "done"}
-                  aria-describedby={timeDescribedBy || undefined}
-                  aria-invalid={errors.time ? true : undefined}
-                  className={cn(FIELD_CLASS, "tabular-nums [color-scheme:dark]")}
-                />
-              </div>
-              {/* Where the date and time came from, until the visitor edits them. */}
-              {when.hint && (
-                <p
-                  id="memory-when-hint"
-                  data-approximate={when.approximate || undefined}
-                  className="m-0 text-xs tracking-[0.04em] text-ink-muted"
-                >
-                  {when.hint}
-                </p>
-              )}
-              {errors.date && (
-                <p id="memory-date-error" className={ERROR_CLASS}>
-                  {errors.date}
-                </p>
-              )}
-              {errors.time && (
-                <p id="memory-time-error" className={ERROR_CLASS}>
-                  {errors.time}
-                </p>
-              )}
-            </div>
-
-            {relation?.place && (
-              <SamePlaceOption
-                place={relation.place}
-                checked={samePlace}
-                onChange={onSamePlaceChange}
-                disabled={busy || phase.kind === "done"}
-              />
-            )}
-            <PlaceSection
-              place={place}
-              link={{ text: link.text, state: link.state }}
-              onLinkChange={onLinkChange}
-              consent={shareLocation}
-              onConsentChange={onConsentChange}
-              disabled={busy || phase.kind === "done"}
-            />
-          </div>
+  /** One step: its heading (focused when it arrives), at most one line under it, and its fields. */
+  const panel = (n: FormStep, body: ReactNode) => {
+    const state: StepState = n === step ? "active" : n === leaving ? "leaving" : "idle"
+    const copy = STEP_COPY[n]
+    return (
+      <div
+        key={n}
+        data-step-panel={n}
+        data-state={state}
+        hidden={state === "idle"}
+        aria-hidden={state === "leaving" ? true : undefined}
+        inert={state === "leaving"}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && state === "leaving") setLeaving(null)
+        }}
+        className="mem-step flex flex-1 flex-col gap-6"
+      >
+        <div className="flex flex-col gap-1.5">
+          <h3
+            ref={(node) => {
+              headings.current[n - 1] = node
+            }}
+            tabIndex={-1}
+            className="t-title m-0 text-[length:var(--type-4)] text-balance text-[#f3f0ea] outline-none"
+          >
+            {copy.title}
+          </h3>
+          {copy.sub && <p className="t-body m-0 text-[length:var(--type-1)] text-pretty text-ink-muted">{copy.sub}</p>}
         </div>
+        {body}
+      </div>
+    )
+  }
+
+  const whatToLeave = (
+    <>
+      {relation && (
+        // In the sheet padding, so the panel radius; its remove button sits in the panel padding, so the inner radius.
+        <div data-testid="related-chip" className={cn(PANEL, "flex h-12 min-w-0 items-center gap-2 p-panel pl-3.5")}>
+          <span className="t-body min-w-0 flex-1 truncate text-[length:var(--type-1)] text-ink">{chipText(relation.caption)}</span>
+          <button
+            type="button"
+            aria-label={RELATED_COPY.removeRelation}
+            onClick={removeRelation}
+            disabled={settled}
+            data-magnetic="light"
+            data-cursor-label={RELATED_COPY.removeRelation}
+            className={cn(PRESS, "grid size-10 shrink-0 place-items-center rounded-inner text-ink-muted hover:bg-white/[0.08] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#a8c8ff] disabled:opacity-50")}
+          >
+            <CloseIcon size={10} />
+          </button>
+        </div>
+      )}
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <input
+            id="memory-photo"
+            type="file"
+            accept={ACCEPT}
+            onChange={onPick}
+            disabled={settled}
+            aria-labelledby="memory-photo-label"
+            aria-describedby={photoDescribedBy}
+            aria-invalid={errors.photo || errors.media ? true : undefined}
+            className="peer sr-only"
+          />
+          {/* A tile of a stable height: the preview covers it, clipped by its radius, so picking a photo moves nothing. */}
+          <label
+            htmlFor="memory-photo"
+            data-testid="photo-drop"
+            data-magnetic="light"
+            data-cursor-label={picked ? STEPPER_COPY.photo.change : STEPPER_COPY.photo.choose}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            className={cn(
+              PANEL,
+              "relative flex h-44 cursor-pointer flex-col items-center justify-center gap-1.5 overflow-hidden p-4 text-center text-ink-muted transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.06] [@media(max-height:520px)]:h-28",
+              "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#a8c8ff] peer-aria-[invalid=true]:shadow-[inset_0_0_0_1px_var(--signal)]",
+              dragging && "bg-[#a8c8ff]/[0.08] shadow-[inset_0_0_0_1px_rgba(168,200,255,0.6)]",
+            )}
+          >
+            {preview ? (
+              // A local blob preview of the picked file: nothing to optimize, and `next/image` cannot take a blob.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={picked.url}
+                alt={STEPPER_COPY.photo.preview}
+                onError={() => setPreviewFailed(true)}
+                className="absolute inset-0 size-full rounded-panel object-cover outline-1 -outline-offset-1 outline-white/10"
+              />
+            ) : (
+              <PhotoIcon />
+            )}
+            {picked && !preview && (
+              <span className="t-body max-w-full truncate text-[length:var(--type-1)] text-ink">{picked.file.name}</span>
+            )}
+            <span
+              id="memory-photo-label"
+              className={picked ? "sr-only" : "t-body text-[length:var(--type-1)] leading-snug text-ink"}
+            >
+              {picked ? STEPPER_COPY.photo.change : STEPPER_COPY.photo.choose}
+            </span>
+            {!picked && (
+              <span id="memory-photo-hint" className={cn(HINT, "text-xs")}>
+                {STEPPER_COPY.photo.formats}
+              </span>
+            )}
+          </label>
+          {picked && (
+            // A 44 px hit area in the tile's corner; the 32 px badge is centred in it, 6 px in from both edges, so its
+            // radius is the tile's minus that inset (12 − 6 = 6): concentric with the corner it sits in.
+            <button
+              type="button"
+              aria-label={STEPPER_COPY.photo.remove}
+              onClick={removePhoto}
+              disabled={settled}
+              data-magnetic="light"
+              data-cursor-label={STEPPER_COPY.photo.remove}
+              className="group absolute top-0 right-0 size-11 outline-none disabled:opacity-50"
+            >
+              <span className="absolute top-1.5 right-1.5 grid size-8 place-items-center rounded-[calc(var(--panel-r)-6px)] bg-[#07061a]/75 text-[#eaf0ff] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)] backdrop-blur-sm transition-[scale,background-color] duration-150 ease-out group-hover:bg-[#07061a]/90 group-active:group-enabled:scale-[0.96] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-[#a8c8ff] motion-reduce:transition-none">
+                <CloseIcon size={10} />
+              </span>
+            </button>
+          )}
+        </div>
+        {errors.photo && (
+          <p id="memory-photo-error" className={ERROR}>
+            {errors.photo}
+          </p>
+        )}
+        <AudioSection
+          id="memory-audio"
+          recorder={{ ...recorder, start: startRecording }}
+          color={orbColor ?? DEFAULT_ORB_COLOR}
+          disabled={settled}
+          error={errors.audio}
+          describedBy={errors.media ? "memory-media-error" : undefined}
+          onPickFile={(file) => void chooseAudio(file)}
+          levelEnv={props.levelEnv}
+        />
+        {errors.media && (
+          <p id="memory-media-error" role="alert" className={ERROR}>
+            {errors.media}
+          </p>
+        )}
+      </div>
+    </>
+  )
+
+  const theMemory = (
+    <>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="memory-caption" className={LABEL}>
+          {STEPPER_COPY.caption}
+        </label>
+        {/* The counter sits inside the field's corner: it does not need a row of its own. */}
+        <div className="relative">
+          <textarea
+            id="memory-caption"
+            rows={3}
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            disabled={settled}
+            aria-describedby={captionDescribedBy}
+            aria-invalid={errors.caption ? true : undefined}
+            className={cn(FIELD, "min-h-28 resize-none pb-8")}
+          />
+          <span
+            id="memory-caption-count"
+            className={cn(
+              "t-body pointer-events-none absolute right-3.5 bottom-2.5 text-sm leading-none tabular-nums",
+              count > CAPTION_MAX_LENGTH ? "text-signal" : "text-ink-muted",
+            )}
+          >
+            {count}/{CAPTION_MAX_LENGTH}
+          </span>
+        </div>
+        {errors.caption && (
+          <p id="memory-caption-error" className={ERROR}>
+            {errors.caption}
+          </p>
+        )}
       </div>
 
-      {/* Outside the scroll region, so the submit and what it reports are always in reach. On desktop it sits under the right column. */}
+      <div className="flex flex-col gap-2">
+        <label htmlFor="memory-date" className={LABEL}>
+          {STEPPER_COPY.when}
+        </label>
+        {/* The date, and an optional time beside it. Both fill themselves from the photo or the audio. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)] gap-2">
+          <input
+            id="memory-date"
+            type="date"
+            value={when.date}
+            min={EARLIEST_MEMORY_DATE.toISOString().slice(0, 10)}
+            max={today}
+            onChange={(e) => setTyped((t) => ({ ...t, date: e.target.value }))}
+            disabled={settled}
+            aria-describedby={dateDescribedBy}
+            aria-invalid={errors.date ? true : undefined}
+            className={cn(INPUT, "tabular-nums [color-scheme:dark]")}
+          />
+          <input
+            id="memory-time"
+            type="time"
+            aria-label={WHEN_COPY.time}
+            value={when.time}
+            onChange={(e) => setTyped((t) => ({ ...t, time: e.target.value }))}
+            disabled={settled}
+            aria-describedby={timeDescribedBy}
+            aria-invalid={errors.time ? true : undefined}
+            className={cn(INPUT, "tabular-nums [color-scheme:dark]")}
+          />
+        </div>
+        {/* Where the date and time came from, until the visitor edits them. */}
+        {when.hint && (
+          <p id="memory-when-hint" data-approximate={when.approximate || undefined} className={HINT}>
+            {when.hint}
+          </p>
+        )}
+        {errors.date && (
+          <p id="memory-date-error" className={ERROR}>
+            {errors.date}
+          </p>
+        )}
+        {errors.time && (
+          <p id="memory-time-error" className={ERROR}>
+            {errors.time}
+          </p>
+        )}
+      </div>
+
+      <PlaceSection
+        place={place}
+        link={{ text: link.text, state: link.state }}
+        onLinkChange={onLinkChange}
+        consent={shareLocation}
+        onConsentChange={onConsentChange}
+        disabled={settled}
+        error={errors.place}
+      >
+        {relation?.place && (
+          <SamePlaceOption place={relation.place} checked={samePlace} onChange={onSamePlaceChange} disabled={settled} />
+        )}
+      </PlaceSection>
+    </>
+  )
+
+  const itsColor = (
+    <>
+      <OrbColorPicker
+        status={picked ? palette.status : hasAudio ? "ready" : "idle"}
+        colors={swatches}
+        value={orbColor}
+        fromPhoto={palette.status === "ready" ? palette.fromPhoto : true}
+        voice={!picked && hasAudio}
+        disabled={settled}
+        onChange={setChosenColor}
+      />
+      {/* At the foot of the step, right above the footer. */}
+      <p className={cn(HINT, "mt-auto text-center")}>{STEPPER_COPY.approval}</p>
+    </>
+  )
+
+  const steps: Record<FormStep, ReactNode> = { 1: whatToLeave, 2: theMemory, 3: itsColor }
+  const stepsStyle: StepsStyle = { "--step-dir": String(dir) }
+
+  return (
+    <form data-testid="memory-form" data-step={step} noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+      {/*
+        The close button sits exactly at the sheet padding from the corner (20 px down, 20 px in), so its 12 px radius
+        shares the 32 px corner's centre.
+      */}
+      <div className="flex shrink-0 items-center justify-between gap-4 px-sheet pt-sheet pb-4">
+        <div className="flex flex-col gap-2">
+          <p className="t-label m-0 tabular-nums text-ink-muted">{kicker(step)}</p>
+          <div aria-hidden="true" className="flex w-24 gap-1">
+            {STEPS.map((n) => (
+              <span
+                key={n}
+                data-testid="step-segment"
+                data-filled={n <= step}
+                className={cn(
+                  "h-1 flex-1 rounded-full transition-[background-color] duration-200 ease-out",
+                  n > step ? "bg-white/15" : !orbColor && "bg-ink",
+                )}
+                style={n <= step && orbColor ? { backgroundColor: orbColor } : undefined}
+              />
+            ))}
+          </div>
+        </div>
+        <Dialog.Close
+          disabled={locked}
+          aria-label={STEPPER_COPY.close}
+          data-magnetic="light"
+          data-cursor-label={STEPPER_COPY.close}
+          className={cn(
+            PRESS,
+            FOCUS,
+            "grid size-10 shrink-0 place-items-center rounded-panel bg-white/[0.06] text-ink-muted hover:bg-white/[0.11] hover:text-ink disabled:opacity-40",
+          )}
+        >
+          <CloseIcon />
+        </Dialog.Close>
+      </div>
+
+      {/* The ONE scroll region: whatever does not fit scrolls here, and the footer stays in reach. */}
+      <div
+        ref={scroller}
+        data-testid="memory-scroll"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-sheet pt-2 pb-6"
+      >
+        <div data-testid="memory-steps" className="relative flex flex-1 flex-col" style={stepsStyle}>
+          {STEPS.map((n) => panel(n, steps[n]))}
+        </div>
+      </div>
+      <div data-testid="step-announcer" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+
+      {/*
+        Pinned under the scroll region, with the sheet padding on the sides and the bottom (plus the safe area): the
+        buttons' 12 px corners nest in the sheet's 32 px ones. The primary is always the right-hand control, so its right
+        edge never moves; Atrás comes in on its left from the second step.
+      */}
       <div
         data-testid="memory-actions"
-        className="grid shrink-0 gap-2 border-t border-[#a8c8ff]/15 bg-[#080714] px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-center md:gap-x-8 md:px-8 md:pb-4 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="flex shrink-0 flex-col gap-3 border-t border-white/[0.06] px-sheet pt-sheet pb-[calc(var(--sheet-pad)+env(safe-area-inset-bottom))]"
       >
-        <div className="flex min-w-0 flex-col justify-center gap-1">
-          {errors.form && (
-            <p id="memory-form-error" role="alert" className={ERROR_CLASS}>
-              {errors.form}
-            </p>
-          )}
-          <p role="status" className="t-body m-0 text-[length:var(--type-1)] text-ink empty:hidden">
-            {phase.kind === "done"
-              ? `Listo. Tu recuerdo quedó pendiente de aprobación.${placeNotSaved ? ` ${PLACE_COPY.notSaved}` : ""}`
-              : ""}
+        {errors.form && step === LAST_STEP && (
+          <p id="memory-form-error" role="alert" className={ERROR}>
+            {errors.form}
           </p>
-        </div>
-        <div className="flex flex-col gap-2">
+        )}
+        <p role="status" className="t-body m-0 text-[length:var(--type-1)] text-pretty text-ink empty:hidden">
+          {phase.kind === "done"
+            ? `Listo. Tu recuerdo quedó pendiente de aprobación.${placeNotSaved ? ` ${PLACE_COPY.notSaved}` : ""}`
+            : ""}
+        </p>
+        <div data-testid="memory-actions-row" className="flex gap-2">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={() => show((step - 1) as FormStep)}
+              disabled={settled}
+              data-magnetic="light"
+              data-cursor-label={STEPPER_COPY.back}
+              className={cn(ACTION, "shrink-0 bg-white/[0.06] px-5 text-ink shadow-[inset_0_0_0_1px_rgba(168,200,255,0.14)] hover:bg-white/[0.11]")}
+            >
+              {STEPPER_COPY.back}
+            </button>
+          )}
           <button
             type="submit"
-            disabled={busy || phase.kind === "done"}
+            // The second click of a double click on Siguiente would land on the next step's button: it is not a save.
+            onClick={(event) => {
+              if (event.detail > 1) event.preventDefault()
+            }}
+            disabled={settled}
             aria-busy={busy || undefined}
-            aria-describedby={errors.form ? "memory-form-error" : undefined}
+            aria-describedby={errors.form && step === LAST_STEP ? "memory-form-error" : undefined}
             data-magnetic="light"
-            data-cursor-label="Guardar recuerdo"
-            className="press t-label flex h-12 w-full items-center justify-center rounded-sm border border-[#a8c8ff]/45 bg-[#a8c8ff]/[0.1] text-[#eaf0ff] tabular-nums transition-colors duration-200 hover:bg-[#a8c8ff]/[0.18] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff] disabled:opacity-60"
+            data-cursor-label={buttonLabel(phase, step)}
+            className={cn(ACTION, "relative flex-1 overflow-hidden bg-[#eaf0ff] px-5 text-[#07061a] tabular-nums hover:bg-white")}
           >
-            {buttonLabel(phase)}
-          </button>
-          {phase.kind !== "idle" && (
-            <div aria-hidden="true" className="h-px w-full overflow-hidden bg-white/10">
-              <div
-                className="h-full bg-[#a8c8ff]/70 transition-[width] duration-200 ease-out"
+            {/* The upload's progress fills the button itself: nothing appears under it, so the footer never grows. */}
+            {phase.kind !== "idle" && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 bg-[#a8c8ff]/50 transition-[width] duration-200 ease-out"
                 style={{ width: phase.kind === "uploading" ? `${phase.percent}%` : "100%" }}
               />
-            </div>
-          )}
+            )}
+            <span className="relative">{buttonLabel(phase, step)}</span>
+          </button>
         </div>
       </div>
     </form>
@@ -699,10 +916,11 @@ function MemoryForm({
 }
 
 /**
- * The "Contribuir" control (a plus and the word, in the space's top bar) and the dialog it opens: a photo and/or an audio (recorded or uploaded), the color of
- * the orb, a few words, a date with an optional time (filled in from the photo or the audio) and the place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
- * like the viewer. On phones it is a bottom sheet (one scroll region, the submit always in reach); on tablets and
- * desktops it is a two-column card that fits without scrolling.
+ * The "Contribuir" control (a plus and the word, in the space's top bar) and the sheet it opens: three short steps
+ * ("¿Qué quieres dejar?", "Cuéntalo", "Elige su color") under a "Paso N de 3" kicker, with Atrás and Siguiente (Guardar
+ * recuerdo on the last) pinned at the foot. Part of the dark dimension, mounted inside the stage like the viewer. On
+ * phones it is a bottom sheet (its own height, up to 92% of the screen); from md a centred dialog of a stable height.
+ * Its corners are concentric all the way in: sheet 32, what sits in its 20 px padding 12, what sits in a 4 px panel 8.
  */
 export function AddMemory(props: AddMemoryProps) {
   const [ownOpen, setOwnOpen] = useState(false)
@@ -739,6 +957,8 @@ export function AddMemory(props: AddMemoryProps) {
         {/* Above the journey's HUD (the way back), which is drawn after the stage. */}
         <Dialog.Overlay className="mem-scrim absolute inset-0 z-10 bg-[#020207]/80" />
         <Dialog.Content
+          // The steps' headings and the live region say what each step is about; there is no separate description.
+          aria-describedby={undefined}
           className="mem-viewer mem-sheet absolute inset-0 z-10 flex items-end justify-center overscroll-contain p-0 outline-none md:items-center md:p-6"
           // The card is the only part that takes pointers: a press on the empty stage falls through to the scrim and closes.
           style={{
@@ -750,29 +970,19 @@ export function AddMemory(props: AddMemoryProps) {
           <div
             data-testid="memory-card"
             className={cn(
-              RIM,
-              "pointer-events-auto relative flex h-[calc(100%-max(0.5rem,env(safe-area-inset-top)))] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl border-b-0 bg-[#080714] shadow-[0_0_0_1px_rgba(168,200,255,0.06),0_28px_90px_rgba(0,0,0,0.65)] backdrop-blur-md",
-              "md:h-[min(100%,690px)] md:max-w-[900px] md:rounded-md md:border-b",
+              // A 1 px cool rim drawn as a shadow, outside the box: a border would push the padding 1 px off the radii.
+              "pointer-events-auto relative flex w-full min-w-0 flex-col overflow-hidden rounded-t-sheet bg-[#080714] shadow-[0_0_0_1px_rgba(168,200,255,0.14),0_28px_90px_rgba(0,0,0,0.65)]",
+              "max-h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))))]",
+              "md:h-[min(100%,680px)] md:max-h-none md:w-[min(30rem,calc(100vw-2rem))] md:rounded-sheet",
             )}
           >
-            <div className="relative shrink-0 px-5 pt-2.5 pb-3 md:px-8 md:pt-5 md:pb-3 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-1.5">
-              <div data-testid="sheet-handle" aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 md:hidden" />
-              <div className="flex flex-col gap-1 pr-16">
-                <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea] [@media(max-height:520px)]:text-[length:var(--type-3)]">{RELATED_COPY.title}</Dialog.Title>
-                <Dialog.Description className="t-body m-0 text-[length:var(--type-1)] text-ink-muted [@media(max-height:520px)]:sr-only">
-                  {RELATED_COPY.description}
-                </Dialog.Description>
-              </div>
-            </div>
-            <MemoryForm props={props} onLockChange={setLocked} onClose={() => setOpen(false)} />
-            <Dialog.Close
-              disabled={locked}
-              data-magnetic="light"
-              data-cursor-label="Cerrar"
-              className="press absolute top-2 right-3 flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted disabled:opacity-40 md:top-5 md:right-6"
-            >
-              Cerrar
-            </Dialog.Close>
+            <div
+              data-testid="sheet-handle"
+              aria-hidden="true"
+              className="absolute top-2 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-white/20 md:hidden"
+            />
+            <Dialog.Title className="sr-only">{RELATED_COPY.title}</Dialog.Title>
+            <MemoryForm props={props} locked={locked} onLockChange={setLocked} onClose={() => setOpen(false)} />
           </div>
         </Dialog.Content>
       </Dialog.Portal>

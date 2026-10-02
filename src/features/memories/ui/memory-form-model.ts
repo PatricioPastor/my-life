@@ -4,13 +4,13 @@ import type { CreateMemoryResult, PrepareUploadFailure } from "../upload-view"
 
 /** The form's Spanish copy (neutral, `tú`). Short and honest. */
 export const COPY = {
-  media: "Agrega una foto o un audio.",
+  media: "Agrega una foto o tu voz para seguir.",
   photoSize: "La foto supera los 10 MB.",
   photoType: "Elige una foto JPG, PNG, WebP o HEIC.",
   audioType: "Elige un audio WebM, OGG, MP3, M4A, AAC o WAV.",
   audioSize: "El audio supera los 100 MB. Para audios largos usa MP3, M4A u OGG.",
   audioLong: "El audio dura más de 60 minutos.",
-  audioRecording: "Detén la grabación antes de guardar.",
+  audioRecording: "Detén la grabación para seguir.",
   caption: "Escribe entre 1 y 140 caracteres.",
   dateFuture: "La fecha no puede ser futura.",
   dateInvalid: "Elige una fecha entre 1900 y hoy.",
@@ -28,6 +28,8 @@ export interface FormErrors {
   caption?: string
   date?: string
   time?: string
+  /** The pasted Google Maps link is still being read, or was not understood: it cannot stand for the place yet. */
+  place?: string
   /** An error about the whole submission, not one field. */
   form?: string
 }
