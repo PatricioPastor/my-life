@@ -7,9 +7,21 @@ import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
 import type { Lens } from "./lens"
 import * as readiness from "./audio-readiness"
+import { BAR_COUNT, BAR_REST } from "./audio-bars"
+import { VOLUME_KEY, resetVolumeSession } from "./player-model"
 
-// jsdom has no Web Audio: a voice that is loud while it plays stands in for the analyser.
-vi.mock("./use-audio-level", () => ({ useAudioLevel: (_source: unknown, active: boolean) => () => (active ? 0.6 : 0) }))
+// jsdom has no Web Audio: a voice that is loud while it plays stands in for the analyser (one stable handle per state, as
+// the real hook gives).
+const setVolume = vi.hoisted(() => vi.fn())
+vi.mock("./use-audio-level", () => {
+  const spectrum = new Uint8Array(1024).fill(200)
+  const playing = { level: () => 0.6, spectrum: () => spectrum, setVolume }
+  const idle = { level: () => 0, spectrum: () => null, setVolume }
+  return {
+    useAudioGraph: (_source: unknown, active: boolean) => (active ? playing : idle),
+    useAudioLevel: (_source: unknown, active: boolean) => (active ? playing : idle).level,
+  }
+})
 
 // The readiness of the audio route is its own tested hook; here it is steered, except in the one test that runs it.
 vi.mock("./audio-readiness", async (original) => ({
@@ -87,6 +99,9 @@ let pause: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   frames = []
+  setVolume.mockClear()
+  resetVolumeSession()
+  localStorage.clear()
   vi.mocked(readiness.useAudioReadiness).mockImplementation(readyAudio)
   vi.stubGlobal("matchMedia", undefined)
   vi.stubGlobal("AudioContext", undefined)
@@ -118,6 +133,9 @@ function runFrames(count: number, ms = 16) {
 
 const dialog = () => screen.getByRole("dialog")
 const audioButton = () => within(dialog()).getByRole("button", { name: /audio/i })
+const progress = () => within(dialog()).getByRole("slider", { name: "Progreso del audio" }) as HTMLInputElement
+const volumeSlider = () => within(dialog()).getByRole("slider", { name: "Volumen" }) as HTMLInputElement
+const muteButton = () => within(dialog()).getByRole("button", { name: "Silenciar" })
 
 describe("GlassView as a dialog", () => {
   it("is closed when there is no memory", () => {
@@ -249,10 +267,13 @@ describe("GlassView audio button", () => {
     act(() => {
       audio.dispatchEvent(new Event("timeupdate"))
     })
-    expect(within(dialog()).getByText("0:12 / 1:05")).toBeTruthy()
+    expect(within(dialog()).getByText("0:12")).toBeTruthy()
+    expect(within(dialog()).getByText("1:05")).toBeTruthy()
+    expect(progress().getAttribute("aria-valuetext")).toBe("0:12 de 1:05")
     act(() => {
       audio.dispatchEvent(new Event("ended"))
     })
+    expect(within(dialog()).getByText("0:00")).toBeTruthy()
     expect(within(dialog()).getByText("1:05")).toBeTruthy()
   })
 
@@ -389,6 +410,303 @@ describe("GlassView audio that is still processing", () => {
     const audio = dialog().querySelector("audio")!
     expect(audio.crossOrigin).toBe("anonymous")
     expect(audio.getAttribute("src")).toMatch(/^\/api\/memories\//)
+  })
+})
+
+describe("GlassView player", () => {
+  const sphereBox = (viewport = DESKTOP) => lensGeometry(viewport, 1)
+
+  it("puts the play button at the center of the sphere, not on its rim", () => {
+    mount({ memory: both })
+    const geometry = sphereBox()
+    const holder = dialog().querySelector<HTMLElement>("[data-glass-voice]")!
+    expect(holder.style.left).toBe(`${geometry.center.x}px`)
+    expect(holder.style.top).toBe(`${geometry.center.y}px`)
+    expect(holder.contains(audioButton())).toBe(true)
+  })
+
+  it("keeps the play button 64 px, a comfortable target", () => {
+    mount({ memory: both })
+    expect(audioButton().className).toContain("size-16")
+  })
+
+  it("lays a circular contrast scrim over the sphere, darker while paused than while playing", () => {
+    mount({ memory: both })
+    const geometry = sphereBox()
+    const scrim = dialog().querySelector<HTMLElement>("[data-glass-scrim]")!
+    expect(scrim.getAttribute("aria-hidden")).toBe("true")
+    expect(scrim.className).toContain("mem-glass-scrim")
+    // Exactly the sphere's disc: round, never a square box around it.
+    expect(scrim.style.width).toBe(`${geometry.diameter}px`)
+    expect(scrim.style.height).toBe(`${geometry.diameter}px`)
+    expect(scrim.style.left).toBe(`${geometry.center.x}px`)
+    expect(scrim.style.top).toBe(`${geometry.center.y}px`)
+    expect(scrim.getAttribute("data-state")).toBe("idle")
+    fireEvent.click(audioButton())
+    expect(scrim.getAttribute("data-state")).toBe("playing")
+  })
+
+  it("lays no scrim and no player on a photo-only memory", () => {
+    mount()
+    expect(dialog().querySelector("[data-glass-scrim]")).toBeNull()
+    expect(dialog().querySelector("[data-glass-bars]")).toBeNull()
+    expect(within(dialog()).queryByRole("slider")).toBeNull()
+  })
+
+  describe("frequency bars", () => {
+    const bars = () => Array.from(dialog().querySelectorAll<HTMLElement>("[data-glass-bar]"))
+    const scale = (bar: HTMLElement) => Number(/scaleY\(([\d.]+)\)/.exec(bar.style.transform)?.[1])
+
+    it("draws a row of bars that the screen reader skips", () => {
+      mount({ memory: both })
+      expect(bars()).toHaveLength(BAR_COUNT)
+      expect(dialog().querySelector("[data-glass-bars]")!.getAttribute("aria-hidden")).toBe("true")
+    })
+
+    it("rests on a calm low baseline while paused", () => {
+      mount({ memory: both })
+      runFrames(5)
+      expect(bars().every((bar) => scale(bar) === BAR_REST)).toBe(true)
+    })
+
+    it("moves with the spectrum while it plays, mirrored around the middle", () => {
+      mount({ memory: both })
+      fireEvent.click(audioButton())
+      runFrames(12)
+      const heights = bars().map(scale)
+      expect(Math.max(...heights)).toBeGreaterThan(0.5)
+      expect(heights.every((h) => h <= 1)).toBe(true)
+      expect(heights[0]).toBeCloseTo(heights[BAR_COUNT - 1], 3)
+    })
+
+    it("eases back to the baseline once it is paused", () => {
+      mount({ memory: both })
+      fireEvent.click(audioButton())
+      runFrames(12)
+      fireEvent.click(audioButton())
+      runFrames(160)
+      expect(bars().every((bar) => scale(bar) === BAR_REST)).toBe(true)
+    })
+
+    it("stays still under reduced motion", () => {
+      mount({ memory: both, reduced: true })
+      fireEvent.click(audioButton())
+      runFrames(12)
+      expect(bars().every((bar) => scale(bar) === BAR_REST)).toBe(true)
+    })
+  })
+
+  describe("progress", () => {
+    it("is a slider for the whole voice, read as where it is of how long it is", () => {
+      mount({ memory: both })
+      const slider = progress()
+      expect(slider.type).toBe("range")
+      expect(slider.min).toBe("0")
+      expect(slider.max).toBe("65")
+      expect(slider.value).toBe("0")
+      expect(slider.getAttribute("aria-valuetext")).toBe("0:00 de 1:05")
+    })
+
+    it("follows the voice as it plays", () => {
+      mount({ memory: both })
+      fireEvent.click(audioButton())
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 30.2 })
+      act(() => {
+        audio.dispatchEvent(new Event("timeupdate"))
+      })
+      expect(progress().value).toBe("30")
+      expect(progress().getAttribute("aria-valuetext")).toBe("0:30 de 1:05")
+    })
+
+    it("seeks at once with the keyboard", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 0 })
+      fireEvent.change(progress(), { target: { value: "20" } })
+      expect(audio.currentTime).toBe(20)
+      expect(progress().value).toBe("20")
+    })
+
+    it("seeks when a drag is released, not on every move (a long voice would ask the server for a range each time)", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 5 })
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", clientX: 10, clientY: 10 })
+      fireEvent.change(progress(), { target: { value: "30" } })
+      fireEvent.change(progress(), { target: { value: "40" } })
+      expect(audio.currentTime).toBe(5)
+      expect(progress().value).toBe("40")
+      expect(progress().getAttribute("aria-valuetext")).toBe("0:40 de 1:05")
+      fireEvent.pointerUp(progress(), { pointerType: "mouse", clientX: 90, clientY: 10 })
+      expect(audio.currentTime).toBe(40)
+    })
+
+    it("does not fight the drag while the voice keeps playing", () => {
+      mount({ memory: both })
+      fireEvent.click(audioButton())
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 3 })
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", clientX: 10, clientY: 10 })
+      fireEvent.change(progress(), { target: { value: "50" } })
+      act(() => {
+        audio.dispatchEvent(new Event("timeupdate"))
+      })
+      expect(progress().value).toBe("50")
+    })
+
+    it("is not a swipe: dragging the scrubber sideways does not turn the page", () => {
+      const prev = view("x", "Antes")
+      const next = view("y", "Después")
+      const { props } = mount({ memory: both, prev, next })
+      fireEvent.pointerDown(progress(), { pointerType: "touch", clientX: 300, clientY: 700 })
+      fireEvent.pointerUp(progress(), { pointerType: "touch", clientX: 120, clientY: 704 })
+      expect(props.onStep).not.toHaveBeenCalled()
+    })
+
+    it("cannot be used until the audio is ready", () => {
+      vi.mocked(readiness.useAudioReadiness).mockImplementation(() => ({ status: "checking", retry: vi.fn() }))
+      mount({ memory: both })
+      expect(progress().disabled).toBe(true)
+    })
+
+    it("gives way to the processing message while the audio is still being made", () => {
+      vi.mocked(readiness.useAudioReadiness).mockImplementation(() => ({ status: "processing", retry: vi.fn() }))
+      mount({ memory: both })
+      expect(within(dialog()).queryByRole("slider", { name: "Progreso del audio" })).toBeNull()
+    })
+  })
+
+  describe("volume", () => {
+    it("is a slider named Volumen, at full for a first visit", () => {
+      mount({ memory: both })
+      expect(volumeSlider().value).toBe("100")
+      expect(volumeSlider().getAttribute("aria-valuetext")).toBe("100 %")
+    })
+
+    it("sets the volume of the voice through the audio graph", () => {
+      mount({ memory: both })
+      fireEvent.change(volumeSlider(), { target: { value: "40" } })
+      expect(setVolume).toHaveBeenLastCalledWith(0.4)
+      expect(volumeSlider().getAttribute("aria-valuetext")).toBe("40 %")
+    })
+
+    it("silences and restores with the mute button, which says whether it is pressed", () => {
+      mount({ memory: both })
+      fireEvent.change(volumeSlider(), { target: { value: "40" } })
+      expect(muteButton().getAttribute("aria-pressed")).toBe("false")
+      fireEvent.click(muteButton())
+      expect(setVolume).toHaveBeenLastCalledWith(0)
+      expect(muteButton().getAttribute("aria-pressed")).toBe("true")
+      expect(volumeSlider().value).toBe("0")
+      expect(volumeSlider().getAttribute("aria-valuetext")).toBe("Silenciado")
+      fireEvent.click(muteButton())
+      expect(setVolume).toHaveBeenLastCalledWith(0.4)
+      expect(muteButton().getAttribute("aria-pressed")).toBe("false")
+      expect(volumeSlider().value).toBe("40")
+    })
+
+    it("un-mutes when the slider is moved up", () => {
+      mount({ memory: both })
+      fireEvent.click(muteButton())
+      fireEvent.change(volumeSlider(), { target: { value: "70" } })
+      expect(muteButton().getAttribute("aria-pressed")).toBe("false")
+      expect(setVolume).toHaveBeenLastCalledWith(0.7)
+    })
+
+    it("brings a slider dragged to zero back to a middle volume when unmuted", () => {
+      mount({ memory: both })
+      fireEvent.change(volumeSlider(), { target: { value: "0" } })
+      expect(setVolume).toHaveBeenLastCalledWith(0)
+      fireEvent.click(muteButton())
+      expect(setVolume).toHaveBeenLastCalledWith(0.5)
+    })
+
+    it("is remembered from one memory to the next, and across visits", () => {
+      const { again } = mount({ memory: both })
+      fireEvent.change(volumeSlider(), { target: { value: "30" } })
+      expect(JSON.parse(localStorage.getItem(VOLUME_KEY)!)).toEqual({ volume: 0.3, muted: false })
+      again({ memory: audioOnly })
+      expect(volumeSlider().value).toBe("30")
+      expect(setVolume).toHaveBeenLastCalledWith(0.3)
+    })
+
+    it("starts from the volume of an earlier visit", () => {
+      localStorage.setItem(VOLUME_KEY, JSON.stringify({ volume: 0.6, muted: false }))
+      mount({ memory: both })
+      expect(volumeSlider().value).toBe("60")
+      expect(setVolume).toHaveBeenLastCalledWith(0.6)
+    })
+  })
+
+  describe("keyboard", () => {
+    it("plays and pauses with Space and K", () => {
+      mount({ memory: both })
+      fireEvent.keyDown(dialog(), { key: " " })
+      expect(audioButton().getAttribute("aria-pressed")).toBe("true")
+      fireEvent.keyDown(dialog(), { key: "k" })
+      expect(audioButton().getAttribute("aria-pressed")).toBe("false")
+      fireEvent.keyDown(dialog(), { key: "K" })
+      expect(audioButton().getAttribute("aria-pressed")).toBe("true")
+    })
+
+    it("does not play from a slider, which owns its keys", () => {
+      mount({ memory: both })
+      fireEvent.keyDown(progress(), { key: " " })
+      fireEvent.keyDown(volumeSlider(), { key: "k" })
+      expect(play).not.toHaveBeenCalled()
+    })
+
+    it("leaves Space to a focused button, such as Cerrar", () => {
+      mount({ memory: both })
+      fireEvent.keyDown(within(dialog()).getByRole("button", { name: "Cerrar" }), { key: " " })
+      expect(play).not.toHaveBeenCalled()
+    })
+
+    it("does nothing for a photo, or while the audio is not ready", () => {
+      mount()
+      fireEvent.keyDown(dialog(), { key: " " })
+      expect(play).not.toHaveBeenCalled()
+      cleanup()
+      vi.mocked(readiness.useAudioReadiness).mockImplementation(() => ({ status: "processing", retry: vi.fn() }))
+      mount({ memory: both })
+      fireEvent.keyDown(dialog(), { key: " " })
+      expect(play).not.toHaveBeenCalled()
+    })
+
+    it("keeps the arrows for the previous and next memory, except on a slider", () => {
+      const prev = view("x", "Antes")
+      const next = view("y", "Después")
+      const { props } = mount({ memory: both, prev, next })
+      fireEvent.keyDown(dialog(), { key: "ArrowRight" })
+      expect(props.onStep).toHaveBeenCalledTimes(1)
+      fireEvent.keyDown(progress(), { key: "ArrowRight" })
+      fireEvent.keyDown(volumeSlider(), { key: "ArrowLeft" })
+      expect(props.onStep).toHaveBeenCalledTimes(1)
+    })
+
+    it("lets go of the keys when the view closes", () => {
+      const { again } = mount({ memory: both })
+      again({ memory: null })
+      play.mockClear()
+      fireEvent.keyDown(document.body, { key: " " })
+      expect(play).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("labels and targets", () => {
+    it("names every control in Spanish", () => {
+      mount({ memory: both })
+      expect(audioButton().getAttribute("aria-label")).toBe("Reproducir audio")
+      expect(progress().getAttribute("aria-label")).toBe("Progreso del audio")
+      expect(volumeSlider().getAttribute("aria-label")).toBe("Volumen")
+      expect(muteButton()).toBeTruthy()
+    })
+
+    it("gives the mute button a 44 px target", () => {
+      mount({ memory: both })
+      expect(muteButton().className).toContain("size-11")
+    })
   })
 })
 

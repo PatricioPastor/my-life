@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import Link from "next/link"
 import { Dialog } from "radix-ui"
 import { formatMemoryDate } from "../format"
@@ -9,16 +9,14 @@ import { ladderOf, pickSize } from "../photo-ladder"
 import type { ShareMemoryResult } from "../share/share-view"
 import type { RecordViewResult } from "../views/view-result"
 import type { Viewport } from "./camera"
-import { smoothedReader } from "./audio-level"
-import { AUDIO_READINESS_COPY, useAudioReadiness } from "./audio-readiness"
 import { lensGeometry, type LensGeometry } from "./glass-layout"
-import { formatClock } from "./glass-mode"
 import { GlassSphere } from "./glass-orb"
+import { GlassVoice } from "./glass-voice"
 import type { Lens } from "./lens"
 import { createShareCache } from "./share-cache"
 import { ShareButton } from "./share-button"
+import { isTypingTarget } from "./player-model"
 import { swipeStep } from "./swipe"
-import { useAudioLevel } from "./use-audio-level"
 import { formatViewCount } from "./view-count"
 import { createViewRecorder } from "./view-recorder"
 
@@ -76,122 +74,6 @@ const Chevron = ({ flip }: { flip?: boolean }) => (
     <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
   </svg>
 )
-
-const PlayIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-    <path d="M5 3.2v11.6L15 9z" fill="currentColor" />
-  </svg>
-)
-const PauseIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-    <path d="M4.5 3h3.4v12H4.5zM10.1 3h3.4v12h-3.4z" fill="currentColor" />
-  </svg>
-)
-
-type VoiceStatus = "idle" | "playing" | "error"
-
-/** The voice of a memory: its audio, its play control under the sphere, and the level the glass reads. */
-function GlassVoice({
-  memory,
-  geometry,
-  open,
-  onLevel,
-}: {
-  memory: MemoryView
-  geometry: LensGeometry
-  open: boolean
-  onLevel: (level: () => number) => void
-}) {
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
-  const [status, setStatus] = useState<VoiceStatus>("idle")
-  // How far it has played (whole seconds), shown beside the length while it plays or is paused part way.
-  const [played, setPlayed] = useState(0)
-  // The same listener and the same smoothing as the form's talking orb, so the voice looks alike in both places.
-  const rawLevel = useAudioLevel(audio, status === "playing")
-  const level = useMemo(() => smoothedReader(rawLevel), [rawLevel])
-  useEffect(() => onLevel(level), [level, onLevel])
-  // The voice stops when the memory does: on another memory, on close, on leaving.
-  useEffect(() => {
-    if (!open) audio?.pause()
-  }, [open, audio])
-  useEffect(() => {
-    const el = audio
-    return () => el?.pause()
-  }, [audio])
-
-  // The audio is made in the background after the upload: until the route answers it, the control only says so.
-  const readiness = useAudioReadiness(memory.audio?.url ?? null).status
-  const failed = status === "error" || readiness === "unavailable"
-  const processing = readiness === "processing"
-  const waiting = processing || readiness === "checking"
-  const label = failed
-    ? AUDIO_READINESS_COPY.unavailable
-    : processing
-      ? AUDIO_READINESS_COPY.processing
-      : status === "playing"
-        ? "Pausar audio"
-        : "Reproducir audio"
-
-  const toggle = () => {
-    if (!audio) return
-    if (status === "playing") audio.pause()
-    else audio.play().catch(() => setStatus("error"))
-  }
-
-  const { diameter, center } = geometry
-  return (
-    <>
-      {memory.audio && (
-        <div
-          data-glass-voice
-          className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-3"
-          style={{ left: center.x, top: center.y + diameter / 2 }}
-        >
-          <button
-            type="button"
-            disabled={failed || waiting}
-            aria-pressed={failed || processing ? undefined : status === "playing"}
-            aria-label={label}
-            data-magnetic="light"
-            data-cursor-label={status === "playing" ? "Pausar" : "Escuchar"}
-            data-state={status}
-            className="mem-glass-play press pointer-events-auto flex size-14 items-center justify-center rounded-full text-ink"
-            style={{ "--pc": memory.orbColor } as React.CSSProperties}
-            onClick={toggle}
-          >
-            {status === "playing" ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          {processing ? (
-            <span role="status" className="text-xs tracking-[0.08em] text-ink-muted">
-              {AUDIO_READINESS_COPY.processing}
-            </span>
-          ) : (
-            <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">
-              {played > 0 ? `${formatClock(played * 1000)} / ${formatClock(memory.audio.durationMs)}` : formatClock(memory.audio.durationMs)}
-            </span>
-          )}
-        </div>
-      )}
-      {memory.audio && readiness === "ready" && (
-        // Same origin now (our audio route), so `crossOrigin` is harmless; it keeps Web Audio able to read it either way.
-        <audio
-          ref={setAudio}
-          src={memory.audio.url}
-          crossOrigin="anonymous"
-          preload="metadata"
-          onPlay={() => setStatus("playing")}
-          onPause={() => setStatus((s) => (s === "error" ? s : "idle"))}
-          onTimeUpdate={(event) => setPlayed(Math.floor(event.currentTarget.currentTime))}
-          onEnded={() => {
-            setStatus("idle")
-            setPlayed(0)
-          }}
-          onError={() => setStatus("error")}
-        />
-      )}
-    </>
-  )
-}
 
 /**
  * The caption, date and place floating by the sphere, between the previous and next controls. On a switch the text
@@ -439,7 +321,8 @@ export function GlassView({
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (guest) return
+    // A slider (the scrubber, the volume) owns its arrows.
+    if (guest || isTypingTarget(event.target)) return
     if (event.key === "ArrowLeft" && prev) {
       event.preventDefault()
       onStep(prev.id)
@@ -497,7 +380,7 @@ export function GlassView({
                 travel={travel}
                 onTravel={onTravel}
               />
-              <GlassVoice key={shown.id} memory={shown} open={memory !== null} geometry={geometry} onLevel={onLevel} />
+              <GlassVoice key={shown.id} memory={shown} open={memory !== null} geometry={geometry} reduced={reduced} onLevel={onLevel} />
               {guestExit && <GuestExits onExit={guestExit} />}
               <GlassCaption
                 memory={caption ?? shown}
