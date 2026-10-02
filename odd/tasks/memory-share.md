@@ -52,15 +52,24 @@ Strict. Runner `pnpm test`.
 
 ## Tasks
 
-- [ ] **T1 — Share token, server action and guest data access** (token sign/verify, `shareMemory` action, guest DTO lookup for approved memories, token-gated audio).
-- [ ] **T2 — Guest page `/m/[token]`** (guest glass view, exits to `/`, redirects, metadata and OG image, analytics).
-- [ ] **T3 — Share button in the glass view** (Web Share and clipboard fallback).
+- [x] **T1 — Share token, server action and guest data access** (token sign/verify, `shareMemory` action, guest DTO lookup for approved memories, token-gated audio).
+- [x] **T2 — Guest page `/m/[token]`** (guest glass view, exits to `/`, redirects, metadata and OG image, analytics).
+- [x] **T3 — Share button in the glass view** (Web Share and clipboard fallback).
 - [ ] **T4 — Deliver.** Full checks and RDD. A live check after authorization: share a real approved memory, open it with no cookies, play its audio, check the OG preview, check that an invalid token redirects. Then fast-forward main.
 
 ## Progress
 
 - 2026-10-02: Document created. Any admitted visitor can share approved memories (the user chose this).
 
+- 2026-10-02 (T1 to T3, delegated writer, commits `322985c`, `0938299`, `84ab64a`):
+  - **Token:** `<memory uuid as 16 bytes, base64url (22 chars)>.<HMAC-SHA256(SESSION_SECRET, "share:v1:" + id) truncated to 16 bytes, base64url (22 chars)>`. Constant-time compare; the id part must decode to exactly 16 bytes. A session cookie or an upload ticket never verifies as a share token, and the other way round (tested against `signSession` and `signUploadTicket` with the same secret). Rotating `SESSION_SECRET` invalidates every link; rejecting the memory revokes one.
+  - **Sharing:** `shareMemory({ id })` (server action) needs a session, reads the memory as the visitor and refuses anything that is not approved (`not_shareable`), then answers the absolute `/m/<token>` URL from `resolveSiteUrl`.
+  - **Guest data path:** `findSharedMemory(token)` verifies the token, then reads through the `app_user` connection with an empty `app.handle` (so the select policy only lets approved rows through) via a new port, `ApprovedMemoryReader.findApproved`, which also filters `status = 'approved'` itself. No migration, RLS untouched. It returns the same `MemoryView` the glass uses (photo sizes, coarse place, orb color, no handle) plus the signed 1200x630 preview URL for photos.
+  - **Audio access (choice):** a separate route, `/api/memories/shared/[token]/audio`, rather than a `?share=` param on the session route. The session route keeps a single way in (the session), the token never ends up in a query string that logs and caches treat differently, and the token names exactly one memory, so it cannot reach another memory's audio. The streaming (`Range`/206, 416, 503 "processing") is the shared `streamAudio` inside `serve-audio.ts`, no duplication.
+  - **Page and metadata:** `/m/[token]` is dynamic (`ƒ`); any failed lookup redirects to `/`. The client mounts the place after hydration (a stale server viewport aimed the camera wrongly on phones), opens the one memory by itself, and has no prev/next, swipe, wheel-exit, add button, constellation or sky. "Universo", Esc, Cerrar and a quiet "Entrar al universo" link all go to `/`. `generateMetadata`: caption as title, date plus "Un recuerdo de patriciopastor" as description, `robots` noindex and nofollow, Twitter `summary_large_image`. OG image: a signed 1200x630 `f_jpg` Cloudinary crop for photos; for audio-only memories an `ImageResponse` card (orb in `orbColor` on the void, plus the caption) from the route handler `/m/[token]/og`, in the font ImageResponse bundles (nothing fetched). No `fs` reads, so no trace includes.
+  - **Share button:** `Compartir` in the glass (approved only, never pending). It asks `shareMemory`, then uses `navigator.share` only on a coarse pointer with Web Share, and otherwise (or when the sheet fails) copies the link and says "Enlace copiado" (`role="status"`, about 2 s). An `AbortError` is silent. A guest has no session to call the action, so their button passes on the link they hold (the page URL). Analytics: `memory_shared` on success and `shared_memory_opened` once per guest visit, both allow-listed with no props.
+  - **Checks:** `pnpm lint` clean, `pnpm typecheck` clean, `pnpm test` 168 files / 2680 tests passing, `pnpm build` with `/` static and `/m/[token]`, `/m/[token]/og` and both audio routes dynamic. Visual check with Playwright on :3001 at 1440x900 and 390x844 through a temporary harness (deleted): the guest view with a photo and audio-only, "Enlace copiado" and its fade, `/m/not-a-token` redirecting to `/`, Esc leaving to `/`. Shots `s-*` in the session scratchpad. Nothing ran against the real database or Cloudinary.
+
 ## Next step
 
-T1 to T3 (one writer).
+T4: deliver (full checks, RDD, the live check after authorization, then fast-forward main).
