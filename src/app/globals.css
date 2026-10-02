@@ -520,19 +520,47 @@
     animation: none;
     opacity: 0.35;
   }
-  /* The glass view: the sphere opens out of the orb, the caption and the controls fade in after it. */
-  .mem-glass[data-state="open"] .mem-glass-sphere {
-    animation: mem-glass-in 380ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  }
+  /* The glass view. The sphere opens exactly over the disc the orb grew into and condenses into glass (the lens ramps
+     it in), so nothing pops or scales; the caption and the controls fade in after it. */
   .mem-glass[data-state="open"] > *:not(.mem-glass-sphere) {
     animation: fade 320ms ease 140ms both;
   }
+  /* On close the glass melts back into the orb (the lens ramps it out) while the rest fades out; the content holds
+     until then, so the orb's disc under it takes over pixel for pixel. */
   .mem-glass[data-state="closed"] {
-    animation: mem-fade-out 200ms ease-out both;
+    animation: mem-hold 200ms linear both;
   }
-  .mem-glass-sphere[data-reduced="true"] {
-    animation-name: fade !important;
-    animation-duration: 160ms !important;
+  .mem-glass[data-state="closed"] > *:not(.mem-glass-sphere) {
+    animation: mem-fade-out 140ms ease-out both;
+  }
+  /* Reduced motion: no warping in or out; the glass crossfades over the orb. */
+  .mem-glass-sphere[data-reduced="true"] .mem-lens-canvas,
+  .mem-glass-sphere[data-reduced="true"] .mem-glass-css {
+    animation: fade 160ms ease-out both;
+  }
+  .mem-glass[data-state="closed"] .mem-glass-sphere[data-reduced="true"] {
+    animation: mem-fade-out 180ms ease-out both;
+  }
+  /* A soft halo in the memory's color, drawn in CSS around the sphere: a radial gradient that fades to nothing inside
+     its own box, so no edge of it is ever seen. It comes in with the glass and brightens with the voice. */
+  .mem-glass-halo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 220%;
+    height: 220%;
+    translate: -50% -50%;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklab, var(--pc) 24%, transparent) 40%,
+      color-mix(in oklab, var(--pc) 12%, transparent) 50%,
+      color-mix(in oklab, var(--pc) 5%, transparent) 63%,
+      color-mix(in oklab, var(--pc) 1.5%, transparent) 80%,
+      transparent 100%
+    );
+    opacity: calc(var(--glass, 1) * (0.55 + 0.45 * var(--glow, 0)));
   }
   /* Without WebGL the glass is drawn in CSS: a dark body, a clipped photo, a highlight and a rim in the orb color.
      The voice sets --glow (light) and --warp (a small breath) every frame. */
@@ -545,11 +573,9 @@
     overflow: hidden;
     background: radial-gradient(circle at 50% 50%, color-mix(in oklab, var(--pc) 22%, #07080f) 0%, #05060c 78%);
     box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-      inset 0 -18px 40px rgba(0, 0, 0, 0.45),
-      inset 0 0 60px rgba(0, 0, 0, 0.35),
-      0 0 calc(40px + var(--glow) * 90px) calc(var(--glow) * 14px)
-        color-mix(in oklab, var(--pc) calc(18% + var(--glow) * 50%), transparent);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 -18px 40px rgba(0, 0, 0, 0.32),
+      inset 0 0 50px rgba(0, 0, 0, 0.22);
     transform: scale(calc(1 + var(--warp) * 0.03));
   }
   .mem-glass-photo {
@@ -580,9 +606,9 @@
     border-radius: 50%;
     pointer-events: none;
     mix-blend-mode: screen;
-    opacity: 0.6;
+    opacity: calc(0.6 * var(--glass, 1));
     background:
-      radial-gradient(ellipse 38% 26% at 30% 22%, rgba(255, 255, 255, 0.55), transparent 70%),
+      radial-gradient(ellipse 16% 10% at 28% 24%, rgba(255, 255, 255, 0.4), transparent 70%),
       radial-gradient(circle at 50% 50%, transparent 58%, color-mix(in oklab, var(--pc) 40%, white) 100%);
   }
   .mem-glass-play {
@@ -1570,14 +1596,13 @@
     transform: translateY(24px);
   }
 }
-@keyframes mem-glass-in {
+/* Holds a closing dialog on screen (nothing changes) while what is in it finishes its own exit. */
+@keyframes mem-hold {
   from {
-    opacity: 0;
-    transform: scale(0.3);
+    opacity: 1;
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 @keyframes mem-voice {

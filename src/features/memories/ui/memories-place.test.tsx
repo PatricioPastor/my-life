@@ -5,8 +5,7 @@ import { rimColor } from "../orb-color"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
 import { VOID_GLOWS } from "./void-glows"
 
-// The glass view picks WebGL or CSS from this probe: jsdom has no WebGL, so the CSS glass is what these tests see.
-vi.mock("@/features/onboarding/gpu-probe", () => ({ probeRenderer: () => ({ webgl2: false }) }))
+// jsdom has no WebGL: the lens cannot be prepared, so the CSS glass is what these tests see.
 
 afterEach(() => {
   cleanup()

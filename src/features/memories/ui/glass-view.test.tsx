@@ -1,12 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
+import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
+import type { Lens } from "./lens"
 
-const probe = vi.hoisted(() => vi.fn(() => ({ webgl2: false })))
-const makeRenderer = vi.hoisted(() => vi.fn())
-vi.mock("@/features/onboarding/gpu-probe", () => ({ probeRenderer: probe }))
-vi.mock("./glass-renderer", () => ({ createGlassRenderer: makeRenderer }))
 // jsdom has no Web Audio: a voice that is loud while it plays stands in for the analyser.
 vi.mock("./use-audio-level", () => ({ useAudioLevel: (_source: unknown, active: boolean) => () => (active ? 0.6 : 0) }))
 
@@ -42,6 +40,7 @@ interface Props {
   onClose: () => void
   onRestoreFocus: (id: string) => void
   onWarm: (memory: MemoryView) => void
+  lens: Lens | null
 }
 
 const DESKTOP = { width: 1440, height: 900 }
@@ -56,6 +55,7 @@ function mount(over: Partial<Props> = {}, viewport: { width: number; height: num
     onClose: vi.fn(),
     onRestoreFocus: vi.fn(),
     onWarm: vi.fn(),
+    lens: null,
     ...over,
   }
   const utils = render(<GlassView {...props} container={document.body} viewport={viewport} />)
@@ -70,9 +70,6 @@ let pause: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   frames = []
-  probe.mockReturnValue({ webgl2: false })
-  makeRenderer.mockReset()
-  makeRenderer.mockReturnValue(null)
   vi.stubGlobal("matchMedia", undefined)
   vi.stubGlobal("AudioContext", undefined)
   vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
@@ -339,7 +336,8 @@ describe("GlassView next and previous", () => {
   it("centers the sphere on the layout anchor, so the side caption never overlaps it", () => {
     mount({}, { width: 844, height: 390 })
     const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
-    expect(parseFloat(sphere.style.left)).toBeCloseTo(32, 0)
+    const center = parseFloat(sphere.style.left) + parseFloat(sphere.style.width) / 2
+    expect(center / 844).toBeCloseTo(0.32, 2)
   })
 
   it("keeps the caption under the sphere on a portrait phone", () => {
@@ -356,93 +354,138 @@ describe("GlassView next and previous", () => {
   })
 })
 
-describe("GlassView renderer selection", () => {
-  const fakeRenderer = () => ({ setPhoto: vi.fn(), draw: vi.fn(), dispose: vi.fn() })
+/** A lens the test drives: whether it can draw, and what it is asked to do. */
+function fakeLens(available = true) {
+  const canvas = document.createElement("canvas")
+  let failed: (() => void) | null = null
+  const lens = {
+    canvas,
+    prepare: vi.fn(() => available),
+    available: vi.fn(() => available),
+    onFail: vi.fn((listener: () => void) => {
+      failed = listener
+      return () => {
+        failed = null
+      }
+    }),
+    resize: vi.fn(),
+    attach: vi.fn((holder: HTMLElement) => holder.appendChild(canvas)),
+    detach: vi.fn(() => canvas.remove()),
+    show: vi.fn(),
+    reset: vi.fn(),
+    open: vi.fn(),
+    release: vi.fn(),
+    frame: vi.fn((_now: number, input: { level: number; reduced: boolean; travel: number | null }) => ({
+      glow: input.reduced ? input.level * 0.45 : input.level,
+      glass: 1,
+    })),
+    dispose: vi.fn(),
+  }
+  return { lens: lens as unknown as Lens & typeof lens, lose: () => act(() => failed?.()) }
+}
 
-  it("is a CSS glass circle when there is no WebGL2", () => {
-    probe.mockReturnValue({ webgl2: false })
-    mount()
+describe("GlassView renderer selection", () => {
+  it("is a CSS glass circle when there is no lens that can draw", () => {
+    mount({ lens: fakeLens(false).lens })
     const sphere = dialog().querySelector("[data-glass-sphere]")!
     expect(sphere.getAttribute("data-glass")).toBe("css")
     expect(dialog().querySelector("canvas")).toBeNull()
-    expect(makeRenderer).not.toHaveBeenCalled()
   })
 
-  it("draws the refracting glass on a canvas when WebGL2 works", () => {
-    probe.mockReturnValue({ webgl2: true })
-    const renderer = fakeRenderer()
-    makeRenderer.mockReturnValue(renderer)
-    mount()
-    const sphere = dialog().querySelector("[data-glass-sphere]")!
+  it("draws the refracting glass on the lens canvas, which the sphere adopts, sized to whole device pixels", () => {
+    const { lens } = fakeLens()
+    mount({ lens }, { ...DESKTOP, dpr: 2 })
+    const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
     expect(sphere.getAttribute("data-glass")).toBe("webgl")
-    const canvas = dialog().querySelector("canvas")!
-    expect(canvas.getAttribute("aria-hidden")).toBe("true")
-    expect(makeRenderer).toHaveBeenCalledTimes(1)
-    runFrames(2)
-    expect(renderer.draw).toHaveBeenCalled()
+    expect(sphere.contains(lens.canvas)).toBe(true)
+    const geometry = lensGeometry(DESKTOP, 2)
+    expect(lens.resize).toHaveBeenCalledWith({
+      device: geometry.canvas.device,
+      deviceDiameter: Math.round(geometry.diameter * 2),
+      diameter: geometry.diameter,
+      dpr: 2,
+    })
+    expect(lens.attach).toHaveBeenCalledWith(expect.any(HTMLElement), {
+      offset: (geometry.canvas.css - geometry.diameter) / 2,
+      size: geometry.canvas.css,
+    })
+  })
+
+  it("shows the memory and condenses the glass when it opens, and melts it back when it closes", () => {
+    const { lens } = fakeLens()
+    const { again } = mount({ lens })
+    expect(lens.show).toHaveBeenCalledWith(photo)
+    expect(lens.open).toHaveBeenCalledTimes(1)
+    expect(lens.release).not.toHaveBeenCalled()
+    again({ memory: null })
+    expect(lens.release).toHaveBeenCalledTimes(1)
+  })
+
+  it("draws a frame on every animation frame while open", () => {
+    const { lens } = fakeLens()
+    mount({ lens })
+    runFrames(3)
+    expect(lens.frame).toHaveBeenCalledTimes(3)
+  })
+
+  it("gives the canvas back and forgets the memory once the glass has gone", () => {
+    const { lens } = fakeLens()
+    const { unmount } = mount({ lens })
+    unmount()
+    expect(lens.canvas.isConnected).toBe(false)
+    expect(lens.reset).toHaveBeenCalled()
   })
 
   it("keeps the photo as an accessible image beside the canvas", () => {
-    probe.mockReturnValue({ webgl2: true })
-    makeRenderer.mockReturnValue(fakeRenderer())
-    mount()
+    mount({ lens: fakeLens().lens })
     expect(within(dialog()).getByRole("img", { name: "Una tarde de lluvia" })).toBeTruthy()
   })
 
-  it("falls back to the CSS glass when the renderer cannot be built", () => {
-    probe.mockReturnValue({ webgl2: true })
-    makeRenderer.mockReturnValue(null)
-    mount()
+  it("falls back to the CSS glass if the GL context is lost", () => {
+    const { lens, lose } = fakeLens()
+    mount({ lens })
+    lose()
     expect(dialog().querySelector("[data-glass-sphere]")!.getAttribute("data-glass")).toBe("css")
-    expect(dialog().querySelector("canvas")).toBeNull()
   })
 
-  it("tints the glass with the orb color", () => {
-    probe.mockReturnValue({ webgl2: true })
-    makeRenderer.mockReturnValue(fakeRenderer())
-    mount({ memory: view("p", "Una tarde", { orbColor: "#4fd1b9" }) })
-    expect(makeRenderer.mock.calls[0][1]).toMatchObject({ tint: [expect.any(Number), expect.any(Number), expect.any(Number)] })
-    const tint = makeRenderer.mock.calls[0][1].tint as number[]
-    expect(tint[1]).toBeGreaterThan(tint[0])
-  })
-
-  it("releases the renderer when it closes", () => {
-    probe.mockReturnValue({ webgl2: true })
-    const renderer = fakeRenderer()
-    makeRenderer.mockReturnValue(renderer)
-    const { again } = mount()
-    again({ memory: null })
-    expect(renderer.dispose).toHaveBeenCalled()
+  it("draws its soft halo in CSS around the sphere, outside the canvas, where nothing can clip it", () => {
+    const { lens } = fakeLens()
+    mount({ lens })
+    const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
+    const halo = sphere.querySelector<HTMLElement>("[data-glass-halo]")!
+    expect(halo).not.toBeNull()
+    expect(lens.canvas.contains(halo)).toBe(false)
+    expect(halo.getAttribute("aria-hidden")).toBe("true")
   })
 })
 
 describe("GlassView talking", () => {
   const talk = (reduced: boolean) => {
-    probe.mockReturnValue({ webgl2: true })
-    const renderer = { setPhoto: vi.fn(), draw: vi.fn(), dispose: vi.fn() }
-    makeRenderer.mockReturnValue(renderer)
-    mount({ memory: both, reduced })
+    const { lens } = fakeLens()
+    mount({ memory: both, reduced, lens })
     fireEvent.click(audioButton())
     runFrames(80)
-    return renderer.draw.mock.calls.map((c) => c[0] as { warp: number; glow: number; time: number })
+    return lens.frame.mock.calls.map((c) => c[1] as { level: number; reduced: boolean })
   }
 
-  it("ripples the surface and glows while the voice plays", () => {
-    const draws = talk(false)
-    expect(Math.max(...draws.map((d) => d.warp))).toBeGreaterThan(0.2)
-    expect(Math.max(...draws.map((d) => d.glow))).toBeGreaterThan(0.2)
+  it("hands the voice to the glass every frame while it plays", () => {
+    const inputs = talk(false)
+    expect(Math.max(...inputs.map((i) => i.level))).toBeGreaterThan(0.2)
+    expect(inputs.every((i) => i.reduced === false)).toBe(true)
   })
 
-  it("under reduced motion only glows gently: no ripple, and a still clock", () => {
-    const draws = talk(true)
-    expect(Math.max(...draws.map((d) => d.warp))).toBe(0)
-    expect(Math.max(...draws.map((d) => d.glow))).toBeGreaterThan(0.1)
-    expect(Math.max(...draws.map((d) => d.glow))).toBeLessThan(0.6)
-    expect(new Set(draws.map((d) => d.time))).toEqual(new Set([0]))
+  it("tells the glass when motion is reduced", () => {
+    const inputs = talk(true)
+    expect(inputs.every((i) => i.reduced)).toBe(true)
+  })
+
+  it("lights the halo with the voice", () => {
+    talk(false)
+    const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
+    expect(Number(sphere.style.getPropertyValue("--glow"))).toBeGreaterThan(0.2)
   })
 
   it("marks the sphere as reduced", () => {
-    probe.mockReturnValue({ webgl2: false })
     mount({ reduced: true })
     expect(dialog().querySelector("[data-glass-sphere]")!.getAttribute("data-reduced")).toBe("true")
   })

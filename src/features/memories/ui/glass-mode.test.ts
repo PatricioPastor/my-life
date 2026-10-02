@@ -1,19 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatClock, glassMotion, hexToUnit, pickGlassMode } from "./glass-mode"
-
-describe("pickGlassMode", () => {
-  it("uses WebGL when the browser has WebGL2", () => {
-    expect(pickGlassMode({ webgl2: true })).toBe("webgl")
-  })
-
-  it("falls back to the CSS glass without it", () => {
-    expect(pickGlassMode({ webgl2: false })).toBe("css")
-  })
-
-  it("falls back when the GL view could not be built or was lost", () => {
-    expect(pickGlassMode({ webgl2: true, failed: true })).toBe("css")
-  })
-})
+import { formatClock, glassMotion, hexToUnit } from "./glass-mode"
 
 describe("glassMotion", () => {
   it("ripples the surface and lights the glow with the voice", () => {

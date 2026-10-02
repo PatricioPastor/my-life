@@ -11,6 +11,7 @@ import { createCameraController } from "./camera-controller"
 import { DustCanvas } from "./dust-canvas"
 import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
+import { createLens, type Lens } from "./lens"
 import { MemoryPoints, type PointsHandle } from "./memory-points"
 import { createPhotoCache } from "./photo-cache"
 import { useApproach } from "./use-approach"
@@ -66,11 +67,34 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   const points = useRef<PointsHandle>(null)
   // Every photo the space shows is fetched and decoded once, here, and shared by the orbs, the approach and the glass.
   const [photos] = useState(() => createPhotoCache())
+  // The glass sphere's canvas and renderer live as long as the space: compiled ahead of time, never on the frame the
+  // glass opens (there is no document while rendering on the server).
+  const [glass] = useState<Lens | null>(() => (typeof document === "undefined" ? null : createLens({ cache: photos })))
   const lens = lensGeometry(viewport, viewport.dpr)
   const ordered = useMemo(() => orderByDate(memories), [memories])
   const approach = useApproach(controller, ordered, points)
   const current = approach.state
   const open = current.phase === "open" ? (memories.find((m) => m.id === current.id) ?? null) : null
+  const approached = current.phase === "idle" ? null : (memories.find((m) => m.id === current.id) ?? null)
+
+  // Build the glass renderer when the browser is idle; dispose of it with the space.
+  useEffect(() => {
+    if (!glass) return
+    const idle = window.requestIdleCallback?.(() => glass.prepare(), { timeout: 1500 })
+    const fallback = idle === undefined ? window.setTimeout(() => glass.prepare(), 300) : 0
+    return () => {
+      if (idle !== undefined) window.cancelIdleCallback?.(idle)
+      window.clearTimeout(fallback)
+      glass.dispose()
+    }
+  }, [glass])
+
+  // The flight has begun: the glass gets ready to hold this memory (its photo uploads while the camera flies).
+  useEffect(() => {
+    if (!glass || !approached) return
+    glass.prepare()
+    glass.show(approached)
+  }, [glass, approached])
 
   // The title is Gambarino, which the onboarding normally loads; make sure it is there when arriving straight here.
   useEffect(() => {
@@ -227,6 +251,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         onClose={approach.close}
         onRestoreFocus={restoreFocus}
         onWarm={warm}
+        lens={glass}
       />
     </div>
   )

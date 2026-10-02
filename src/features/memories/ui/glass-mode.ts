@@ -1,14 +1,12 @@
 /** Small pure decisions behind the glass orb view: which renderer, how the voice moves it, and its color and clock. */
 
-/** The WebGL canvas is this much bigger than the sphere, so its halo has room outside the glass. */
-export const CANVAS_SCALE = 1.16
+import { GLASS } from "./glass-config"
 
+/** The WebGL canvas is this much bigger than the sphere: room for its thin rim bloom (the halo is drawn in CSS). */
+export const CANVAS_SCALE = GLASS.canvasScale
+
+/** WebGL2 draws the refracting glass (the lens); without it, or if it fails or is lost, a CSS glass circle stands in. */
 export type GlassMode = "webgl" | "css"
-
-/** WebGL2 draws the refracting glass; without it (or if it fails or is lost) a CSS glass circle stands in. */
-export function pickGlassMode({ webgl2, failed = false }: { webgl2: boolean; failed?: boolean }): GlassMode {
-  return webgl2 && !failed ? "webgl" : "css"
-}
 
 export interface GlassMotion {
   /** How much the surface ripples and deforms, 0..1. */

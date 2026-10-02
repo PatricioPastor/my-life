@@ -1,16 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import { Dialog } from "radix-ui"
-import { probeRenderer } from "@/features/onboarding/gpu-probe"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
 import type { Viewport } from "./camera"
 import { smoothedReader } from "./audio-level"
-import { glassLayout, lensGeometry } from "./glass-layout"
-import { formatClock, pickGlassMode } from "./glass-mode"
-import { GlassOrb } from "./glass-orb"
+import { lensGeometry, type LensGeometry } from "./glass-layout"
+import { formatClock } from "./glass-mode"
+import { GlassSphere } from "./glass-orb"
+import type { Lens } from "./lens"
 import { swipeStep } from "./swipe"
 import { useAudioLevel } from "./use-audio-level"
 
@@ -22,7 +22,7 @@ interface GlassViewProps {
   /** The element the dialog mounts into, so it stays inside the stage (and its cursor). */
   container: HTMLElement | null
   reduced: boolean
-  /** The viewport, and its device pixel ratio (the photo is fetched for the sphere's size in device pixels). */
+  /** The viewport, and its device pixel ratio (the sphere is laid out on whole device pixels). */
   viewport: Viewport & { dpr?: number }
   /** Another memory to fly to (the arrows, the buttons, a swipe). */
   onStep: (id: string) => void
@@ -31,6 +31,8 @@ interface GlassViewProps {
   onRestoreFocus: (id: string) => void
   /** Warms a memory's photo (the neighbours, while this one is open), so a step lands on a sharp photo. */
   onWarm?: (memory: MemoryView) => void
+  /** The persistent WebGL lens, or null (the CSS glass stands in). */
+  lens?: Lens | null
 }
 
 const Chevron = ({ flip }: { flip?: boolean }) => (
@@ -58,27 +60,28 @@ const PauseIcon = () => (
 )
 
 type VoiceStatus = "idle" | "playing" | "error"
-type SphereStyle = CSSProperties & Record<`--${string}`, string>
 
-/** What is inside the dialog for one memory: the sphere, its voice, and the caption floating below it. */
+/** What changes with each memory: its voice and the caption floating by the sphere. */
 function GlassBody({
   memory,
   prev,
   next,
-  reduced,
-  viewport,
+  geometry,
   onStep,
   open,
-}: Pick<GlassViewProps, "prev" | "next" | "reduced" | "viewport" | "onStep"> & { memory: MemoryView; open: boolean }) {
-  const [failed, setFailed] = useState(false)
-  const onFail = useCallback(() => setFailed(true), [])
-  const mode = pickGlassMode({ webgl2: probeRenderer().webgl2, failed })
-
+  onLevel,
+}: Pick<GlassViewProps, "prev" | "next" | "onStep"> & {
+  memory: MemoryView
+  geometry: LensGeometry
+  open: boolean
+  onLevel: (level: () => number) => void
+}) {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [status, setStatus] = useState<VoiceStatus>("idle")
   // The same listener and the same smoothing as the form's talking orb, so the voice looks alike in both places.
   const rawLevel = useAudioLevel(audio, status === "playing")
   const level = useMemo(() => smoothedReader(rawLevel), [rawLevel])
+  useEffect(() => onLevel(level), [level, onLevel])
   // The voice stops when the memory does: on another memory, on close, on leaving.
   useEffect(() => {
     if (!open) audio?.pause()
@@ -94,19 +97,8 @@ function GlassBody({
     else audio.play().catch(() => setStatus("error"))
   }
 
-  const { diameter, anchor, caption: captionAt } = glassLayout(viewport)
-  // The same square crop the orb showed, at the size the sphere needs on this screen.
-  const photoUrl = pickSize(ladderOf(memory), diameter, lensGeometry(viewport, viewport.dpr ?? 1).dpr)?.url ?? null
+  const { diameter, center, caption: captionAt } = geometry
   const side = captionAt === "side"
-  const sphere: SphereStyle = {
-    "--pc": memory.orbColor,
-    width: diameter,
-    height: diameter,
-    left: `${(anchor.x * 100).toFixed(2)}%`,
-    top: `${(anchor.y * 100).toFixed(2)}%`,
-    marginLeft: -diameter / 2,
-    marginTop: -diameter / 2,
-  }
   const prevButton = (
     <button
       type="button"
@@ -137,42 +129,29 @@ function GlassBody({
 
   return (
     <>
-      <div
-        data-glass-sphere
-        data-glass={mode}
-        data-reduced={reduced}
-        data-voice={memory.audio !== null}
-        className="mem-glass-sphere pointer-events-auto absolute touch-none"
-        style={sphere}
-      >
-        <GlassOrb
-          memory={memory}
-          photoUrl={photoUrl}
-          mode={mode}
-          reduced={reduced}
-          level={level}
-          diameter={diameter}
-          onFail={onFail}
-        />
-        {memory.audio && (
-          <div className="absolute bottom-0 left-1/2 flex -translate-x-1/2 translate-y-1/2 items-center gap-3">
-            <button
-              type="button"
-              disabled={status === "error"}
-              aria-pressed={status === "error" ? undefined : status === "playing"}
-              aria-label={status === "error" ? "Audio no disponible" : status === "playing" ? "Pausar audio" : "Reproducir audio"}
-              data-magnetic="light"
-              data-cursor-label={status === "playing" ? "Pausar" : "Escuchar"}
-              data-state={status}
-              className="mem-glass-play press flex size-14 items-center justify-center rounded-full text-ink"
-              onClick={toggle}
-            >
-              {status === "playing" ? <PauseIcon /> : <PlayIcon />}
-            </button>
-            <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">{formatClock(memory.audio.durationMs)}</span>
-          </div>
-        )}
-      </div>
+      {memory.audio && (
+        <div
+          data-glass-voice
+          className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-3"
+          style={{ left: center.x, top: center.y + diameter / 2 }}
+        >
+          <button
+            type="button"
+            disabled={status === "error"}
+            aria-pressed={status === "error" ? undefined : status === "playing"}
+            aria-label={status === "error" ? "Audio no disponible" : status === "playing" ? "Pausar audio" : "Reproducir audio"}
+            data-magnetic="light"
+            data-cursor-label={status === "playing" ? "Pausar" : "Escuchar"}
+            data-state={status}
+            className="mem-glass-play press pointer-events-auto flex size-14 items-center justify-center rounded-full text-ink"
+            style={{ "--pc": memory.orbColor } as React.CSSProperties}
+            onClick={toggle}
+          >
+            {status === "playing" ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">{formatClock(memory.audio.durationMs)}</span>
+        </div>
+      )}
       {memory.audio && (
         // `crossOrigin` lets Web Audio read it (the signed Cloudinary response must allow CORS); without it a browser mutes it.
         <audio
@@ -197,11 +176,11 @@ function GlassBody({
         style={
           side
             ? {
-                top: `${(anchor.y * 100).toFixed(2)}%`,
-                left: `calc(${(anchor.x * 100).toFixed(2)}% + ${Math.round(diameter / 2 + 24)}px)`,
+                top: center.y,
+                left: Math.round(center.x + diameter / 2 + 24),
                 right: "max(1.5rem, calc(env(safe-area-inset-right) + 0.5rem))",
               }
-            : { top: `calc(${(anchor.y * 100).toFixed(2)}% + ${Math.round(diameter / 2 + (memory.audio ? 64 : 40))}px)` }
+            : { top: Math.round(center.y + diameter / 2 + (memory.audio ? 64 : 40)) }
         }
       >
         {!side && prevButton}
@@ -225,11 +204,14 @@ function GlassBody({
   )
 }
 
+const silence = () => 0
+
 /**
  * The glass view: a memory held in a glass sphere that the camera has flown up to, with its caption, date and place
  * floating below. A dialog (Esc, the close button, zooming out, a click on the empty stage all close it; the arrows,
  * the buttons and a swipe fly to the neighbours) so focus is managed and the rest of the stage is hidden from the
- * cursor and from assistive technology. It keeps the last memory on screen while it fades out.
+ * cursor and from assistive technology. The sphere opens exactly over the disc the orb grew into and condenses into
+ * glass; on close it melts back into the orb while the rest fades, and only then does the dialog let go.
  */
 export function GlassView({
   memory,
@@ -242,11 +224,22 @@ export function GlassView({
   onClose,
   onRestoreFocus,
   onWarm,
+  lens = null,
 }: GlassViewProps) {
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
   if (memory && memory !== held) setHeld(memory)
   const shown = memory ?? held
+  const geometry = lensGeometry(viewport, viewport.dpr ?? 1)
+  // The same square crop the orb showed, at the size the sphere needs on this screen.
+  const photoUrl = shown ? (pickSize(ladderOf(shown), geometry.diameter, geometry.dpr)?.url ?? null) : null
+
+  // The voice of the memory on screen, read by the sphere every frame.
+  const levelRef = useRef<() => number>(silence)
+  const level = useCallback(() => levelRef.current(), [])
+  const onLevel = useCallback((reader: () => number) => {
+    levelRef.current = reader
+  }, [])
 
   // The memories on either side are a step away: their photos are fetched and decoded now.
   useEffect(() => {
@@ -316,15 +309,24 @@ export function GlassView({
               >
                 Cerrar
               </Dialog.Close>
+              <GlassSphere
+                memory={shown}
+                photoUrl={photoUrl}
+                open={memory !== null}
+                lens={lens}
+                geometry={geometry}
+                reduced={reduced}
+                level={level}
+              />
               <GlassBody
                 key={shown.id}
                 memory={shown}
                 open={memory !== null}
                 prev={memory ? prev : null}
                 next={memory ? next : null}
-                reduced={reduced}
-                viewport={viewport}
+                geometry={geometry}
                 onStep={onStep}
+                onLevel={onLevel}
               />
             </>
           )}
