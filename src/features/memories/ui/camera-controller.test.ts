@@ -323,6 +323,38 @@ describe("flights", () => {
     expect(second).toHaveBeenCalledTimes(1)
   })
 
+  it("waits before it leaves when asked (the glass melts back into the orb first)", () => {
+    setup()
+    const start = controller.camera()
+    const done = vi.fn()
+    controller.flyTo(target, { delay: 0.2, onDone: done })
+    controller.step(0.1)
+    controller.step(0.09)
+    expect(controller.camera()).toEqual(start)
+    expect(controller.progress()).toBe(0)
+    controller.step(0.05)
+    expect(controller.camera()).not.toEqual(start)
+    for (let i = 0; i < 120; i++) controller.step(1 / 60)
+    expect(controller.camera()).toEqual(target)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it("tells how far the flight has come on its curve, and nothing at rest", () => {
+    setup()
+    expect(controller.progress()).toBeNull()
+    controller.flyTo(target)
+    expect(controller.progress()).toBe(0)
+    controller.step(0.3)
+    const early = controller.progress()!
+    controller.step(0.3)
+    const later = controller.progress()!
+    expect(early).toBeGreaterThan(0)
+    expect(later).toBeGreaterThan(early)
+    expect(later).toBeLessThan(1)
+    for (let i = 0; i < 120; i++) controller.step(1 / 60)
+    expect(controller.progress()).toBeNull()
+  })
+
   it("stops gestures from taking over a flight that is on its way", () => {
     setup()
     controller.setEnabled(false)

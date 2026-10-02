@@ -1,3 +1,4 @@
+import { summonEase } from "@/features/orb/orb-summon"
 import {
   clampCamera,
   fitBounds,
@@ -40,6 +41,8 @@ export interface FlightOptions {
   onDone?: () => void
   /** `approach` is the slow-fast-settle flight to an orb; `quick` is a short move (a key, a double tap). */
   curve?: "approach" | "quick"
+  /** Seconds to hold still before leaving (the glass melts back into the orb first). */
+  delay?: number
 }
 
 export interface CameraController extends CameraSource {
@@ -55,6 +58,8 @@ export interface CameraController extends CameraSource {
   jump: (camera: Camera) => void
   flyTo: (target: Camera, options?: FlightOptions) => void
   cancelFlight: () => void
+  /** How far the current flight has come on its curve (0..1), or null when the camera is not flying. */
+  progress: () => number | null
   /** Under reduced motion a "flight" is a cut: this wraps the swap so the caller can fade around it. */
   setCut: (cut: (apply: () => void) => void) => void
   /** Advances flights, inertia and the soft edge by `dt` seconds. The frame loop calls it; it does nothing at rest. */
@@ -84,6 +89,7 @@ const OWN_INPUT = "[data-hud],[role='dialog'],[role='alertdialog']"
 interface Flight {
   from: Camera
   to: Camera
+  /** Seconds since it was asked for; negative while it still waits to leave. */
   elapsed: number
   duration: number
   curve: "approach" | "quick"
@@ -153,7 +159,7 @@ export function createCameraController(options: Options): CameraController {
     flight = {
       from: cam,
       to: target,
-      elapsed: 0,
+      elapsed: -Math.max(flyOptions.delay ?? 0, 0),
       duration: curve === "quick" ? QUICK_FLIGHT_S : flightDuration(cam, target),
       curve,
       onDone: flyOptions.onDone,
@@ -172,6 +178,7 @@ export function createCameraController(options: Options): CameraController {
   const step = (dt: number) => {
     if (flight) {
       flight.elapsed += dt
+      if (flight.elapsed < 0) return
       const u = flight.elapsed / flight.duration
       const done = flight.onDone
       if (u >= 1) {
@@ -411,6 +418,11 @@ export function createCameraController(options: Options): CameraController {
     },
     flyTo,
     cancelFlight,
+    progress: () => {
+      if (!flight) return null
+      const u = Math.min(Math.max(flight.elapsed / flight.duration, 0), 1)
+      return flight.curve === "quick" ? 1 - (1 - u) ** 3 : summonEase(u)
+    },
     setCut: (next) => {
       cut = next
     },

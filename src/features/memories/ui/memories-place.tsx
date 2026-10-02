@@ -71,8 +71,13 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   // glass opens (there is no document while rendering on the server).
   const [glass] = useState<Lens | null>(() => (typeof document === "undefined" ? null : createLens({ cache: photos })))
   const lens = lensGeometry(viewport, viewport.dpr)
+  const lensRef = useRef(lens)
+  useEffect(() => {
+    lensRef.current = lens
+  })
+  const anchor = useCallback(() => lensRef.current.anchor, [])
   const ordered = useMemo(() => orderByDate(memories), [memories])
-  const approach = useApproach(controller, ordered, points)
+  const approach = useApproach(controller, ordered, points, anchor)
   const current = approach.state
   const open = current.phase === "open" ? (memories.find((m) => m.id === current.id) ?? null) : null
   const approached = current.phase === "idle" ? null : (memories.find((m) => m.id === current.id) ?? null)
@@ -202,6 +207,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
             controller={controller}
             reduced={reduced}
             approachId={approach.state.phase === "idle" ? null : approach.state.id}
+            approachPhase={approach.state.phase}
             paused={current.phase === "open"}
             cache={photos}
             onOpen={approach.open}

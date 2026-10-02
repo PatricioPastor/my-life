@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { worldBounds, type Camera } from "./camera"
 import { createCameraController, type CameraController } from "./camera-controller"
-import { MemoryPoints, type PointsHandle } from "./memory-points"
+import { MemoryPoints, approachAmount, type PointsHandle } from "./memory-points"
 import { OPEN_ZOOM, lensGeometry } from "./glass-layout"
 import { PHOTO_RUNGS, approachSizes } from "../photo-ladder"
 import type { PhotoCache } from "./photo-cache"
-import { orbScale } from "./camera"
+import { orbScale, worldToScreen } from "./camera"
+import type { Approach } from "./approach"
 
 const view = (id: string, caption: string, over: Partial<MemoryView> = {}): MemoryView => ({
   id,
@@ -43,8 +44,8 @@ let handle: { current: PointsHandle | null }
 function mount(
   memories: readonly MemoryView[],
   reduced = false,
-  onOpen: (id: string, world: { x: number; y: number }) => void = () => {},
-  extra: { approachId?: string | null; cache?: PhotoCache } = {},
+  onOpen: (id: string) => void = () => {},
+  extra: { approachId?: string | null; approachPhase?: Approach["phase"]; cache?: PhotoCache } = {},
 ) {
   const aspect = window.innerWidth / window.innerHeight
   controller = createCameraController({
@@ -54,21 +55,23 @@ function mount(
     pad: PAD,
   })
   handle = { current: null }
-  const props = (list: readonly MemoryView[], approachId: string | null) => ({
+  const props = (list: readonly MemoryView[], approachId: string | null, approachPhase: Approach["phase"]) => ({
     memories: list,
     bounds: worldBounds(list.length, aspect),
     controller,
     reduced,
     approachId,
+    approachPhase,
     onOpen,
     cache: extra.cache,
     ref: handle,
   })
-  const utils = render(<MemoryPoints {...props(memories, extra.approachId ?? null)} />)
+  const phaseOf = (id: string | null | undefined, phase?: Approach["phase"]) => phase ?? (id ? "open" : "idle")
+  const utils = render(<MemoryPoints {...props(memories, extra.approachId ?? null, phaseOf(extra.approachId, extra.approachPhase))} />)
   return {
     ...utils,
-    again: (list: readonly MemoryView[], next: { approachId?: string | null } = {}) =>
-      utils.rerender(<MemoryPoints {...props(list, next.approachId ?? null)} />),
+    again: (list: readonly MemoryView[], next: { approachId?: string | null; approachPhase?: Approach["phase"] } = {}) =>
+      utils.rerender(<MemoryPoints {...props(list, next.approachId ?? null, phaseOf(next.approachId, next.approachPhase))} />),
   }
 }
 
@@ -253,16 +256,27 @@ describe("MemoryPoints in motion", () => {
     expect(a.getAttribute("data-link")).toBe("idle")
   })
 
-  it("hands over where the orb is in the world when it is opened", () => {
+  it("says which orb was opened", () => {
     const onOpen = vi.fn()
     mount(trip, false, onOpen)
     play(180)
     fireEvent.click(orb(/Uno/))
-    const [id, world] = onOpen.mock.calls[0]
-    expect(id).toBe("a")
-    const now = handle.current!.worldOf("a")!
-    expect(world.x).toBeCloseTo(now.x, 6)
-    expect(world.y).toBeCloseTo(now.y, 6)
+    expect(onOpen).toHaveBeenCalledWith("a")
+  })
+
+  it("pins the orb it is asked for exactly where it is, and it never drifts from there", () => {
+    mount(trip)
+    play(90)
+    const pinned = handle.current!.pin("a")!
+    // Drawn on that very point at once: no leftover drift from the frame before.
+    play(1)
+    const cam = controller.camera()
+    const drawn = worldToScreen(cam, controller.viewport(), pinned)
+    expect(at(orb(/Uno/))!.x).toBeCloseTo(drawn.x, 2)
+    expect(at(orb(/Uno/))!.y).toBeCloseTo(drawn.y, 2)
+    play(240)
+    expect(handle.current!.worldOf("a")).toEqual(pinned)
+    expect(handle.current!.pin("nope")).toBeNull()
   })
 
   describe("a tap on overlapping orbs", () => {
@@ -275,7 +289,7 @@ describe("MemoryPoints in motion", () => {
       })
     }
     /** Two orbs 12 px apart, so their 44 px hit areas overlap and "Dos" is the one on top. */
-    const crowd = (onOpen: (id: string, world: { x: number; y: number }) => void) => {
+    const crowd = (onOpen: (id: string) => void) => {
       mount(trip, false, onOpen)
       play(5)
       const centers: Record<string, [number, number]> = { Uno: [100, 100], Dos: [112, 104], Tres: [400, 400], Lejos: [600, 600] }
@@ -454,16 +468,14 @@ describe("MemoryPoints approach", () => {
     expect(orb(/Uno/).getAttribute("data-link")).toBe("idle")
   })
 
-  it("marks the orb being approached, and stops its breath as the camera comes in", () => {
+  it("marks the orb being approached, and stops its breath once the glass is open", () => {
     const { again } = mount(trip, true)
-    again(trip, { approachId: "a" })
+    again(trip, { approachId: "a", approachPhase: "open" })
     const a = orb(/Uno/)
-    const world = handle.current!.worldOf("a")!
-    controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM })
     expect(a.getAttribute("data-focus")).toBe("true")
     // The orb stops breathing as it fills the screen (the breath would be scaled up with it).
     expect(Number(a.style.getPropertyValue("--focus"))).toBeCloseTo(1, 2)
-    controller.jump({ ...controller.camera(), zoom: 0.5 })
+    again(trip, { approachId: null, approachPhase: "idle" })
     expect(a.hasAttribute("data-focus")).toBe(false)
     expect(Number(a.style.getPropertyValue("--focus"))).toBe(0)
   })
@@ -549,16 +561,82 @@ describe("MemoryPoints photos at the size they are shown", () => {
   })
 })
 
+describe("how far the approach disc has grown", () => {
+  it("follows the flight in, sits on the sphere while open, and follows the flight home", () => {
+    expect(approachAmount("idle", null, false)).toBe(0)
+    expect(approachAmount("flying", 0, false)).toBe(0)
+    expect(approachAmount("flying", 0.4, false)).toBe(0.4)
+    expect(approachAmount("open", null, false)).toBe(1)
+    // Waiting for the glass to melt back: still the sphere.
+    expect(approachAmount("leaving", 0, false)).toBe(1)
+    expect(approachAmount("leaving", 0.25, false)).toBe(0.75)
+  })
+
+  it("never pops when a flight has landed but the phase has not caught up yet", () => {
+    expect(approachAmount("flying", null, false)).toBe(1)
+    expect(approachAmount("leaving", null, false)).toBe(0)
+  })
+
+  it("does not grow before a cut under reduced motion: it is there once the world has faded", () => {
+    expect(approachAmount("flying", null, true)).toBe(0)
+    expect(approachAmount("leaving", null, true)).toBe(0)
+    expect(approachAmount("open", null, true)).toBe(1)
+  })
+})
+
 describe("MemoryPoints approach disc", () => {
   const disc = () => document.querySelector<HTMLElement>("[data-focus-disc]")!
   const discImages = () => Array.from(disc().querySelectorAll("img")).map((img) => img.getAttribute("src"))
 
-  it("grows a disc to the glass as the camera comes in, while the orb itself keeps its size", () => {
+  /** The disc's place and scale, as written by the loop. */
+  const discAt = () => {
+    const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0\) scale\(([\d.]+)\)/.exec(disc().style.transform)!
+    return { x: Number(m[1]), y: Number(m[2]), scale: Number(m[3]) }
+  }
+
+  it("grows the disc with the flight, from the orb's own size to the sphere's", () => {
+    const { again } = mount(ladderTrip, false, undefined, { cache: fakeCache(["a-96"]).cache })
+    play(30)
+    const world = handle.current!.pin("a")!
+    again(ladderTrip, { approachId: "a", approachPhase: "flying" })
+    controller.flyTo({ x: world.x, y: world.y, zoom: OPEN_ZOOM })
+    play(1)
+    const { diameter } = lens()
+    const startScale = discAt().scale
+    expect(startScale * diameter).toBeCloseTo(40 * orbScale(controller.camera().zoom), 0)
+    play(30)
+    const progress = controller.progress()!
+    const base = 40 * orbScale(controller.camera().zoom)
+    expect(discAt().scale).toBeCloseTo((base + (diameter - base) * progress) / diameter, 3)
+    play(120)
+    again(ladderTrip, { approachId: "a", approachPhase: "open" })
+    expect(discAt().scale).toBeCloseTo(1, 4)
+  })
+
+  it("shrinks it back with the flight home, to exactly the orb's size as the camera lands", () => {
+    const { again } = mount(ladderTrip, false, undefined, { cache: fakeCache(["a-96"]).cache })
+    play(30)
+    const home = controller.camera()
+    const world = handle.current!.pin("a")!
+    controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM })
+    again(ladderTrip, { approachId: "a", approachPhase: "open" })
+    play(1)
+    again(ladderTrip, { approachId: "a", approachPhase: "leaving" })
+    controller.flyTo(home)
+    play(2)
+    expect(discAt().scale).toBeLessThan(1)
+    play(200)
+    expect(controller.progress()).toBeNull()
+    const base = 40 * orbScale(home.zoom)
+    expect(discAt().scale * lens().diameter).toBeCloseTo(base, 1)
+  })
+
+  it("puts the disc on the sphere exactly when the glass is open, while the orb itself keeps its size", () => {
     const { again } = mount(ladderTrip, true, undefined, { cache: fakeCache(["a-96"]).cache })
-    again(ladderTrip, { approachId: "a" })
-    const world = handle.current!.worldOf("a")!
+    const world = handle.current!.pin("a")!
     const { diameter } = lens()
     act(() => controller.jump({ x: world.x, y: world.y, zoom: OPEN_ZOOM }))
+    again(ladderTrip, { approachId: "a", approachPhase: "open" })
     expect(disc().getAttribute("data-on")).toBe("true")
     expect(disc().style.width).toBe(`${diameter}px`)
     const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0\) scale\(([\d.]+)\)/.exec(disc().style.transform)!
@@ -568,7 +646,7 @@ describe("MemoryPoints approach disc", () => {
     expect(Number(m[2]) + diameter / 2).toBeCloseTo(center.y, 1)
     // The orb is never blown up itself: only the disc grows.
     expect(scaleOf(orb(/Uno/))).toBeCloseTo(orbScale(OPEN_ZOOM), 3)
-    act(() => controller.jump({ ...controller.camera(), zoom: 0.5 }))
+    again(ladderTrip, { approachId: null, approachPhase: "idle" })
     expect(disc().getAttribute("data-on")).toBe("false")
   })
 

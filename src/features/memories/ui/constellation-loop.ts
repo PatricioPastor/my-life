@@ -181,9 +181,11 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     const viewport = { width, height }
     const scale = orbScale(cam.zoom)
     for (let i = 0; i < n; i++) {
-      // Extrapolate by the leftover time: pinned orbs have zero velocity, so they never slide.
-      worldX[i] = sim.x[i] + sim.vx[i] * lead
-      worldY[i] = sim.y[i] + sim.vy[i] * lead
+      // Extrapolate by the leftover time. A pinned orb is drawn exactly where it is held (its velocity is only zeroed
+      // by the next step, and the camera aims at this very point).
+      const ahead = sim.pinned[i] ? 0 : lead
+      worldX[i] = sim.x[i] + sim.vx[i] * ahead
+      worldY[i] = sim.y[i] + sim.vy[i] * ahead
       const at = worldToScreen(cam, viewport, { x: worldX[i], y: worldY[i] })
       drawX[i] = at.x
       drawY[i] = at.y
@@ -191,7 +193,8 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
       const el = items[i]
       if (el) el.style.transform = `translate3d(${at.x.toFixed(2)}px, ${at.y.toFixed(2)}px, 0) scale(${scale.toFixed(3)})`
     }
-    const now = emphasis && emphasis.amount > 0.02 ? emphasis.index : null
+    // The approached orb hands over to its disc from the first frame of the approach: its photo shows at once.
+    const now = emphasis ? emphasis.index : null
     if (disc) {
       if (now !== null && emphasis) {
         // Laid out at the glass diameter and scaled down to the orb: at arrival it is exactly the sphere, unscaled.
@@ -309,7 +312,8 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
   }
 
   return {
-    positionOf: (index) => ({ x: worldX[index] ?? sim.x[index], y: worldY[index] ?? sim.y[index] }),
+    positionOf: (index) =>
+      sim.pinned[index] ? { x: sim.x[index], y: sim.y[index] } : { x: worldX[index] ?? sim.x[index], y: worldY[index] ?? sim.y[index] },
     screenOf: (index) => ({ x: drawX[index] ?? 0, y: drawY[index] ?? 0 }),
     emphasize: (index, amount, diameter) => {
       emphasis = index === null ? null : { index, amount, diameter }
@@ -334,6 +338,8 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     hold: (source, index) => {
       held[source] = index
       applyPin()
+      // Draw a newly pinned orb where it is held right away.
+      if (index !== null && sim.pinned[index]) render(reduced ? 0 : acc, 0)
       // Reduced motion has no loop: repaint the still frame so the links answer right away.
       if (reduced) drawEdges(1)
     },

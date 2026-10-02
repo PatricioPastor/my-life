@@ -5,12 +5,13 @@ import { formatMemoryDate, truncateCaption } from "../format"
 import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
 import { approachSizes, ladderOf, PHOTO_RUNGS, pickSize } from "../photo-ladder"
-import { focusCamera, focusAmount, orbScale, type Bounds, type Point } from "./camera"
+import type { Approach } from "./approach"
+import { focusCamera, orbScale, type Bounds, type Point } from "./camera"
 import type { CameraController } from "./camera-controller"
 import { startConstellation, type ConstellationLoop } from "./constellation-loop"
 import { createSim } from "./constellation-sim"
 import { FocusDisc } from "./focus-disc"
-import { lensGeometry, OPEN_ZOOM } from "./glass-layout"
+import { lensGeometry } from "./glass-layout"
 import { orbDepth, orbMetrics } from "./orb-depth"
 import { createPhotoCache, type PhotoCache } from "./photo-cache"
 import { driftFor, layoutPoints } from "./point-layout"
@@ -39,6 +40,11 @@ export interface PointsHandle {
   /** Where the orb of a memory is in the world right now, or null. */
   worldOf: (id: string) => Point | null
   /**
+   * Holds an orb for the approach and returns exactly where it is held, or null. The camera aims at this point, so
+   * the orb lands on the very pixel the glass opens on: it no longer drifts, not even by its last frame's motion.
+   */
+  pin: (id: string) => Point | null
+  /**
    * Gives focus back to an orb after the glass closed. It is a quiet focus: the keyboard is back where it was, but the
    * orb is not held, lit or opened up (no photo, no dimmed neighbours) until the visitor moves focus themselves.
    */
@@ -53,15 +59,31 @@ interface MemoryPointsProps {
   reduced: boolean
   /** The memory the camera is approaching or the glass is open on: it is held still and grows as the camera arrives. */
   approachId: string | null
+  /** Where the approach is: the disc follows the flight in, sits on the sphere while open, and follows it back out. */
+  approachPhase?: Approach["phase"]
   /** The glass view is open over the constellation: the loop idles. */
   paused?: boolean
   /** The decoded photos shared with the approach and the glass. */
   cache?: PhotoCache
-  onOpen: (id: string, world: Point) => void
+  onOpen: (id: string) => void
   ref?: Ref<PointsHandle>
 }
 
 type PointStyle = CSSProperties & Record<`--${string}`, string>
+
+/**
+ * How far the approached orb's disc has grown toward the sphere (0..1): with the flight in (its eased progress), all
+ * of it while the glass is open, and back down with the flight home, so it is exactly the orb's size as the camera
+ * lands whatever zoom it left from. Before a cut (reduced motion) there is no flight: it waits, then is there.
+ */
+export function approachAmount(phase: Approach["phase"], progress: number | null, reduced: boolean): number {
+  if (phase === "open") return 1
+  // No progress means the flight has landed (the phase follows a moment later), or, under reduced motion, that the
+  // cut has not happened yet.
+  if (phase === "flying") return reduced ? 0 : (progress ?? 1)
+  if (phase === "leaving") return reduced ? 0 : 1 - (progress ?? 1)
+  return 0
+}
 
 /**
  * One soft round orb per memory, tinted with the memory's own color (core, halo and rim), each at its own seeded
@@ -78,6 +100,7 @@ export function MemoryPoints({
   controller,
   reduced,
   approachId,
+  approachPhase = approachId === null ? "idle" : "open",
   paused = false,
   cache: given,
   onOpen,
@@ -106,6 +129,7 @@ export function MemoryPoints({
   const indexById = useRef<Map<string, number>>(new Map())
   const approachIndex = useRef<number | null>(null)
   const approachRef = useRef(approachId)
+  const phaseRef = useRef(approachPhase)
   // Where each orb was when the simulation last stopped, so a new memory never makes the others jump back.
   const carry = useRef<Map<string, { x: number; y: number }> | null>(null)
 
@@ -125,6 +149,13 @@ export function MemoryPoints({
       worldOf: (id) => {
         const index = indexById.current.get(id)
         return index === undefined ? null : (loopRef.current?.positionOf(index) ?? null)
+      },
+      pin: (id) => {
+        const index = indexById.current.get(id)
+        const loop = loopRef.current
+        if (index === undefined || !loop) return null
+        loop.hold("approach", index)
+        return loop.positionOf(index)
       },
       restoreFocus: (id) => {
         const orb = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-memory-id]") ?? []).find(
@@ -206,10 +237,10 @@ export function MemoryPoints({
       return id === null || id === undefined ? null : (index.get(id) ?? null)
     }
 
-    // The orb being approached stays put and grows toward the glass as the camera comes in.
+    // The orb being approached stays put and its disc grows toward the glass as the camera comes in.
     const applyApproach = () => {
       const at = approachIndex.current
-      loop.emphasize(at, at === null ? 0 : focusAmount(controller.camera().zoom, OPEN_ZOOM), lensRef.current.diameter)
+      loop.emphasize(at, at === null ? 0 : approachAmount(phaseRef.current, controller.progress(), reduced), lensRef.current.diameter)
     }
     approachIndex.current = approachRef.current === null ? null : (index.get(approachRef.current) ?? null)
     loop.hold("approach", approachIndex.current)
@@ -319,13 +350,14 @@ export function MemoryPoints({
   // The approach (the camera flying to an orb, the glass open on it, the way back) holds that orb and grows it.
   useEffect(() => {
     approachRef.current = approachId
+    phaseRef.current = approachPhase
     const loop = loopRef.current
     if (!loop) return
     const at = approachId === null ? null : (indexById.current.get(approachId) ?? null)
     approachIndex.current = at
     loop.hold("approach", at)
-    loop.emphasize(at, at === null ? 0 : focusAmount(controller.camera().zoom, OPEN_ZOOM), lensRef.current.diameter)
-  }, [approachId, controller])
+    loop.emphasize(at, at === null ? 0 : approachAmount(approachPhase, controller.progress(), reduced), lensRef.current.diameter)
+  }, [approachId, approachPhase, controller, reduced])
 
   return (
     <>
@@ -357,7 +389,7 @@ export function MemoryPoints({
           if (index === undefined) return
           event.stopPropagation()
           event.preventDefault()
-          onOpen(id, loopRef.current?.positionOf(index) ?? points[index])
+          onOpen(id)
         }}
       >
         {memories.map((memory, index) => {
@@ -402,8 +434,7 @@ export function MemoryPoints({
                 data-voice={memory.audio !== null}
                 data-reduced={reduced}
                 data-link="idle"
-                // The camera flies to the orb where it is now.
-                onClick={() => onOpen(memory.id, loopRef.current?.positionOf(index) ?? points[index])}
+                onClick={() => onOpen(memory.id)}
               >
                 <span className="mem-drift" aria-hidden="true">
                   <span className="mem-dot" />

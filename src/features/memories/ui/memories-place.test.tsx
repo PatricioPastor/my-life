@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
+import { lensGeometry } from "./glass-layout"
+import { GLASS_RELEASE_MS } from "./lens"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
 import { VOID_GLOWS } from "./void-glows"
 
@@ -330,6 +332,64 @@ describe("MemoriesPlace approach", () => {
     expect(Number(m[1])).toBeCloseTo(window.innerWidth / 2, 0)
     expect(Number(m[2])).toBeGreaterThan(window.innerHeight * 0.3)
     expect(Number(m[2])).toBeLessThan(window.innerHeight * 0.6)
+  })
+
+  const lens = () => lensGeometry({ width: window.innerWidth, height: window.innerHeight }, window.devicePixelRatio || 1)
+  const translateOf = (transform: string | undefined) => {
+    const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0(?:px)?\)(?: scale\(([\d.]+)\))?/.exec(transform ?? "")!
+    return { x: Number(m[1]), y: Number(m[2]), scale: Number(m[3]) }
+  }
+
+  for (const dpr of [1, 1.5]) {
+    it(`lands the orb exactly on the sphere's center, on the device pixel grid (${dpr}x)`, () => {
+      vi.stubGlobal("devicePixelRatio", dpr)
+      render(<MemoriesPlace state={three} />)
+      advance(20)
+      fireEvent.click(orbAt(/Una tarde de lluvia/))
+      advanceUntil(dialogOpen)
+      const { center } = lens()
+      const orb = translateOf(transformOf(/Una tarde de lluvia/))
+      expect(Math.abs(orb.x - center.x)).toBeLessThan(0.01)
+      expect(Math.abs(orb.y - center.y)).toBeLessThan(0.01)
+    })
+  }
+
+  it("opens the sphere exactly over the disc the orb grew into: same center, same size, nothing scaled", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    const { center, diameter } = lens()
+    const disc = translateOf((document.querySelector("[data-focus-disc]") as HTMLElement).style.transform)
+    expect(disc.scale).toBeCloseTo(1, 4)
+    expect(disc.x + diameter / 2).toBeCloseTo(center.x, 2)
+    expect(disc.y + diameter / 2).toBeCloseTo(center.y, 2)
+    const sphere = screen.getByRole("dialog").querySelector<HTMLElement>("[data-glass-sphere]")!
+    expect(parseFloat(sphere.style.left)).toBeCloseTo(center.x - diameter / 2, 2)
+    expect(parseFloat(sphere.style.top)).toBeCloseTo(center.y - diameter / 2, 2)
+    expect(parseFloat(sphere.style.width)).toBeCloseTo(diameter, 2)
+  })
+
+  it("lets the glass melt back into the orb before the camera flies home", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    const opened = transformOf(/Una tarde de lluvia/)
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    // Frames shorter than the release: the camera has not moved, the disc is still the sphere.
+    advance(1, GLASS_RELEASE_MS / 2 - 10)
+    expect(transformOf(/Una tarde de lluvia/)).toBe(opened)
+    advance(3)
+    expect(transformOf(/Una tarde de lluvia/)).not.toBe(opened)
+  })
+
+  it("flies straight back when closed mid-flight, with no glass to wait for", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advance(4)
+    const mid = transformOf(/Una tarde de lluvia/)
+    fireEvent.keyDown(stage(), { key: "Escape" })
+    advance(1, 60)
+    expect(transformOf(/Una tarde de lluvia/)).not.toBe(mid)
   })
 
   it("flies back with Escape, restores focus to the orb and ends idle", async () => {
