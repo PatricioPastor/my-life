@@ -7,6 +7,7 @@ import { sharedAudioPath } from "../audio-path"
 import type { Memory } from "../memory"
 import type { ApprovedMemoryReader } from "../memory-repository"
 import { findSharedMemoryWith, type FindSharedMemoryDeps } from "./find-shared-memory"
+import { OG_TRANSFORM, cloudinaryUrl } from "../cloudinary-url"
 import { signShareToken } from "./share-token"
 
 const ID = "11111111-1111-4111-8111-111111111111"
@@ -107,5 +108,22 @@ describe("findSharedMemoryWith", () => {
     const { full, repository } = setup()
     vi.mocked(repository.findApproved).mockRejectedValue(new Error("boom"))
     expect(await findSharedMemoryWith(full, TOKEN)).toEqual({ ok: false, reason: "unavailable" })
+  })
+})
+
+describe("findSharedMemoryWith: the link preview image", () => {
+  it("is a signed 1200x630 jpg crop of the photo", async () => {
+    const result = await findSharedMemoryWith(setup().full, TOKEN)
+    expect(result.ok && result.ogImageUrl).toBe(cloudinaryUrl("demo", "my-life/memories/x", OG_TRANSFORM, "abcd"))
+    expect(OG_TRANSFORM).toContain("w_1200,h_630")
+    expect(OG_TRANSFORM).toContain("c_fill")
+    expect(OG_TRANSFORM).toContain("f_jpg")
+  })
+
+  it("is null for an audio-only memory, whose preview is generated", async () => {
+    const audio = { publicId: "my-life/memories/a", format: "webm", bytes: 9, durationMs: 4000 }
+    const { full } = setup({}, memory({ publicId: null, width: null, height: null, audio }))
+    const result = await findSharedMemoryWith(full, TOKEN)
+    expect(result.ok && result.ogImageUrl).toBeNull()
   })
 })

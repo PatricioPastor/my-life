@@ -904,3 +904,70 @@ describe("MemoriesPlace title", () => {
     })
   })
 })
+
+describe("MemoriesPlace as a guest (a shared memory)", () => {
+  beforeEach(stubFrames)
+
+  const shared = view("s", "Una tarde compartida")
+
+  it("opens that one memory in the glass by itself, with no click", () => {
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit: vi.fn() }} />)
+    advanceUntil(dialogOpen)
+    expect(phase()).toBe("open")
+    expect(screen.getByRole("dialog", { name: "Una tarde compartida" })).toBeTruthy()
+  })
+
+  it("opens it once, not again after it was left", () => {
+    const onExit = vi.fn()
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit }} />)
+    advanceUntil(dialogOpen)
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    advance(30)
+    expect(onExit).toHaveBeenCalledTimes(1)
+    expect(phase()).toBe("open")
+  })
+
+  it("exits on Esc, on Cerrar and on Universo, and never flies the camera back", () => {
+    for (const leave of [
+      () => fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" }),
+      () => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cerrar" })),
+      () => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Universo/ })),
+    ]) {
+      const onExit = vi.fn()
+      const { unmount } = render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit }} />)
+      advanceUntil(dialogOpen)
+      leave()
+      expect(onExit).toHaveBeenCalledTimes(1)
+      expect(phase()).toBe("open")
+      unmount()
+    }
+  })
+
+  it("exits on Esc from the stage too", () => {
+    const onExit = vi.fn()
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit }} />)
+    fireEvent.keyDown(stage(), { key: "Escape" })
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows no previous or next, and no add control or other memory", () => {
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit: vi.fn() }} />)
+    advanceUntil(dialogOpen)
+    const dialog = within(screen.getByRole("dialog"))
+    expect(dialog.queryByRole("button", { name: "Anterior" })).toBeNull()
+    expect(dialog.queryByRole("button", { name: "Siguiente" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo", hidden: true })).toBeNull()
+  })
+
+  it("under reduced motion it cuts to the memory and opens it", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "s", onExit: vi.fn() }} />)
+    await waitFor(() => expect(dialogOpen()).toBe(true))
+  })
+
+  it("does not open a memory that is not in the list", () => {
+    render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "other", onExit: vi.fn() }} />)
+    advance(30)
+    expect(phase()).toBe("idle")
+  })
+})

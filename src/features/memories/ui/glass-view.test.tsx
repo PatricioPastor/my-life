@@ -664,3 +664,75 @@ describe("GlassView talking", () => {
     expect(dialog().querySelector("[data-glass-sphere]")!.getAttribute("data-reduced")).toBe("true")
   })
 })
+
+describe("GlassView as a guest (a shared memory)", () => {
+  const exit = vi.fn()
+  const guestProps = () => ({ guestExit: exit })
+  beforeEach(() => exit.mockReset())
+
+  function mountGuest(over: Partial<Props> = {}) {
+    const props: Props = {
+      memory: photo,
+      prev: both,
+      next: audioOnly,
+      reduced: false,
+      onStep: vi.fn(),
+      onClose: vi.fn(),
+      onRestoreFocus: vi.fn(),
+      onWarm: vi.fn(),
+      lens: null,
+      travel: () => null,
+      switching: false,
+      ...over,
+    }
+    render(<GlassView {...props} {...guestProps()} container={document.body} viewport={DESKTOP} />)
+    return props
+  }
+
+  it("has no previous or next controls, even when there are neighbours", () => {
+    mountGuest()
+    expect(within(dialog()).queryByRole("button", { name: "Anterior" })).toBeNull()
+    expect(within(dialog()).queryByRole("button", { name: "Siguiente" })).toBeNull()
+  })
+
+  it("does not step on the arrow keys or on a swipe, and does not warm neighbours", () => {
+    const props = mountGuest()
+    fireEvent.keyDown(dialog(), { key: "ArrowRight" })
+    fireEvent.keyDown(dialog(), { key: "ArrowLeft" })
+    const sphere = dialog().querySelector("[data-glass-sphere]") as HTMLElement
+    fireEvent.pointerDown(sphere, { clientX: 700, clientY: 400 })
+    fireEvent.pointerUp(sphere, { clientX: 300, clientY: 410 })
+    expect(props.onStep).not.toHaveBeenCalled()
+    expect(props.onWarm).not.toHaveBeenCalled()
+  })
+
+  it("does not leave on a wheel away from the sphere: only the exits leave", () => {
+    const props = mountGuest()
+    fireEvent.wheel(dialog().querySelector("[data-glass-sphere]") as HTMLElement, { deltaY: 120 })
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
+  it("leaves on Esc, through the same close the dialog always calls", () => {
+    const props = mountGuest()
+    fireEvent.keyDown(dialog(), { key: "Escape" })
+    expect(props.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("offers Universo, which exits", () => {
+    mountGuest()
+    fireEvent.click(within(dialog()).getByRole("button", { name: /Universo/ }))
+    expect(exit).toHaveBeenCalledTimes(1)
+  })
+
+  it("offers a quiet Entrar al universo link to the start", () => {
+    mountGuest()
+    const link = within(dialog()).getByRole("link", { name: "Entrar al universo" })
+    expect(link.getAttribute("href")).toBe("/")
+  })
+
+  it("is not a guest view without guestExit: it offers neither exit", () => {
+    mount()
+    expect(within(dialog()).queryByRole("link", { name: "Entrar al universo" })).toBeNull()
+    expect(within(dialog()).queryByRole("button", { name: /Universo/ })).toBeNull()
+  })
+})

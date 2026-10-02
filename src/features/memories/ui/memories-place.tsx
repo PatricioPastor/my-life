@@ -33,6 +33,11 @@ interface MemoriesPlaceProps {
    * stage element, so a dialog it opens can mount inside it (and keep the magnetic cursor).
    */
   action?: ReactNode | ((container: HTMLElement | null) => ReactNode)
+  /**
+   * A guest with a share link: the one memory opens by itself, and leaving it (Esc, Cerrar, "Universo") calls
+   * `onExit` (the start) instead of flying back to the overview. There is no previous or next.
+   */
+  guest?: { memoryId: string; onExit: () => void }
 }
 
 const PORCELAIN = "#f3f0ea"
@@ -61,7 +66,7 @@ const CUT_IN_MS = 140
  * given; loading it is the container's job, and the way back belongs to the journey. The title, the add control and
  * the dialogs are a HUD: they never move with the camera.
  */
-export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
+export function MemoriesPlace({ state, accent, action, guest }: MemoriesPlaceProps) {
   const reduced = useReducedMotion()
   const viewport = useViewport()
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
@@ -97,6 +102,16 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   const titleRef = useRef<HTMLHeadingElement>(null)
   const title = useTitle(current.phase, reduced, titleRef)
   const approached = current.phase === "idle" ? null : (memories.find((m) => m.id === current.id) ?? null)
+
+  // A guest arrives with the memory in hand: the camera flies to it, once, as if its orb had been tapped.
+  const opened = useRef(false)
+  const guestId = guest?.memoryId
+  const { open: openApproach } = approach
+  useEffect(() => {
+    if (!guestId || opened.current || !memories.some((m) => m.id === guestId)) return
+    opened.current = true
+    openApproach(guestId)
+  })
 
   // Build the glass renderer when the browser is idle; dispose of it with the space.
   useEffect(() => {
@@ -184,7 +199,7 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
 
   // Escape on the stage (focus on an orb, or the glass not open yet) turns the camera back, as it does from the glass.
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !(event.target as Element).closest?.("[role='dialog']")) approach.close()
+    if (event.key === "Escape" && !(event.target as Element).closest?.("[role='dialog']")) (guest ? guest.onExit : approach.close)()
   }
 
   return (
@@ -283,7 +298,8 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         reduced={reduced}
         viewport={viewport}
         onStep={approach.step}
-        onClose={approach.close}
+        onClose={guest ? guest.onExit : approach.close}
+        guestExit={guest?.onExit}
         onRestoreFocus={restoreFocus}
         onWarm={warm}
         lens={glass}

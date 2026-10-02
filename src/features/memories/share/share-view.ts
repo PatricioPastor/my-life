@@ -7,5 +7,10 @@ export type ShareMemoryResult = { ok: true; url: string } | { ok: false; reason:
 
 /** What a guest lookup answers. Every failure is a redirect to the start, so the reasons only help the logs and tests. */
 export type SharedMemoryResult =
-  | { ok: true; memory: MemoryView }
+  | {
+      ok: true
+      memory: MemoryView
+      /** A signed 1200x630 crop of the photo for the link preview, or null for an audio-only memory (a card is drawn). */
+      ogImageUrl: string | null
+    }
   | { ok: false; reason: "invalid" | "not_found" | "unavailable" }

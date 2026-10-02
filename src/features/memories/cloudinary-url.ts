@@ -8,6 +8,12 @@ export const THUMB_TRANSFORM = "f_auto,q_auto,c_fill,g_auto,w_160,h_160"
 /** The viewer's photo: never upscaled, never wider than 1600 px. */
 export const FULL_TRANSFORM = "f_auto,q_auto,c_limit,w_1600"
 
+/**
+ * The link preview of a shared photo: 1200x630 (the Open Graph size), face-aware, always a jpg, because the crawlers
+ * behind link previews (chat apps, social networks) do not all read webp or avif.
+ */
+export const OG_TRANSFORM = "f_jpg,q_auto,c_fill,g_auto,w_1200,h_630"
+
 /** From this side up the crop is shown up close (the approach and the glass), so it asks for the best quality. */
 const BEST_QUALITY_FROM = 768
 

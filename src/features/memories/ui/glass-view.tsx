@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
+import Link from "next/link"
 import { Dialog } from "radix-ui"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
@@ -38,6 +39,12 @@ interface GlassViewProps {
   travel?: () => number | null
   /** The camera is carrying the world to another memory: the caption waits for it to be half way. */
   switching?: boolean
+  /**
+   * Set when a guest holds a share link: the glass is the whole page. There is no previous or next, no swipe, and no
+   * way to leave by zooming out; instead it offers "Universo" (this function) and a quiet "Entrar al universo" link,
+   * both to the start. Esc and Cerrar still go through `onClose`.
+   */
+  guestExit?: () => void
 }
 
 /** The caption changes once the camera is this far across a switch (or at once when there is no travel). */
@@ -185,12 +192,15 @@ function GlassCaption({
   leaving,
   entering,
   onStep,
+  stepless,
 }: Pick<GlassViewProps, "prev" | "next" | "onStep"> & {
   memory: MemoryView
   hasVoice: boolean
   geometry: LensGeometry
   leaving: boolean
   entering: boolean
+  /** A guest has nothing to step to: the caption stands alone. */
+  stepless: boolean
 }) {
   const { diameter, center, caption: captionAt } = geometry
   const side = captionAt === "side"
@@ -233,7 +243,7 @@ function GlassCaption({
         className={
           side
             ? "pointer-events-none absolute flex -translate-y-1/2 flex-col items-start gap-3"
-            : "pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 items-center justify-between gap-3 px-3"
+            : `pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 items-center gap-3 px-3 ${stepless ? "justify-center" : "justify-between"}`
         }
         style={
           side
@@ -245,7 +255,7 @@ function GlassCaption({
             : { top: Math.round(center.y + diameter / 2 + (hasVoice ? 64 : 40)) }
         }
       >
-        {!side && prevButton}
+        {!side && !stepless && prevButton}
         <div key={memory.id} className={side ? "mem-caption-text min-w-0 text-left" : "mem-caption-text min-w-0 text-center"}>
           <Dialog.Title className="t-title m-0 text-[length:var(--type-3)] text-ink">{memory.caption}</Dialog.Title>
           <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted">
@@ -254,14 +264,40 @@ function GlassCaption({
           {memory.place?.name && <p className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint">{memory.place.name}</p>}
           {pending && <p className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">Pendiente de aprobación</p>}
         </div>
-        {!side && nextButton}
-        {side && (
+        {!side && !stepless && nextButton}
+        {side && !stepless && (
           <div className="flex items-center gap-2">
             {prevButton}
             {nextButton}
           </div>
         )}
       </div>
+    </>
+  )
+}
+
+/** What a guest has instead of the journey's way back: "Universo" on top, and a quiet way in below. Both go to the start. */
+function GuestExits({ onExit }: { onExit: () => void }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onExit}
+        data-magnetic="light"
+        data-cursor-label="Volver al universo"
+        className="press pointer-events-auto absolute top-[max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))] left-[max(1.25rem,calc(env(safe-area-inset-left)+0.25rem))] flex h-12 items-center gap-3 px-3 text-xs tracking-[0.08em] text-ink-muted md:left-[max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))]"
+      >
+        <Chevron />
+        <span>Universo</span>
+      </button>
+      <Link
+        href="/"
+        data-magnetic="light"
+        data-cursor-label="Entrar"
+        className="press pointer-events-auto absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 flex h-12 -translate-x-1/2 items-center px-4 text-xs tracking-[0.08em] text-ink-faint"
+      >
+        Entrar al universo
+      </Link>
     </>
   )
 }
@@ -289,7 +325,9 @@ export function GlassView({
   lens = null,
   travel,
   switching = false,
+  guestExit,
 }: GlassViewProps) {
+  const guest = guestExit !== undefined
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
   if (memory && memory !== held) setHeld(memory)
@@ -325,10 +363,10 @@ export function GlassView({
 
   // The memories on either side are a step away: their photos are fetched and decoded now.
   useEffect(() => {
-    if (!memory || !onWarm) return
+    if (!memory || !onWarm || guest) return
     if (prev) onWarm(prev)
     if (next) onWarm(next)
-  }, [memory, prev, next, onWarm])
+  }, [memory, prev, next, onWarm, guest])
 
   // A swipe anywhere on the glass turns the page (the sphere, the caption or the empty stage); the camera cannot pan
   // while it is open, so the two never compete.
@@ -351,6 +389,7 @@ export function GlassView({
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (guest) return
     if (event.key === "ArrowLeft" && prev) {
       event.preventDefault()
       onStep(prev.id)
@@ -361,14 +400,15 @@ export function GlassView({
   }
   // Zooming out on the stage (a wheel away from the sphere) leaves it, as the way back is a zoom out.
   const onWheel = (event: { deltaY: number }) => {
-    if (event.deltaY > 0) onClose()
+    // A guest has no overview to zoom back to: only the exits leave.
+    if (event.deltaY > 0 && !guest) onClose()
   }
 
   return (
     <Dialog.Root open={memory !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal container={container}>
         {/* Above the journey's HUD (the way back), which is drawn after the stage: a dialog covers it like the rest. */}
-        <Dialog.Overlay className="mem-scrim absolute inset-0 z-10 bg-[#020207]/70" onWheel={onWheel} {...swipe} />
+        <Dialog.Overlay className="mem-scrim absolute inset-0 z-10 bg-[#020207]/70" onWheel={onWheel} {...(guest ? {} : swipe)} />
         <Dialog.Content
           aria-describedby="memory-glass-date"
           className="mem-glass absolute inset-0 z-10 outline-none"
@@ -376,7 +416,7 @@ export function GlassView({
           style={{ pointerEvents: "none" }}
           onKeyDown={onKeyDown}
           onWheel={onWheel}
-          {...swipe}
+          {...(guest ? {} : swipe)}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             // By now the dialog has closed and `memory` is null, so use the last memory that was on screen.
@@ -404,8 +444,10 @@ export function GlassView({
                 onTravel={onTravel}
               />
               <GlassVoice key={shown.id} memory={shown} open={memory !== null} geometry={geometry} onLevel={onLevel} />
+              {guestExit && <GuestExits onExit={guestExit} />}
               <GlassCaption
                 memory={caption ?? shown}
+                stepless={guest}
                 hasVoice={shown.audio !== null}
                 leaving={leaving}
                 entering={entering && !leaving}

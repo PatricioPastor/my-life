@@ -1,4 +1,5 @@
 import { sharedAudioPath } from "../audio-path"
+import { OG_TRANSFORM, cloudinaryUrl } from "../cloudinary-url"
 import { toMemoryView, type DeliveryConfig } from "../list-memories"
 import type { ApprovedMemoryReader } from "../memory-repository"
 import { verifyShareToken } from "./share-token"
@@ -31,7 +32,10 @@ export async function findSharedMemoryWith(deps: FindSharedMemoryDeps, token: st
     const memory = await deps.repository().findApproved(id)
     if (!memory || memory.status !== "approved") return { ok: false, reason: "not_found" }
     const view = toMemoryView(memory, deps.cloudinary, sharedAudioPath(token))
-    return view ? { ok: true, memory: view } : { ok: false, reason: "not_found" }
+    if (!view) return { ok: false, reason: "not_found" }
+    const ogImageUrl =
+      memory.publicId === null ? null : cloudinaryUrl(deps.cloudinary.cloudName, memory.publicId, OG_TRANSFORM, deps.cloudinary.apiSecret)
+    return { ok: true, memory: view, ogImageUrl }
   } catch (error) {
     deps.log(`Reading a shared memory failed (${error instanceof Error ? error.name : "unknown"}).`)
     return { ok: false, reason: "unavailable" }
