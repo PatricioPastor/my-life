@@ -710,6 +710,80 @@ describe("GlassView player", () => {
   })
 })
 
+describe("GlassView particles", () => {
+  let ctx: { fillStyle: string; globalAlpha: number; globalCompositeOperation: string; setTransform: ReturnType<typeof vi.fn>; clearRect: ReturnType<typeof vi.fn>; beginPath: ReturnType<typeof vi.fn>; arc: ReturnType<typeof vi.fn>; fill: ReturnType<typeof vi.fn> }
+  const particles = () => dialog().querySelector<HTMLCanvasElement>("[data-orb-particles]")
+
+  beforeEach(() => {
+    ctx = {
+      fillStyle: "",
+      globalAlpha: 1,
+      globalCompositeOperation: "source-over",
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((() => ctx) as never)
+  })
+
+  it("lays a canvas around the sphere of a memory with a voice", () => {
+    mount({ memory: both })
+    const canvas = particles()!
+    const sphere = dialog().querySelector<HTMLElement>("[data-glass-sphere]")!
+    expect(canvas).not.toBeNull()
+    // Bigger than the sphere, and not inside it: nothing the sphere clips can cut a particle.
+    expect(parseFloat(canvas.style.width)).toBeGreaterThan(parseFloat(sphere.style.width) * 2)
+    expect(sphere.contains(canvas)).toBe(false)
+  })
+
+  it("has none for a photo-only memory", () => {
+    mount()
+    expect(particles()).toBeNull()
+  })
+
+  it("has none under reduced motion", () => {
+    mount({ memory: both, reduced: true })
+    expect(particles()).toBeNull()
+  })
+
+  it("throws nothing off while it is paused", () => {
+    mount({ memory: both })
+    runFrames(40)
+    expect(ctx.arc).not.toHaveBeenCalled()
+  })
+
+  it("throws particles off, in the orb color, while it plays", () => {
+    mount({ memory: view("b", "La casa nueva", { audio: voice, orbColor: "#ff9a3c" }) })
+    fireEvent.click(audioButton())
+    runFrames(60)
+    expect(ctx.arc.mock.calls.length).toBeGreaterThan(20)
+    expect(ctx.fillStyle).toBe("rgb(255, 154, 60)")
+  })
+
+  it("stops throwing them off when it is paused, and lets the rest fade out", () => {
+    mount({ memory: both })
+    fireEvent.click(audioButton())
+    runFrames(60)
+    fireEvent.click(audioButton())
+    runFrames(200)
+    const drawn = ctx.arc.mock.calls.length
+    runFrames(30)
+    expect(ctx.arc.mock.calls.length).toBe(drawn)
+  })
+
+  it("is gone when the view closes", () => {
+    const { again } = mount({ memory: both })
+    fireEvent.click(audioButton())
+    runFrames(30)
+    again({ memory: null })
+    ctx.arc.mockClear()
+    runFrames(30)
+    expect(ctx.arc).not.toHaveBeenCalled()
+  })
+})
+
 describe("GlassView next and previous", () => {
   const prev = view("x", "Antes")
   const next = view("y", "Después")

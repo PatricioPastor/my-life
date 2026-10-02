@@ -44,12 +44,15 @@ export function GlassVoice({
   open,
   reduced,
   onLevel,
+  onPlaying,
 }: {
   memory: MemoryView
   geometry: LensGeometry
   open: boolean
   reduced: boolean
   onLevel: (level: () => number) => void
+  /** Told when the voice starts and stops playing (and false when this voice goes away), for what is thrown off the orb. */
+  onPlaying: (playing: boolean) => void
 }) {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [status, setStatus] = useState<VoiceStatus>("idle")
@@ -63,6 +66,11 @@ export function GlassVoice({
   const graph = useAudioGraph(audio, status === "playing")
   const level = useMemo(() => smoothedReader(graph.level), [graph])
   useEffect(() => onLevel(level), [level, onLevel])
+  const playingNow = status === "playing"
+  useEffect(() => {
+    onPlaying(playingNow)
+    return () => onPlaying(false)
+  }, [playingNow, onPlaying])
   useEffect(() => graph.setVolume(effectiveVolume(volume)), [graph, volume])
   // The voice stops when the memory does: on another memory, on close, on leaving.
   useEffect(() => {

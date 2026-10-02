@@ -12,6 +12,7 @@ import type { Viewport } from "./camera"
 import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { GlassSphere } from "./glass-orb"
 import { GlassVoice } from "./glass-voice"
+import { ParticleCanvas } from "./particle-canvas"
 import type { Lens } from "./lens"
 import { createShareCache } from "./share-cache"
 import { ShareButton } from "./share-button"
@@ -274,6 +275,8 @@ export function GlassView({
   const onLevel = useCallback((reader: () => number) => {
     levelRef.current = reader
   }, [])
+  // Whether that voice is playing: the orb only throws particles off while it is.
+  const [speaking, setSpeaking] = useState(false)
 
   // The caption on screen. On a switch it lets go at once and changes once the camera is half way across.
   const [caption, setCaption] = useState<MemoryView | null>(memory)
@@ -380,7 +383,25 @@ export function GlassView({
                 travel={travel}
                 onTravel={onTravel}
               />
-              <GlassVoice key={shown.id} memory={shown} open={memory !== null} geometry={geometry} reduced={reduced} onLevel={onLevel} />
+              {shown.audio && (
+                <ParticleCanvas
+                  geometry={geometry}
+                  color={shown.orbColor}
+                  level={level}
+                  emitting={speaking}
+                  active={memory !== null}
+                  reduced={reduced}
+                />
+              )}
+              <GlassVoice
+                key={shown.id}
+                memory={shown}
+                open={memory !== null}
+                geometry={geometry}
+                reduced={reduced}
+                onLevel={onLevel}
+                onPlaying={setSpeaking}
+              />
               {guestExit && <GuestExits onExit={guestExit} />}
               <GlassCaption
                 memory={caption ?? shown}
