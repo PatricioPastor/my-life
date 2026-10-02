@@ -98,13 +98,14 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - Run an accessibility pass: targets, focus, labels, safe areas, reduced motion.
 
   Route: the same writer as T3.
-- [ ] **T5 — Contribute from a memory.**
+- [x] **T1b — Review follow-ups** (`e3a6daf`). Scrubber, volume hydration, bars under reduced motion, caption overflow, `overflow` fallback and the inert covered pill. Route: delegated writer.
+- [x] **T5 — Contribute from a memory** (`f70a965`; its migration also holds T6's column).
   - "+ Contribuir" in the glass view opens the form with the date (and place) prefilled.
   - Store `related_memory_id` (expand-only migration with RLS, a column grant and a policy that the related memory is approved and visible).
   - A strong edge for related memories, and the new orb spawns near its parent.
 
   Route: delegated writer.
-- [ ] **T6 — Exact place and address.**
+- [x] **T6 — Exact place and address** (`4426014`).
   - Geocode the exact position at street level.
   - Compose and store `place_address` (expand-only migration).
   - Show it.
@@ -199,6 +200,54 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **Visual.** Overview and glass at 360, 390, 412, 1440; the form sheet at 360 and 1440; the guest page at 360 and 1440. The top bar is on one line.
   - **Open concerns.** The real trigger of the scroll is unproven; "Universo" from the journey is still drawn dimly under the glass scrim; there is no automated contrast check.
 
+- 2026-10-02 — **T1b done** (`e3a6daf`, route: delegated writer).
+  - **Scrubber.** A press that does not move seeks nowhere; a click on the track (the value jumped) and a drag seek on release. The drag takes pointer capture; `pointerup` and `lostpointercapture` end it, `pointercancel` drops the draft with no seek. Keys still seek at once.
+  - **Volume hydration.** `useVolume` (`useSyncExternalStore`, server snapshot = full volume) reads the kept volume after mount.
+  - **Bars.** Reduced motion turned on at runtime drops them to the baseline (they no longer freeze mid-height); off again, they move.
+  - **Review warnings.**
+    - The covered space pill is `inert` while the glass is open, vanishes at once (`duration-0 delay-0` when covered) and fades back after the glass's own 200 ms exit.
+    - `.clip-overflow` in `globals.css` declares `overflow: hidden` then `overflow: clip`; the journey `main`, the stage and the guest page use it.
+    - The caption now offers Ver más when the panel (not only the title) is cut, so the text around the title is always reachable once expanded (the panel scrolls, bounded to the viewport).
+    - `STACKED_PLAYER_MIN` names the stacked-player threshold.
+  - **TDD.** RED observed: scrubber (5 of the new tests), volume and bars files, `clip-overflow` CSS test, panel overflow, inert pill and instant hide (4 failures when the two source files were stashed); GREEN afterwards.
+  - **Checks.** lint clean, typecheck clean, test 180 files and 2941 passed, build `/` stays `○`.
+- 2026-10-02 — **T5 done** (`f70a965`, route: delegated writer, trigger: 2+ non-trivial files and a migration).
+  - **Migration `20261006000000_memory_related_and_address`** (one migration for T5 and T6, hand-edited after `prisma migrate diff` schema to schema; nothing applied).
+    - Adds `memories.related_memory_id uuid` (self FK, `ON DELETE SET NULL`, index `memories_related_memory_id_idx`) and `memories.place_address varchar(200)`. Both nullable: expand-only.
+    - Check `memories_place_address_needs_location`: an address only with a position.
+    - `GRANT INSERT (related_memory_id, place_address) ON memories TO app_user`. No UPDATE or DELETE. SELECT is already table-wide.
+    - `ALTER POLICY memories_insert` (in place, never dropped): still `status = 'pending'` and the visitor's own handle, and now `"memories"."related_memory_id" IS NULL OR EXISTS (an approved memory with that id)`. The new row's column is qualified so it cannot bind to the subquery's own table. The old code always inserts NULL, so it keeps working.
+    - Lint: `DROP POLICY` is now refused (use `ALTER POLICY`); a migration test pins the policy text, the grant and the expand-only shape.
+  - **Server.** `createMemory` takes `relatedMemoryId` and `samePlace`. A relation is dropped silently when it is not a uuid, does not exist, is not visible, is not approved, or the lookup fails. "Mismo lugar" copies the parent's latitude, longitude, name, address and source (read on the server); a pasted link or the photo's GPS (with consent) wins; a link that cannot be read never falls back to it.
+  - **DTO.** `relatedId` only when the related memory is in what the reader may see; `place.address`. Guests get null.
+  - **Constellation.** `buildEdges` adds explicit edges first (full weight, `explicit: true`, deduped, never capped or thresholded); the sim pulls them 2.2x harder and settles them at 64 px; the loop draws them thicker and brighter; a new related memory spawns 64 px from its parent (`startPositions`).
+  - **UI.** The glass top bar (Contribuir, Compartir, Cerrar in one row, so they cannot overlap) opens the form for approved memories of a visitor with a session (never a guest, never a pending memory: a relation can only point at an approved one). `AddMemory` is controllable (`open`, `onOpenChange`, `related`); the date starts at the parent's, the chip is removable, "Mismo lugar" shows the parent's name and address and excludes the photo's own place and a pasted link. Dialog title "Contribuir con un recuerdo".
+  - **TDD.** RED observed: repository mapping (8), list DTO (5), create-memory relation (14), decide-place related (4), edges (5), spawn (6), form (18), glass control (5), migration lint. For the constellation sim, the points test, the place and space wiring and `related-memory` the tests and code landed together (GREEN only).
+  - **Checks.** lint clean, typecheck clean, test 181 files and 3042 passed, build `/` stays `○`.
+  - **Visual** (Playwright, temporary harness, deleted): 390x844 touch @2x and 1440x900 @2x. The bar fits at 390 (Contribuir 53-187, Compartir 187-296, Cerrar 296-378). Sampling every 70 ms across 14 frames of the open and the close: no overlap between the space pill and any glass control, at both sizes (the pill is gone at once and returns after the glass). The form shows the date, the chip and "Mismo lugar" (desktop still fits without scrolling: the chip sits at the top of the right column). After saving, the pending orb sits beside its parent with a linked edge.
+- 2026-10-02 — **T6 done** (`4426014`, route: delegated writer).
+  - **Geocoding.** The port is now `reverse(lat, lng) -> { label, address } | null`. The Nominatim adapter sends the exact position (6 decimals), `zoom=18`, `accept-language=es`, `addressdetails=1`; the 1 req/s limiter, timeout, User-Agent and `redirect: error` are unchanged; the cache key is the exact position. The 2-decimal rounding and `isApproximatePosition` guard are gone.
+  - **Address.** `composeAddress` (road, pedestrian, footway, path, cycleway plus house number, then city/town/village/municipality/hamlet, else the neighbourhood; a leading "Avenida" becomes "Av."; null without a road; at most 200 characters) and `describePlace`, next to `composePlaceLabel`.
+  - **Maps links.** Order is now pin (`!3d!4d`), then `q`, `query`, `ll`, then the `@` viewport. Real-shaped place and mobile URLs are tested. The pin is reverse-geocoded for the address; the URL's name stays the name ("UOCRA").
+  - **Stored and shown.** `decidePlace`, `suggestPlace` and `resolveMapsLink` return the address; `place_address` is stored. The glass caption shows the name then the address (not twice). The form shows the address under the suggestion and under a link's place. Consent copy: "Guardar el lugar exacto y su dirección. Lo verán las personas que pueden entrar."
+  - **TDD.** RED observed: nominatim and suggest tests rewritten first (adapter and action then changed), composeAddress, pin order (2 of 8), decide-place and resolve-maps-link, caption (3) and form address (2). The `PLACE_COPY.consent` test was green from the start (the old tests already referenced the constant).
+  - **Checks.** lint clean, typecheck clean, test 181 files and 3075 passed, build `/` stays `○`.
+  - **Visual.** Glass caption with "UOCRA" then "Av. Rivadavia 1234, Junín" (390 and 1440); the form with the suggested place plus "Honduras 4000, Buenos Aires", then the link's own name and address replacing it; the new consent line.
+  - **Open concerns.**
+    - The exact position now goes to Nominatim (public, third party) once the photo is picked, before the visitor consents to keep it; only the consent decides what is stored. Worth knowing.
+    - `DTO.place.address` shows the street to everyone who can enter, as asked.
+    - "Avenida" is the only abbreviation: Nominatim returns the street name in full.
+    - The `memories_insert` policy has not been run against a real database (offline work). See the live checks.
+  - **To apply (parent).** `prisma migrate deploy` for `20261006000000_memory_related_and_address` (it needs the owner role). The code live before this keeps working against it.
+  - **Live checks (as `app_user`, in the `withVisitor` shape, in a transaction rolled back or cleaned up).**
+    1. Insert a pending memory with `related_memory_id` set to an approved memory's id: succeeds.
+    2. Same with a pending memory's id, with an unknown uuid, and with another visitor's pending memory: refused with 42501 (row-level security), and the error is the same for the three.
+    3. Insert with `related_memory_id` NULL and with the column omitted (what the old code does): succeeds.
+    4. Insert with `place_address` set and a position: succeeds; with an address and no position: refused by `memories_place_address_needs_location`.
+    5. `UPDATE memories SET related_memory_id = ...` as `app_user`: refused (no grant). Deleting the parent as the owner sets the child's `related_memory_id` to NULL.
+    6. `listMemories` for a visitor who cannot see the parent returns `relatedId: null`; for one who can, the id; a guest's shared memory has `relatedId: null`.
+    7. Create a contribution from a memory with "Mismo lugar" and read it back: the position, name, address and source equal the parent's, and the DTO's `place.lat/lng` are 2 decimals.
+
 ## Next step
 
-T5 (contribute from a memory): "+ Contribuir" in the glass top bar (the bar leaves room on the right), prefilled date and place, `related_memory_id`.
+T7 (deliver): RDD per slice from the last reviewed boundary, then (authorized in advance) apply `20261006000000_memory_related_and_address`, run the live checks above with cleanup, push, and optionally backfill addresses for existing memories that have an exact position.
