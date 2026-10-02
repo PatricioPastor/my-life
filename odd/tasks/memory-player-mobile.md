@@ -112,7 +112,7 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - Update the consent copy.
 
   Route: the same writer as T5.
-- [ ] **T7 — Deliver.**
+- [x] **T7 — Deliver** (`main` at `1bbdc25`, then the link-consent fix; see the T7 entry).
   - RDD per slice.
   - With the user's authorization:
     - apply the migrations;
@@ -277,6 +277,58 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **TDD.** RED observed: 3 of 126 failed in `add-memory.test.tsx` (clear the link, edit it into another, edited link fails). GREEN: 126 passing after updating one older test that relied on the leak ("goes back to the photo suggestion when the link is cleared" now waits for the visitor's own tick). New tests also cover explicit tick before the link and explicit untick/tick during it (they passed already: regression guards) and a second photo after consent (named once, the first photo's late answer ignored).
   - **Checks.** lint clean, typecheck clean, test 3120 passed, build `/` stays `○`.
 
+- 2026-10-02 — **T7 delivered** (route: parent, under the user's advance authorization).
+  - **RDD, one reliability lens per slice; every consent granted under the user's advance authorization.**
+
+    | Slice | Lines | Outcome | Lineage |
+    |---|---|---|---|
+    | T1 `3c019ca..6c98741` | 1,726 | approved | `review-ff22943df456b758` |
+    | T2 `6c98741..21c1323` | 854 | approved | `review-3b926ae117f0ec59` |
+    | T3+T4 `21c1323..ea80b79` | 797 | approved | `review-950c1b8376491b76` |
+    | T1b `ea80b79..e3a6daf` | 321, under budget, reviewed deliberately | approved | `review-997c669710931f47` |
+    | T5 (original) `e3a6daf..f70a965` | — | correction_required | `review-136456e48de29861` |
+    | T5 corrected `e3a6daf..bc99b1a` | 1,969 | approved | `review-711e08db78debefa` |
+    | T6+docs `bc99b1a..77aa2d8` | 794 | approved | `review-33071603f29f377d` |
+    | Privacy fix `77aa2d8..1bbdc25` | 334, deliberate | approved | `review-e74429587acc4982` |
+    | Link-consent fix `1bbdc25..2ca999a` | 119, deliberate | approved | `review-2e88601f1944538b` |
+
+    - The first T1 preflight stopped with `managed_assets_outdated`. Ran `gentle-ai sync --agent claude-code`, then re-queried.
+    - The original T5 review was left at `corrupted_or_unverifiable_authority`: the parent's cleanup script removed its worktree before the correction. Lesson: a review worktree stays until its lineage is acknowledged. The script now keeps it.
+    - The original T5 review's BLOCKER (RLS recursion) was disproved on PGlite and again on Neon below.
+    - Advisory suggestions left open:
+      - copied `location_source` and the breadth of the relation-refusal retry (`create-memory.ts`);
+      - a Nominatim test detail;
+      - two T1b test and scrubber notes;
+      - two privacy-fix test notes;
+      - a submit-payload assertion after a cleared link.
+
+      The warnings were fixed in T1b and in the link-consent fix.
+  - **Migration.** `20261006000000_memory_related_and_address` applied with `prisma migrate deploy` (owner role); `migrate status` had it as the only pending one.
+  - **Live check against Neon, as `app_user` in the `withVisitor` shape, every insert rolled back: 19 of 19 pass.**
+    - The policy keeps `pending` and own handle and adds the approved-relation check. `memories_select` has no subquery, which is why the insert's subquery cannot recurse.
+    - Grants: INSERT on both columns, no UPDATE. RLS is still enabled and forced.
+    - A relation to an approved memory is allowed. Relations to another visitor's pending memory, to the visitor's own pending memory, and to an unknown id are all refused with the same RLS message, so there is no existence leak.
+    - A NULL relation and the old insert shape are allowed, so the code live before the deploy keeps working.
+    - An address with a position is allowed; an address without one fails `memories_place_address_needs_location`.
+    - UPDATE of the relation is refused. In an owner transaction that was rolled back, deleting the parent nulled the child's relation.
+    - Another visitor's pending memory stays invisible.
+    - Cleanup left no test rows.
+    - The first run failed only check 4a, because the script's own row lacked `location_source` (`memories_location_source_paired`). Fixed in the script and re-run.
+  - **Push.** `main` was fast-forwarded to `1bbdc25` and pushed. The Vercel production deployment for `1bbdc25` reported success.
+    - The deployment URL sits behind Vercel SSO and the public domain is not known here, so there was no HTTP smoke test of the live site.
+  - **Address backfill (owner, Nominatim exact position, zoom 18, the app's User-Agent and pace).** 4 approved memories had a position and no address. 3 were filled:
+    - "Av. Doctor Benito de Miguel 701, Junín";
+    - "Necochea 1216, Junín";
+    - "Sarmiento 1410, Junín" (the "Uocra" link).
+
+    One was skipped on purpose: its link label is already a street address ("Dr. Marrull 57, …") and the geocoder gave a different number ("Marrull 63"). Showing both would contradict itself.
+  - **Not verified live:**
+    - the browser path on a real phone: player, particles, iOS volume, the glass top bar, the form prefilled from a memory, the address in the caption;
+    - an end-to-end contribution with "Mismo lugar" through the real server action. It is unit-tested, and the database side is live-checked above.
+
 ## Next step
 
-T7 (deliver): RDD per slice from the last reviewed boundary, then (authorized in advance) apply `20261006000000_memory_related_and_address`, run the live checks above with cleanup, push, and optionally backfill addresses for existing memories that have an exact position.
+Delivered. Later work:
+- Try it on a real phone (iOS volume through the gain node, the player, the Contribuir flow).
+- When a Maps link's label is already a street address, don't show a geocoded address with a different number. This is the case behind the skipped backfill row.
+- The open review suggestions listed in the T7 entry.
