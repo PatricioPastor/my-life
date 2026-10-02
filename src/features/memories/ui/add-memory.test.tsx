@@ -1422,9 +1422,10 @@ describe("AddMemory layout", () => {
     setup()
     open()
     const classes = screen.getByTestId("memory-card").className.split(/\s+/)
-    // Phones: never past 92dvh nor into the top safe area. Desktop: fits 1280x720. Both hold the tallest step.
-    expect(classes).toContain("h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),680px)]")
-    expect(classes).toContain("md:h-[min(100%,680px)]")
+    // Phones: never past 92dvh nor into the top safe area. Desktop: 1 rem clear of a 1280x720 screen's edges.
+    // 760 px holds the tallest step (Cuéntalo measured 744 px at 390 px wide in Chromium).
+    expect(classes).toContain("h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),760px)]")
+    expect(classes).toContain("md:h-[min(calc(100%-2rem),760px)]")
     expect(classes.filter((c) => /(^|:)max-h-/.test(c))).toEqual([])
     expect(classes).toContain("md:w-[min(30rem,calc(100vw-2rem))]")
   })

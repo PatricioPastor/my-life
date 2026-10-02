@@ -972,11 +972,12 @@ export function AddMemory(props: AddMemoryProps) {
             className={cn(
               // A 1 px cool rim drawn as a shadow, outside the box: a border would push the padding 1 px off the radii.
               "pointer-events-auto relative flex w-full min-w-0 flex-col overflow-hidden rounded-t-sheet bg-[#080714] shadow-[0_0_0_1px_rgba(168,200,255,0.14),0_28px_90px_rgba(0,0,0,0.65)]",
-              // One height for every step, so the sheet's top edge never moves: 680 px holds the tallest step (Cuéntalo,
-              // about 650 px at 390 px wide), capped on a phone at 92dvh and below the top safe area, from md by the
-              // screen. A shorter step stays at the top, a longer one scrolls in the body, and the footer stays pinned.
-              "h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),680px)]",
-              "md:h-[min(100%,680px)] md:w-[min(30rem,calc(100vw-2rem))] md:rounded-sheet",
+              // One height for every step, so the sheet's top edge never moves: 760 px holds the tallest step (Cuéntalo,
+              // 744 px at 390 px wide in Chromium), capped on a phone at 92dvh and below the top safe area, from md 1 rem
+              // clear of the screen's edges. A shorter step stays at the top, a longer one scrolls in the body, and the
+              // footer stays pinned.
+              "h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),760px)]",
+              "md:h-[min(calc(100%-2rem),760px)] md:w-[min(30rem,calc(100vw-2rem))] md:rounded-sheet",
             )}
           >
             <div
