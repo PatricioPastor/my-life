@@ -60,7 +60,7 @@ Strict. Runner `pnpm test`.
   - The glass view records a view once per open: the first time it opens on a memory in a session, and again on a later open, which the server dedupes.
   - Shows "N vistas".
   - Never fired for guests or on prev/next prefetch, only on an actual open or switch-arrival.
-- [ ] **T3 — Deliver.**
+- [x] **T3 — Deliver.** (`e2a4c57` on main)
   - RDD.
   - Apply the migration after authorization.
   - Push.
@@ -106,6 +106,20 @@ Strict. Runner `pnpm test`.
   - The trigger's silent no-op, if the owner ever lost `BYPASSRLS`, is not proved by a test (`migration.sql`). Live-check steps 2 and 8 cover it.
   - The view recorder never re-asks after a failed call within a page session (`view-recorder.ts`).
 
+- 2026-10-02: T3 delivered with the user's authorization.
+  - Migration `20261005000000_memory_views` applied with `prisma migrate deploy` (owner role); `migrate status` had listed it as the only pending one.
+  - Before the push: `pnpm typecheck` clean, `pnpm test` 171 files and 2767 tests pass. `main` fast-forwarded to `e2a4c57` and pushed.
+  - Live check against Neon (script in the session scratchpad, test handles `zz_live_a` and `zz_live_b` on the oldest approved memory): 29 of 29 checks pass, one of them a skip.
+    - As `app_user`, in the `withVisitor` shape, with the repository's exact upsert: A's first open returns `open_count` 1 and `view_count` goes 0 to 1. Two more opens by A return 2 and 3; `first_viewed_at` stays, `last_viewed_at` moves, and `view_count` stays at 1, so the INSERT trigger does not fire on the conflict path. B's two opens take `view_count` to 2, with two rows.
+    - The author is refused by RLS ("new row violates row-level security policy"), no row is written, and `view_count` is unchanged.
+    - A sees only its own rows; with no handle set the select returns nothing. An insert for another handle is refused, and B updating A's row matches 0 rows.
+    - DELETE on `memory_views`, UPDATE of `memories.view_count`, and UPDATE of `memory_views.handle` all get "permission denied".
+    - The trigger function is `SECURITY DEFINER`, with `search_path=public, pg_temp`, owned by `neondb_owner`; `app_user` has no EXECUTE on it. RLS is enabled and forced on `memory_views`.
+    - Cleanup: the test rows were deleted and `view_count` recomputed back to 0, with other rows untouched.
+  - **Not verified live:**
+    - A non-approved memory: there was none in the database, so that check was skipped. The policy and the unit tests cover it.
+    - The browser path: the glass label, the guest page sending no action, and the real server action from production. These are covered by unit tests only.
+
 ## Next step
 
-T3: with the user's authorization, apply `20261005000000_memory_views`, push to main, and run the live check above.
+Delivered. Possible later work: the four review advisories above, and a check on a real device that "N vistas" shows and goes up when a second Instagram account opens a memory.
