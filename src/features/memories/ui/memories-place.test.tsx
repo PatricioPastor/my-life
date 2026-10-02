@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { BAR_RIGHT, BAR_TITLE, BAR_TOP } from "@/shared/lib/top-bar"
 import type { MemoryView } from "../memory-view"
 import type { ShareMemoryResult } from "../share/share-view"
 import type { RecordViewResult } from "../views/view-result"
@@ -797,9 +798,11 @@ describe("MemoriesPlace stage", () => {
 
 describe("MemoriesPlace action slot", () => {
   beforeEach(stubFrames)
+  const slotOf = (control: HTMLElement) => control.closest<HTMLElement>("[data-hud]")!
+
   it("steps aside while a memory is open, so it never sits under Cerrar", () => {
     render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
-    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    const slot = slotOf(screen.getByRole("button", { name: "Contribuir" }))
     expect(slot.getAttribute("data-covered")).toBeNull()
     fireEvent.click(orbAt(/Una tarde de lluvia/))
     advanceUntil(dialogOpen)
@@ -809,7 +812,7 @@ describe("MemoriesPlace action slot", () => {
 
   it("is inert while covered: out of the tab order and out of the accessibility tree, and back after", () => {
     render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
-    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    const slot = slotOf(screen.getByRole("button", { name: "Contribuir" }))
     expect(slot.hasAttribute("inert")).toBe(false)
     fireEvent.click(orbAt(/Una tarde de lluvia/))
     advanceUntil(dialogOpen)
@@ -818,7 +821,7 @@ describe("MemoriesPlace action slot", () => {
 
   it("vanishes at once when the glass opens and only returns after the glass has gone, so it never overlaps Cerrar", () => {
     render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
-    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    const slot = slotOf(screen.getByRole("button", { name: "Contribuir" }))
     // Covered: no fade, no delay. Uncovered: a fade that waits out the glass's own 200 ms exit.
     expect(slot.className).toContain("data-[covered=true]:duration-0")
     expect(slot.className).toContain("data-[covered=true]:delay-0")
@@ -827,12 +830,38 @@ describe("MemoriesPlace action slot", () => {
 
   it("puts the control in the top bar, on the right, at every size", () => {
     render(<MemoriesPlace state={ready()} action={<button type="button">Contribuir</button>} />)
-    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
-    expect(slot.hasAttribute("data-hud")).toBe(true)
-    expect(slot.className).toMatch(/(^|\s)top-\[/)
-    expect(slot.className).toMatch(/(^|\s)right-\[/)
+    const slot = slotOf(screen.getByRole("button", { name: "Contribuir" }))
+    const classes = slot.className.split(/\s+/)
+    expect(classes).toContain(BAR_TOP)
+    expect(classes).toContain(BAR_RIGHT)
     expect(slot.className).not.toMatch(/bottom-/)
-    expect(slot.className).toMatch(/(^|\s)h-12(\s|$)/)
+    expect(classes).toContain("h-(--bar-row)")
+  })
+
+  it("brings the control in with the way back's rise, inside the slot so the slot's own fade still covers it", () => {
+    render(<MemoriesPlace state={ready()} action={<button type="button">Contribuir</button>} />)
+    const control = screen.getByRole("button", { name: "Contribuir" })
+    const slot = slotOf(control)
+    expect(slot.className).not.toMatch(/(^|\s)rise(-late)?(\s|$)/)
+    const rise = control.closest(".rise")
+    expect(rise).not.toBeNull()
+    expect(slot.contains(rise)).toBe(true)
+  })
+
+  it("is there from the start, so its rise begins with the page's even while the memories load", () => {
+    const { rerender } = render(<MemoriesPlace state={{ status: "loading" }} />)
+    const rise = document.querySelector("[data-hud] .rise")
+    expect(rise).not.toBeNull()
+    expect(rise?.childElementCount).toBe(0)
+    rerender(<MemoriesPlace state={ready()} action={<button type="button">Contribuir</button>} />)
+    // The same element: its animation is not restarted when the control arrives.
+    expect(document.querySelector("[data-hud] .rise")).toBe(rise)
+    expect(rise?.contains(screen.getByRole("button", { name: "Contribuir" }))).toBe(true)
+  })
+
+  it("has no slot for a guest, who has nothing to put there", () => {
+    render(<MemoriesPlace state={ready(view("s", "Compartida"))} guest={{ memoryId: "s", onExit: vi.fn() }} />)
+    expect(document.querySelector("[data-hud]")).toBeNull()
   })
 
   it("hands a function action the stage, so a dialog can mount inside it", () => {
@@ -885,6 +914,16 @@ describe("MemoriesPlace title", () => {
     expect(title().getAttribute("data-title")).toBe("hero")
     act(() => vi.advanceTimersByTime(100))
     expect(title().getAttribute("data-title")).toBe("label")
+  })
+
+  it("settles under the top bar, lined up with the back chevron, from the bar's own tokens", () => {
+    vi.useFakeTimers()
+    render(<MemoriesPlace state={three} />)
+    act(() => vi.advanceTimersByTime(TITLE_HOLD_MS + 50))
+    expect(title().getAttribute("data-title")).toBe("label")
+    for (const c of BAR_TITLE.split(" ")) expect(title().className.split(/\s+/)).toContain(c)
+    // No offset of its own left over from before the tokens.
+    expect(title().className).not.toMatch(/(^|\s)(md:)?(top|left)-\[calc\(max\(/)
   })
 
   it("shrinks with a FLIP: the label starts where the large title was, at its size, on the interface's ease-out", () => {

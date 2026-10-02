@@ -155,6 +155,35 @@
   --panel-r: calc(var(--sheet-r) - var(--sheet-pad));
   --panel-pad: 4px;
   --inner-r: calc(var(--panel-r) - var(--panel-pad));
+
+  /*
+   * The top bar (src/shared/lib/top-bar.ts): the way back on the left, the actions on the right, mirrored by
+   * construction. Both sides use the same distance (--bar-x), each against its own notch, so the left control's box
+   * sits exactly as far from its edge as the right one's. The bar is --bar-y from the top; each of the three keeps
+   * --bar-notch clear of a notch or the status bar, and all three are larger on a desktop.
+   * Every control is one --bar-row tall with --bar-pad on its sides (the back chevron, a 14 px box, starts its ink
+   * --bar-ink in: its tip at x 4, less half its miter, 0.75 / sin 45° = 1.06).
+   * A title under the bar starts --bar-gap below the row: none, because the row's own 16 px under its label already
+   * separates them. It lines up with the chevron's ink, less the side bearing of its first letter (--title-bearing, in
+   * em so it follows the title's size).
+   */
+  --bar-y: 1rem;
+  --bar-x: 0.5rem;
+  --bar-notch: 0.25rem;
+  --bar-top: max(var(--bar-y), calc(env(safe-area-inset-top) + var(--bar-notch)));
+  --bar-left: max(var(--bar-x), calc(env(safe-area-inset-left) + var(--bar-notch)));
+  --bar-right: max(var(--bar-x), calc(env(safe-area-inset-right) + var(--bar-notch)));
+  --bar-row: 3rem;
+  --bar-pad: 0.75rem;
+  --bar-ink: 3px;
+  --bar-gap: 0px;
+  --title-bearing: 0.02em;
+
+  @variant md {
+    --bar-y: 1.75rem;
+    --bar-x: 2.25rem;
+    --bar-notch: 0.5rem;
+  }
 }
 
 .dark {

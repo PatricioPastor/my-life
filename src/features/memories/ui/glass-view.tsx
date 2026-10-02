@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import Link from "next/link"
 import { Dialog } from "radix-ui"
-import { BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
+import { BAR_CONTROL, BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
 import { formatMemoryWhen } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
@@ -11,6 +11,7 @@ import type { ShareMemoryResult } from "../share/share-view"
 import type { RecordViewResult } from "../views/view-result"
 import type { Viewport } from "./camera"
 import { captionTier, type CaptionTier } from "./caption-text"
+import { ContributeButton } from "./contribute-button"
 import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { GlassSphere } from "./glass-orb"
 import { GlassVoice } from "./glass-voice"
@@ -289,7 +290,7 @@ function GuestExits({ onExit }: { onExit: () => void }) {
         onClick={onExit}
         data-magnetic="light"
         data-cursor-label="Volver al universo"
-        className={`press pointer-events-auto absolute ${BAR_TOP} ${BAR_LEFT} flex h-12 items-center gap-3 px-3 text-xs tracking-[0.08em] text-ink-muted`}
+        className={`pointer-events-auto absolute ${BAR_TOP} ${BAR_LEFT} ${BAR_CONTROL}`}
       >
         <Chevron />
         <span>Universo</span>
@@ -465,24 +466,13 @@ export function GlassView({
                 <Dialog.Close
                   data-magnetic="light"
                   data-cursor-label="Cerrar"
-                  className="press pointer-events-auto flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted"
+                  className={`pointer-events-auto ${BAR_CONTROL}`}
                 >
                   Cerrar
                 </Dialog.Close>
                 {share && <ShareButton memory={shown} share={share} cache={shareLinks} />}
                 {onContribute && !guest && shown.status === "approved" && (
-                  <button
-                    type="button"
-                    data-magnetic="light"
-                    data-cursor-label="Contribuir"
-                    className="press pointer-events-auto flex h-12 items-center gap-2 px-3 text-xs tracking-[0.08em] text-ink-muted"
-                    onClick={() => onContribute(shown)}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
-                    </svg>
-                    Contribuir
-                  </button>
+                  <ContributeButton className="pointer-events-auto" onClick={() => onContribute(shown)} />
                 )}
               </div>
               <GlassSphere

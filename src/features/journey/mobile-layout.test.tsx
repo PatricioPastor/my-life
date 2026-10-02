@@ -2,15 +2,24 @@ import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { FACETS, FacetPlace } from "@/features/facets"
 import type { MemoryView } from "@/features/memories"
+import { ContributeButton } from "@/features/memories/ui/contribute-button"
 import { MemoriesPlace } from "@/features/memories/ui/memories-place"
+import { BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
 import { BackButton } from "./back-button"
 import { ReplayIntroButton } from "./replay-intro-button"
 
 // The page draws under the notch and the home indicator (viewport-fit=cover), so anything pinned to an edge has to
 // keep clear of the device insets. jsdom has no insets; what can be asserted is that each pinned control is placed
-// with env(safe-area-inset-*) on the edge it sits against.
+// with env(safe-area-inset-*) on the edge it sits against, or with the top bar's edge (whose tokens carry the insets,
+// see top-bar.test.ts).
+const BAR_EDGE = { top: BAR_TOP, left: BAR_LEFT, right: BAR_RIGHT } as const
 const hasInset = (el: Element | null, edge: "top" | "bottom" | "left" | "right") =>
-  !!el && el.className.includes(`env(safe-area-inset-${edge})`)
+  !!el &&
+  (el.className.includes(`env(safe-area-inset-${edge})`) ||
+    (edge !== "bottom" && el.className.split(/\s+/).includes(BAR_EDGE[edge])))
+const classesOf = (el: Element | null) => new Set(el?.className.split(/\s+/).filter(Boolean))
+/** The space's slot for its action: the top bar's right end. */
+const slotOf = (control: Element) => control.closest("[data-hud]")
 
 beforeEach(() => {
   vi.stubGlobal("matchMedia", undefined)
@@ -64,7 +73,7 @@ describe("safe areas", () => {
       <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />,
     )
     expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "bottom")).toBe(true)
-    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement
+    const slot = slotOf(screen.getByRole("button", { name: "Contribuir" }))
     expect(hasInset(slot, "top")).toBe(true)
     expect(slot?.className).not.toMatch(/(^|\s)(max-md:)?bottom-/)
   })
@@ -74,22 +83,54 @@ describe("safe areas", () => {
       <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />,
     )
     expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "left")).toBe(true)
-    expect(hasInset(screen.getByRole("button", { name: "Contribuir" }).parentElement, "right")).toBe(true)
+    expect(hasInset(slotOf(screen.getByRole("button", { name: "Contribuir" })), "right")).toBe(true)
   })
 })
 
 describe("one top bar", () => {
-  it("puts the way back and Contribuir on the same line, at the same distance from the top", () => {
+  const renderBar = () =>
     render(
       <>
         <BackButton label="Universo" hint="Volver" onClick={() => {}} />
-        <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />
+        <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<ContributeButton />} />
       </>,
     )
-    const top = (el: Element | null) => (el?.className.match(/(?:^|\s)top-\[[^\s]+/) ?? [])[0]
-    const back = top(screen.getByRole("button", { name: "Universo" }).parentElement)
-    expect(back).toBeTruthy()
-    expect(top(screen.getByRole("button", { name: "Contribuir" }).parentElement)).toBe(back)
+  const back = () => screen.getByRole("button", { name: "Universo" })
+  const contribute = () => screen.getByRole("button", { name: "Contribuir" })
+
+  it("puts the way back and Contribuir on the same line, at the same distance from the top", () => {
+    renderBar()
+    expect(classesOf(back().parentElement).has(BAR_TOP)).toBe(true)
+    expect(classesOf(slotOf(contribute())).has(BAR_TOP)).toBe(true)
+  })
+
+  it("mirrors them: the way back as far from the left edge as Contribuir is from the right one", () => {
+    renderBar()
+    expect(classesOf(back().parentElement).has(BAR_LEFT)).toBe(true)
+    expect(classesOf(slotOf(contribute())).has(BAR_RIGHT)).toBe(true)
+  })
+
+  it("draws them alike: the same row height, padding, type, tracking and ink", () => {
+    renderBar()
+    expect(classesOf(contribute())).toEqual(classesOf(back()))
+  })
+
+  it("centres both on the bar's row", () => {
+    renderBar()
+    const row = (el: Element | null) => classesOf(el).has("h-(--bar-row)") && classesOf(el).has("items-center")
+    expect(row(back())).toBe(true)
+    expect(row(contribute())).toBe(true)
+    expect(row(slotOf(contribute()))).toBe(true)
+  })
+
+  it("brings them in together, with the same rise", () => {
+    renderBar()
+    expect(classesOf(back().parentElement).has("rise")).toBe(true)
+    // The rise is inside the slot, so the slot's own fade can still step the control aside under the glass.
+    const rise = contribute().closest(".rise")
+    expect(rise).not.toBeNull()
+    expect(slotOf(contribute())?.contains(rise)).toBe(true)
+    expect(rise).not.toBe(slotOf(contribute()))
   })
 })
 

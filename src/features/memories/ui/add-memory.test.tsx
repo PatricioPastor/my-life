@@ -1555,9 +1555,20 @@ describe("AddMemory with a virtual keyboard", () => {
     expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
   })
 
-  it("makes the control to open it at least 44 px tall on a phone", () => {
+  it("makes the control to open it one top-bar row tall (48 px) on a phone", () => {
     setup()
-    expect(screen.getByRole("button", { name: "Contribuir" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+    expect(screen.getByRole("button", { name: "Contribuir" }).className.split(/\s+/)).toContain("h-(--bar-row)")
+  })
+
+  it("opens from the shared Contribuir (the glowing mark, no pill), which says it opens a dialog", () => {
+    setup()
+    const trigger = screen.getByRole("button", { name: "Contribuir" })
+    expect(trigger.querySelector("[data-contribute-mark]")).not.toBeNull()
+    expect(trigger.className).not.toMatch(/(^|\s)(rounded-full|border|t-label)(\s|$)/)
+    expect(trigger.getAttribute("aria-haspopup")).toBe("dialog")
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    open()
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
   })
 })
 

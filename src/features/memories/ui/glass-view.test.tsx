@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { BAR_CONTROL, BAR_LEFT, BAR_TOP } from "@/shared/lib/top-bar"
 import type { MemoryView } from "../memory-view"
 import type { ShareMemoryResult } from "../share/share-view"
 import type { RecordViewResult } from "../views/view-result"
@@ -975,7 +976,27 @@ describe("GlassView next and previous", () => {
 })
 
 describe("GlassView top bar", () => {
-  const topOf = (el: Element | null) => (el?.className.match(/(?:^|\s)top-\[[^\s]+/) ?? [])[0]
+  const topOf = (el: Element | null) => (el?.className.match(/(?:^|\s)top-[[(][^\s]+/) ?? [])[0]
+
+  it("draws a guest's Universo exactly like the journey's way back", () => {
+    render(
+      <GlassView
+        memory={photo}
+        prev={null}
+        next={null}
+        reduced={false}
+        onStep={vi.fn()}
+        onClose={vi.fn()}
+        onRestoreFocus={vi.fn()}
+        lens={null}
+        guestExit={vi.fn()}
+        container={document.body}
+        viewport={DESKTOP}
+      />,
+    )
+    const universo = within(dialog()).getByRole("button", { name: /Universo/ }).className.split(/\s+/)
+    for (const c of [...BAR_CONTROL.split(" "), BAR_TOP, BAR_LEFT]) expect(universo).toContain(c)
+  })
 
   it("sets Cerrar and Compartir on the same line as the way back, for guests and members alike", () => {
     const share = vi.fn().mockResolvedValue({ ok: false, reason: "unavailable" })
@@ -1753,10 +1774,18 @@ describe("GlassView contribute control", () => {
     expect(contribute).toHaveBeenCalledWith(photo)
   })
 
-  it("is a 44 px target and has the same label for the magnetic cursor", () => {
+  it("is a 48 px target and has the same label for the magnetic cursor", () => {
     mount({ onContribute: contribute })
-    expect(button().className).toMatch(/(^|\s)h-12(\s|$)/)
+    expect(button().className.split(/\s+/)).toContain("h-(--bar-row)")
     expect(button().getAttribute("data-cursor-label")).toBe("Contribuir")
+  })
+
+  it("is the space's own Contribuir: the same glowing mark, drawn like the way back", () => {
+    mount({ onContribute: contribute })
+    expect(button().querySelector("[data-contribute-mark]")).not.toBeNull()
+    for (const c of BAR_CONTROL.split(" ")) expect(button().className.split(/\s+/)).toContain(c)
+    // It still takes pointers inside the glass, whose own surface lets them fall through.
+    expect(button().className).toContain("pointer-events-auto")
   })
 
   it("is never offered on the guest page (no session)", () => {

@@ -23,6 +23,7 @@ import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadInput, Prepare
 import { readAudioDuration, type ReadAudioDuration } from "./audio-duration"
 import { AudioSection } from "./audio-section"
 import type { UploadToCloudinary } from "./cloudinary-upload"
+import { ContributeButton } from "./contribute-button"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
 import {
   LAST_STEP,
@@ -941,17 +942,7 @@ export function AddMemory(props: AddMemoryProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(next) => (next || !locked) && setOpen(next)}>
       <Dialog.Trigger asChild>
-        <button
-          type="button"
-          data-magnetic="light"
-          data-cursor-label="Contribuir"
-          className="press t-label flex h-11 items-center gap-2.5 rounded-full border border-[#a8c8ff]/35 bg-[#07061a]/70 px-5 text-[#e6edff] shadow-[0_0_28px_rgba(140,170,255,0.14)] backdrop-blur-sm transition-colors duration-200 hover:border-[#a8c8ff]/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
-          </svg>
-          Contribuir
-        </button>
+        <ContributeButton />
       </Dialog.Trigger>
       <Dialog.Portal container={props.container}>
         {/* Above the journey's HUD (the way back), which is drawn after the stage. */}
