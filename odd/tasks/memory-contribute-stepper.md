@@ -62,7 +62,7 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
 - [x] **T2 Date and time:** the migration, the domain, the server and the DTO; client EXIF date parse; recording and file times; the form fields with a source hint; the time shown in the viewers. Route: delegated writer (server plus UI). Done in `e1f940d`.
 - [x] **T3 Stepper:** three steps, concentric radius tokens, copy rewrite, single column, focus and announcements, tests updated. Route: delegated writer (2+ non-trivial files). Done in `d8dbd34`, after the T2-advisory prelude `2f80414`.
 - [x] **T4 Header:** Contribuir redesign and alignment, "Recuerdos" alignment, shared with the glass view. Route: delegated writer (2+ non-trivial files). Done in `eebb5d3`.
-- [ ] **T5 Verify and deliver:** browser screenshots at 390 px and desktop, design detector, full test/lint/typecheck. Apply the migration with authorization, then fast-forward `main` after approval.
+- [x] **T5 Verify and deliver:** browser screenshots at 390 px and desktop, design detector, full test/lint/typecheck. Apply the migration with authorization, then fast-forward `main` after approval.
 
 ## Checks
 
@@ -202,6 +202,18 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
   5. **Place copy and hierarchy.** The status line is a plain hint while there is no place (no photo, reading it, no location); a place keeps the fields' ink. The help line shows only while there is a place to keep (the photo's, before or after the consent, or a resolved link), and says only what the place is for: "El lugar sirve para ubicar tu recuerdo en el universo." The consent still says what is kept and who sees it, so "saving" is said once. No dangling `aria-describedby`. Consent, privacy and what is saved are unchanged.
   - Compiled CSS checked with `@tailwindcss/postcss`: the phone and md heights and `max-w-[17.125rem]` resolve to the intended declarations.
   - Evidence: RED observed first (16 failing across the six test files), then green. `pnpm vitest run src/features/memories`: 94 files, 2310 tests passed. `pnpm test`: 3354 passed, 1 failed, the known flaky `memories-place.test.tsx` "restores the camera exactly under reduced motion", which passed alone. `pnpm lint`: exit 0. `pnpm typecheck`: exit 0.
+  - **Sheet height, corrected by the parent (`829f718`).** A 680 px cap would make Cuéntalo scroll: Chromium measured it at 744 px tall at 390 px wide (`out-p390.json`, natural height). The cap is now 760 px on phones, still `min` with 92dvh and the top safe area. From md it is `min(100% - 2rem, 760px)`, so the tallest step fits and the dialog stays 1 rem clear of a 1280x720 screen.
+    - Evidence: RED first on the class test, then `pnpm vitest run src/features/memories` 94 files / 2310 passed, `pnpm lint` 0, `pnpm typecheck` 0.
+    - Route: inline (one mechanical file plus its test).
+- 2026-10-02: **Delivered** with the user's authorization ("Si, vos aplica y pushea a main, sin problemas").
+  - RDD on the last slice (`57e750a`, `447da3c`, `829f718` from `e2aaf8d`): assessed medium, `review_due` false, `under_budget`. It went out unreviewed under ordinary policy.
+  - `prisma migrate status` listed `20261007000000_memory_happened_time` as the only pending migration. `prisma migrate deploy` (owner role) applied it, before the push, because the new code reads the column.
+  - Read-only checks as the owner on Neon:
+    - `happened_time` is `time without time zone`, nullable.
+    - `app_user` has INSERT and SELECT on it and no UPDATE.
+    - `memories` keeps RLS enabled and forced.
+    - There are 5 existing rows, none with a time.
+  - `main` fast-forwarded to the feature branch and pushed.
 
 ## Follow-ups
 
@@ -213,4 +225,4 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
 
 ## Next step
 
-Assess T5a from the reviewed boundary `e2aaf8d` (`57e750a` and this record), re-check the sheet height and the mirror in Chromium, then apply the migration with authorization and fast-forward `main` after approval.
+Delivered. The follow-ups above are optional polish for a later pass.
