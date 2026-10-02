@@ -5,6 +5,7 @@ import { rimColor } from "../orb-color"
 import { lensGeometry } from "./glass-layout"
 import { GLASS_RELEASE_MS } from "./lens"
 import { MemoriesPlace, type MemoriesState } from "./memories-place"
+import { TITLE_EASE, TITLE_FADE_OUT_MS, TITLE_HOLD_MS, TITLE_SHRINK_MS } from "./title-motion"
 import { VOID_GLOWS } from "./void-glows"
 
 // jsdom has no WebGL: the lens cannot be prepared, so the CSS glass is what these tests see.
@@ -816,5 +817,90 @@ describe("MemoriesPlace on touch", () => {
     await waitFor(() => expect(orb.getAttribute("data-link")).toBe("self"))
     fireEvent.pointerOut(orb, { pointerType: "touch", relatedTarget: document.body })
     await waitFor(() => expect(orb.getAttribute("data-link")).not.toBe("self"))
+  })
+})
+
+describe("MemoriesPlace title", () => {
+  // While the glass is open the stage is hidden from assistive tech, so find the heading by its tag.
+  const title = () => document.querySelector<HTMLElement>("h1")!
+  afterEach(() => vi.useRealTimers())
+
+  it("arrives large, then shrinks into a small label by the way back after about two seconds", () => {
+    vi.useFakeTimers()
+    render(<MemoriesPlace state={three} />)
+    expect(title().getAttribute("data-title")).toBe("hero")
+    act(() => vi.advanceTimersByTime(TITLE_HOLD_MS - 50))
+    expect(title().getAttribute("data-title")).toBe("hero")
+    act(() => vi.advanceTimersByTime(100))
+    expect(title().getAttribute("data-title")).toBe("label")
+  })
+
+  it("shrinks with a FLIP: the label starts where the large title was, at its size, on the interface's ease-out", () => {
+    vi.useFakeTimers()
+    const animate = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate })
+    const boxes = {
+      hero: new DOMRect(80, 740, 425, 88),
+      label: new DOMRect(48, 68, 85, 24),
+    }
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const mode = this.getAttribute("data-title") as "hero" | "label" | null
+        return mode ? boxes[mode] : new DOMRect()
+      })
+    render(<MemoriesPlace state={three} />)
+    act(() => vi.advanceTimersByTime(TITLE_HOLD_MS + 10))
+    expect(animate).toHaveBeenCalledTimes(1)
+    const [frames, options] = animate.mock.calls[0]
+    expect(frames[0].transform).toBe("translate(32px, 672px) scale(5)")
+    expect(frames[0].transformOrigin).toBe("0 0")
+    expect(frames.at(-1).transform).toBe("none")
+    expect(options).toMatchObject({ duration: TITLE_SHRINK_MS, easing: TITLE_EASE })
+    rect.mockRestore()
+    delete (HTMLElement.prototype as { animate?: unknown }).animate
+  })
+
+  it("crossfades into the label under reduced motion: no travel, no transform", () => {
+    vi.useFakeTimers()
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
+    const animate = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate })
+    render(<MemoriesPlace state={three} />)
+    act(() => vi.advanceTimersByTime(TITLE_HOLD_MS + 10))
+    expect(title().getAttribute("data-fading")).toBe("true")
+    expect(title().getAttribute("data-title")).toBe("hero")
+    act(() => vi.advanceTimersByTime(TITLE_FADE_OUT_MS + 10))
+    expect(title().getAttribute("data-title")).toBe("label")
+    expect(title().getAttribute("data-fading")).toBe("false")
+    expect(animate).not.toHaveBeenCalled()
+    expect(title().style.transform).toBe("")
+    delete (HTMLElement.prototype as { animate?: unknown }).animate
+  })
+
+  describe("on a memory", () => {
+    beforeEach(stubFrames)
+
+    it("hides while the camera is on a memory, so it never meets the caption, and comes back as the label", () => {
+      render(<MemoriesPlace state={three} />)
+      expect(title().getAttribute("data-hidden")).toBe("false")
+      fireEvent.click(orbAt(/Una tarde de lluvia/))
+      expect(title().getAttribute("data-hidden")).toBe("true")
+      advanceUntil(dialogOpen)
+      expect(title().getAttribute("data-hidden")).toBe("true")
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+      expect(title().getAttribute("data-hidden")).toBe("false")
+      // It went in before the hold was over: it comes back as the label, never as the large title.
+      expect(title().getAttribute("data-title")).toBe("label")
+    })
+
+    it("stays hidden while the glass moves to another memory", () => {
+      render(<MemoriesPlace state={three} />)
+      fireEvent.click(orbAt(/Una tarde de lluvia/))
+      advanceUntil(dialogOpen)
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" })
+      expect(phase()).toBe("switching")
+      expect(title().getAttribute("data-hidden")).toBe("true")
+    })
   })
 })

@@ -455,6 +455,21 @@
   .mem-stage:focus-visible {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink-muted) 40%, transparent);
   }
+  /* The title: large on arrival, then a quiet label under the way back; hidden while the camera is on a memory. */
+  .mem-title {
+    transition: opacity 240ms ease-out;
+  }
+  .mem-title[data-title="label"] {
+    opacity: 0.88;
+  }
+  .mem-title[data-hidden="true"],
+  .mem-title[data-fading="true"] {
+    opacity: 0;
+  }
+  .mem-title[data-fading="true"],
+  .mem-title[data-hidden="true"] {
+    transition-duration: 160ms;
+  }
   /* Reduced motion cuts the camera: the world fades out around the swap. */
   .mem-world {
     transition: opacity 110ms ease-out;

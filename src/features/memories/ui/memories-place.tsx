@@ -15,6 +15,7 @@ import { createLens, type Lens } from "./lens"
 import { MemoryPoints, type PointsHandle } from "./memory-points"
 import { createPhotoCache } from "./photo-cache"
 import { useApproach } from "./use-approach"
+import { useTitle } from "./use-title"
 import { useViewport } from "./use-viewport"
 import { VOID_GLOWS } from "./void-glows"
 
@@ -42,8 +43,13 @@ const FAILURE_COPY: Record<MemoriesFailure, string> = {
   unavailable: "No pudimos cargar los recuerdos.",
 }
 const SPACE_LABEL = "Recuerdos. Arrastra para moverte y usa la rueda para acercar. Con el teclado: flechas para moverte, más y menos para acercar, cero para verlo todo."
-/** What the first fit leaves clear for the HUD: the back control on top, the title and the add control below. */
-const FIT_PAD = { top: 96, right: 28, bottom: 168, left: 28 }
+/** What the first fit leaves clear for the HUD: the way back and the title's label on top, the large title and the add control below. */
+const FIT_PAD = { top: 112, right: 28, bottom: 168, left: 28 }
+/** The large title at the bottom left, and the label it becomes, under the way back ("Universo"). */
+const TITLE_HERO =
+  "bottom-[calc(72px+env(safe-area-inset-bottom))] left-[max(1.5rem,calc(env(safe-area-inset-left)+0.5rem))] text-[length:var(--type-display)] leading-[0.9] md:left-[max(5rem,calc(env(safe-area-inset-left)+0.5rem))]"
+const TITLE_LABEL =
+  "top-[calc(max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))+2.5rem)] left-[calc(max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))+0.75rem)] text-[length:var(--type-2)] leading-[1.1]"
 /** Under reduced motion a camera move is a cut: the world fades out for this long, swaps, and fades back. */
 const CUT_OUT_MS = 110
 const CUT_IN_MS = 140
@@ -88,6 +94,8 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
     phaseRef.current = current.phase
   }, [current.phase])
   const travel = useCallback(() => (phaseRef.current === "switching" ? controller.progress() : null), [controller])
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const title = useTitle(current.phase, reduced, titleRef)
   const approached = current.phase === "idle" ? null : (memories.find((m) => m.id === current.id) ?? null)
 
   // Build the glass renderer when the browser is idle; dispose of it with the space.
@@ -226,13 +234,18 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         )}
       </div>
       <h1
-        className="t-title rise-late pointer-events-none absolute bottom-[calc(72px+env(safe-area-inset-bottom))] left-[max(1.5rem,calc(env(safe-area-inset-left)+0.5rem))] m-0 text-[length:var(--type-display)] leading-[0.9] md:left-[max(5rem,calc(env(safe-area-inset-left)+0.5rem))]"
+        ref={titleRef}
+        data-title={title.mode}
+        data-fading={title.fading}
+        data-hidden={title.hidden}
+        className={`mem-title t-title pointer-events-none absolute m-0 ${title.mode === "hero" ? TITLE_HERO : TITLE_LABEL}`}
         style={{
           color: PORCELAIN,
-          textShadow: `0 0 36px color-mix(in oklab, ${accent ?? "#a8c8ff"} 22%, transparent)`,
+          textShadow: `0 0 ${title.mode === "hero" ? 36 : 14}px color-mix(in oklab, ${accent ?? "#a8c8ff"} 22%, transparent)`,
         }}
       >
-        Recuerdos
+        {/* The rise on arrival lives on the word, so it never fights the FLIP on the heading. */}
+        <span className="rise-late inline-block">Recuerdos</span>
       </h1>
       {state.status === "loading" && (
         <p role="status" className={MESSAGE_CLASS}>
