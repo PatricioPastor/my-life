@@ -82,6 +82,8 @@ function GlassVoice({
 }) {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
   const [status, setStatus] = useState<VoiceStatus>("idle")
+  // How far it has played (whole seconds), shown beside the length while it plays or is paused part way.
+  const [played, setPlayed] = useState(0)
   // The same listener and the same smoothing as the form's talking orb, so the voice looks alike in both places.
   const rawLevel = useAudioLevel(audio, status === "playing")
   const level = useMemo(() => smoothedReader(rawLevel), [rawLevel])
@@ -124,7 +126,9 @@ function GlassVoice({
           >
             {status === "playing" ? <PauseIcon /> : <PlayIcon />}
           </button>
-          <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">{formatClock(memory.audio.durationMs)}</span>
+          <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">
+            {played > 0 ? `${formatClock(played * 1000)} / ${formatClock(memory.audio.durationMs)}` : formatClock(memory.audio.durationMs)}
+          </span>
         </div>
       )}
       {memory.audio && (
@@ -136,7 +140,11 @@ function GlassVoice({
           preload="metadata"
           onPlay={() => setStatus("playing")}
           onPause={() => setStatus((s) => (s === "error" ? s : "idle"))}
-          onEnded={() => setStatus("idle")}
+          onTimeUpdate={(event) => setPlayed(Math.floor(event.currentTarget.currentTime))}
+          onEnded={() => {
+            setStatus("idle")
+            setPlayed(0)
+          }}
           onError={() => setStatus("error")}
         />
       )}
@@ -339,10 +347,11 @@ export function GlassView({
   return (
     <Dialog.Root open={memory !== null} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal container={container}>
-        <Dialog.Overlay className="mem-scrim absolute inset-0 bg-[#020207]/70" onWheel={onWheel} {...swipe} />
+        {/* Above the journey's HUD (the way back), which is drawn after the stage: a dialog covers it like the rest. */}
+        <Dialog.Overlay className="mem-scrim absolute inset-0 z-10 bg-[#020207]/70" onWheel={onWheel} {...swipe} />
         <Dialog.Content
           aria-describedby="memory-glass-date"
-          className="mem-glass absolute inset-0 outline-none"
+          className="mem-glass absolute inset-0 z-10 outline-none"
           // Only the sphere and the controls take pointers: a press on the empty stage falls through to the scrim and closes.
           style={{ pointerEvents: "none" }}
           onKeyDown={onKeyDown}

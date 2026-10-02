@@ -490,7 +490,7 @@ function MemoryForm({
       {/* Outside the scroll region, so the submit and what it reports are always in reach. On desktop it sits under the right column. */}
       <div
         data-testid="memory-actions"
-        className="grid shrink-0 gap-2 border-t border-[#a8c8ff]/15 bg-[rgba(8,7,20,0.96)] px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-center md:gap-x-8 md:px-8 md:pb-4 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        className="grid shrink-0 gap-2 border-t border-[#a8c8ff]/15 bg-[#080714] px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-center md:gap-x-8 md:px-8 md:pb-4 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <div className="flex min-w-0 flex-col justify-center gap-1">
           {errors.form && (
@@ -562,9 +562,10 @@ export function AddMemory(props: AddMemoryProps) {
         </button>
       </Dialog.Trigger>
       <Dialog.Portal container={props.container}>
-        <Dialog.Overlay className="mem-scrim absolute inset-0 bg-[#020207]/80" />
+        {/* Above the journey's HUD (the way back), which is drawn after the stage. */}
+        <Dialog.Overlay className="mem-scrim absolute inset-0 z-10 bg-[#020207]/80" />
         <Dialog.Content
-          className="mem-viewer mem-sheet absolute inset-0 flex items-end justify-center overscroll-contain p-0 outline-none md:items-center md:p-6"
+          className="mem-viewer mem-sheet absolute inset-0 z-10 flex items-end justify-center overscroll-contain p-0 outline-none md:items-center md:p-6"
           // The card is the only part that takes pointers: a press on the empty stage falls through to the scrim and closes.
           style={{
             transformOrigin: "calc(100% - 120px) calc(100% - 90px)",
@@ -576,7 +577,7 @@ export function AddMemory(props: AddMemoryProps) {
             data-testid="memory-card"
             className={cn(
               RIM,
-              "pointer-events-auto relative flex h-[calc(100%-max(0.5rem,env(safe-area-inset-top)))] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl border-b-0 bg-[rgba(8,7,20,0.96)] shadow-[0_0_0_1px_rgba(168,200,255,0.06),0_28px_90px_rgba(0,0,0,0.65)] backdrop-blur-md",
+              "pointer-events-auto relative flex h-[calc(100%-max(0.5rem,env(safe-area-inset-top)))] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl border-b-0 bg-[#080714] shadow-[0_0_0_1px_rgba(168,200,255,0.06),0_28px_90px_rgba(0,0,0,0.65)] backdrop-blur-md",
               "md:h-[min(100%,690px)] md:max-w-[900px] md:rounded-md md:border-b",
             )}
           >

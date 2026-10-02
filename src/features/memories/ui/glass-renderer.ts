@@ -50,8 +50,9 @@ const MAX_ANISOTROPY = 8
 /**
  * Uploads a decoded photo as a texture: stored as sRGB (sampling it gives linear light, mipmaps are averaged in linear,
  * so nothing darkens or washes out), with a full mip chain and trilinear filtering (a 1600 px photo shrinks into the
- * sphere without shimmer), and anisotropic filtering where the GPU has it (the rim gathers the photo steeply).
- * Rows go in as they are (no flip, straight alpha): the shader reads the photo upright.
+ * sphere without shimmer), and `anisotropy` x anisotropic filtering where the GPU has it (the rim gathers the photo
+ * steeply). It never queries the GPU: a query waits for every draw queued before it. Rows go in as they are (no flip,
+ * straight alpha): the shader reads the photo upright.
  */
 export function setupPhotoTexture(
   gl: WebGL2RenderingContext,
@@ -74,11 +75,8 @@ export function setupPhotoTexture(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-  const ext = anisotropy > 0 ? gl.getExtension("EXT_texture_filter_anisotropic") : null
-  if (ext) {
-    const max = Number(gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT)) || 1
-    gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(anisotropy, max))
-  }
+  const ext = anisotropy > 1 ? gl.getExtension("EXT_texture_filter_anisotropic") : null
+  if (ext) gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy)
   return texture
 }
 
@@ -302,7 +300,9 @@ export function createGlassRenderer(canvas: HTMLCanvasElement, options: GlassOpt
   const black = ctx.createTexture()
   ctx.bindTexture(ctx.TEXTURE_2D, black)
   ctx.texImage2D(ctx.TEXTURE_2D, 0, ctx.RGBA, 1, 1, 0, ctx.RGBA, ctx.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
-  const anisotropy = ctx.getExtension("EXT_texture_filter_anisotropic") ? MAX_ANISOTROPY : 0
+  // The GPU's anisotropy limit, asked once here (in idle time), never while uploading.
+  const anisoExt = ctx.getExtension("EXT_texture_filter_anisotropic")
+  const anisotropy = anisoExt ? Math.min(MAX_ANISOTROPY, Number(ctx.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT)) || 1) : 0
   ctx.disable(ctx.BLEND)
   ctx.clearColor(0, 0, 0, 0)
 

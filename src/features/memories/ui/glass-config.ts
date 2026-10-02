@@ -26,8 +26,8 @@ export const GLASS = {
     tangential: 0.11,
     /** A faint, broad secondary across from it. */
     secondaryAt: [0.48, -0.56] as const,
-    secondaryPeak: 0.08,
-    secondarySize: 0.16,
+    secondaryPeak: 0.05,
+    secondarySize: 0.15,
   },
   /** The cool light the glass catches at grazing angles. */
   fresnel: 0.22,

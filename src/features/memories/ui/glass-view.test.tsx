@@ -226,6 +226,22 @@ describe("GlassView audio button", () => {
     expect(audioButton().getAttribute("aria-pressed")).toBe("false")
   })
 
+  it("shows how far it has played while it plays, and the full length at rest", () => {
+    mount({ memory: both })
+    expect(within(dialog()).getByText("1:05")).toBeTruthy()
+    fireEvent.click(audioButton())
+    const audio = dialog().querySelector("audio")!
+    Object.defineProperty(audio, "currentTime", { configurable: true, value: 12.4 })
+    act(() => {
+      audio.dispatchEvent(new Event("timeupdate"))
+    })
+    expect(within(dialog()).getByText("0:12 / 1:05")).toBeTruthy()
+    act(() => {
+      audio.dispatchEvent(new Event("ended"))
+    })
+    expect(within(dialog()).getByText("1:05")).toBeTruthy()
+  })
+
   it("goes back to play when the audio ends", () => {
     mount({ memory: both })
     fireEvent.click(audioButton())

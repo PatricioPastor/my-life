@@ -85,7 +85,8 @@ describe("the highlights", () => {
     const [x, y] = GLASS.specular.secondaryAt
     expect(x).toBeGreaterThan(0)
     expect(y).toBeLessThan(0)
-    expect(GLASS.specular.secondaryPeak).toBeLessThanOrEqual(0.12)
+    // Faint: on the dark body of a voice it must not read as a second blob.
+    expect(GLASS.specular.secondaryPeak).toBeLessThanOrEqual(0.06)
   })
 
   it("keeps the fresnel rim subtle", () => {

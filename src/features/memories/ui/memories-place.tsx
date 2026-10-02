@@ -110,6 +110,11 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
     }
   }, [glass])
 
+  // The lens canvas is sized ahead of time too (allocating its drawing buffer is not free), and again on a resize.
+  useEffect(() => {
+    glass?.resize({ device: lens.canvas.device, deviceDiameter: Math.round(lens.diameter * lens.dpr), diameter: lens.diameter, dpr: lens.dpr })
+  }, [glass, lens.canvas.device, lens.diameter, lens.dpr])
+
   // The flight has begun: the glass gets ready to hold this memory (its photo uploads while the camera flies).
   useEffect(() => {
     if (!glass || !approached) return

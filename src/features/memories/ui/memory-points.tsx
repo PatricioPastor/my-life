@@ -445,7 +445,8 @@ export function MemoryPoints({
                 className="mem-point pointer-events-auto absolute -mt-[22px] -ml-[22px] size-11"
                 style={style}
                 aria-label={`${memory.caption}, ${date}${pending ? ", pendiente" : ""}`}
-                data-magnetic="light"
+                // While the camera flies to or from a memory the orbs are not targets: the cursor would ride the disc.
+                data-magnetic={approachId === null ? "light" : undefined}
                 data-cursor-id={memory.id}
                 data-cursor-label={truncateCaption(memory.caption, LABEL_MAX)}
                 data-cursor-context={date}

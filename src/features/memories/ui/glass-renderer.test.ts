@@ -25,7 +25,10 @@ function fakeGL(extensions: Record<string, unknown> = {}) {
     isContextLost: () => false,
     getExtension: (name: string) => extensions[name] ?? null,
     // The anisotropy extension reports a maximum of 16.
-    getParameter: (p: number) => (p === 0x84ff ? 16 : 0),
+    getParameter: (p: number) => {
+      calls.push(["getParameter", [p]])
+      return p === 0x84ff ? 16 : 0
+    },
     checkFramebufferStatus: () => constant("FRAMEBUFFER_COMPLETE"),
   }
   const gl = new Proxy({} as Record<string, unknown>, {
@@ -88,6 +91,26 @@ describe("the photo texture", () => {
     const { gl, of } = fakeGL({ EXT_texture_filter_anisotropic: aniso })
     setupPhotoTexture(gl as unknown as WebGL2RenderingContext, photo, { anisotropy: 8 })
     expect(of("texParameterf")).toContainEqual(["TEXTURE_2D", 0x84fe, 8])
+  })
+
+  it("never queries the GPU while uploading: a query waits for every queued draw", () => {
+    const aniso = { TEXTURE_MAX_ANISOTROPY_EXT: 0x84fe, MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84ff }
+    const { gl, of } = fakeGL({ EXT_texture_filter_anisotropic: aniso })
+    setupPhotoTexture(gl as unknown as WebGL2RenderingContext, photo, { anisotropy: 8 })
+    expect(of("getParameter")).toEqual([])
+  })
+
+  it("asks for the GPU's anisotropy limit once, when it is built, and never above 8x", () => {
+    const aniso = { TEXTURE_MAX_ANISOTROPY_EXT: 0x84fe, MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84ff }
+    const { gl, of } = fakeGL({ EXT_texture_filter_anisotropic: aniso })
+    const renderer = createGlassRenderer(fakeCanvas(gl), {})!
+    renderer.texture(photo)
+    renderer.texture(photo)
+    expect(of("getParameter")).toHaveLength(1)
+    expect(of("texParameterf")).toEqual([
+      ["TEXTURE_2D", 0x84fe, 8],
+      ["TEXTURE_2D", 0x84fe, 8],
+    ])
   })
 
   it("does without anisotropic filtering when there is none", () => {

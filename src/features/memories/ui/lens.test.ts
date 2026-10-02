@@ -317,6 +317,16 @@ describe("the lens", () => {
     expect(lens.canvas.parentElement).toBeNull()
   })
 
+  it("takes its size before it is prepared, and sizes the canvas as soon as it is", () => {
+    const { renderer } = fakeRenderer()
+    const { cache } = fakeCache()
+    const lens = createLens({ cache, createRenderer: () => renderer, schedule: () => {}, canvas: document.createElement("canvas") })
+    lens.resize({ device: 604, deviceDiameter: 558, diameter: 558, dpr: 1 })
+    expect(renderer.resize).not.toHaveBeenCalled()
+    lens.prepare()
+    expect(renderer.resize).toHaveBeenCalledWith(604, 558)
+  })
+
   it("sizes the canvas through the renderer", () => {
     const { renderer } = setup()
     expect(renderer.resize).toHaveBeenCalledWith(1206, 1116)

@@ -460,6 +460,18 @@ describe("MemoryPoints approach", () => {
     expect(handle.current!.worldOf("z")).not.toEqual(other)
   })
 
+  it("takes the orbs out of the magnetic cursor's reach while the camera flies to or from a memory", () => {
+    const { again } = mount(trip)
+    expect(orb(/Uno/).getAttribute("data-magnetic")).toBe("light")
+    again(trip, { approachId: "a", approachPhase: "flying" })
+    // The cursor would otherwise ride the growing disc with its label.
+    for (const b of screen.getAllByRole("button")) expect(b.hasAttribute("data-magnetic")).toBe(false)
+    again(trip, { approachId: "a", approachPhase: "leaving" })
+    expect(orb(/Dos/).hasAttribute("data-magnetic")).toBe(false)
+    again(trip, { approachId: null, approachPhase: "idle" })
+    for (const b of screen.getAllByRole("button")) expect(b.getAttribute("data-magnetic")).toBe("light")
+  })
+
   it("lets it go again when the approach ends", () => {
     const { again } = mount(trip)
     play(10)
