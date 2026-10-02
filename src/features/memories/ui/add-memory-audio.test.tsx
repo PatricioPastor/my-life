@@ -126,7 +126,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
   return { prepare, upload, create, onCreated, readAudioDuration, readPalette }
 }
 
-const open = () => fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+const open = () => fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
 const photo = (over: Partial<{ name: string; type: string; size: number }> = {}) => {
   const { name = "foto.jpg", type = "image/jpeg", size = 2000 } = over
   const file = new File(["x"], name, { type })

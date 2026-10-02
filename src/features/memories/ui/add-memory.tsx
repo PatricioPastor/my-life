@@ -314,7 +314,7 @@ function MemoryForm({
     <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
       {/* The ONE scroll region: phones scroll the fields here and nowhere else; desktop fits and never scrolls. */}
       <div data-testid="memory-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 md:px-8 md:pb-4">
-        <div data-testid="memory-columns" className="grid gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-x-8">
+        <div data-testid="memory-columns" className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-x-8">
           <div className="flex flex-col gap-5 md:gap-4">
             <div className="flex flex-col gap-2">
               <label id="memory-photo-label" htmlFor="memory-photo" className={LABEL_CLASS}>
@@ -388,7 +388,7 @@ function MemoryForm({
                 </button>
               )}
               </div>
-              <p id="memory-photo-hint" className="m-0 text-xs tracking-[0.04em] text-ink-faint">
+              <p id="memory-photo-hint" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
                 JPG, PNG, WebP o HEIC, hasta 10 MB.
               </p>
               {errors.photo && (
@@ -439,7 +439,7 @@ function MemoryForm({
                   id="memory-caption-count"
                   className={cn(
                     "pointer-events-none absolute right-3 bottom-2 text-xs tabular-nums tracking-[0.04em]",
-                    count > CAPTION_MAX_LENGTH ? "text-signal" : "text-ink-faint",
+                    count > CAPTION_MAX_LENGTH ? "text-signal" : "text-ink-muted",
                   )}
                 >
                   {count}/{CAPTION_MAX_LENGTH}
@@ -531,7 +531,7 @@ function MemoryForm({
 }
 
 /**
- * The "Agregar recuerdo" control and the dialog it opens: a photo and/or an audio (recorded or uploaded), the color of
+ * The "Contribuir" control (a plus and the word, in the space's top bar) and the dialog it opens: a photo and/or an audio (recorded or uploaded), the color of
  * the orb, a few words, a date and the place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
  * like the viewer. On phones it is a bottom sheet (one scroll region, the submit always in reach); on tablets and
  * desktops it is a two-column card that fits without scrolling.
@@ -552,13 +552,13 @@ export function AddMemory(props: AddMemoryProps) {
         <button
           type="button"
           data-magnetic="light"
-          data-cursor-label="Agregar recuerdo"
+          data-cursor-label="Contribuir"
           className="press t-label flex h-11 items-center gap-2.5 rounded-full border border-[#a8c8ff]/35 bg-[#07061a]/70 px-5 text-[#e6edff] shadow-[0_0_28px_rgba(140,170,255,0.14)] backdrop-blur-sm transition-colors duration-200 hover:border-[#a8c8ff]/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a8c8ff]"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
           </svg>
-          Agregar recuerdo
+          Contribuir
         </button>
       </Dialog.Trigger>
       <Dialog.Portal container={props.container}>

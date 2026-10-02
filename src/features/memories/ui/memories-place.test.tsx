@@ -76,8 +76,8 @@ describe("MemoriesPlace states", () => {
   })
 
   it("renders the action slot reserved for adding a memory", () => {
-    render(<MemoriesPlace state={ready()} action={<button type="button">Agregar recuerdo</button>} />)
-    expect(screen.getByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
+    render(<MemoriesPlace state={ready()} action={<button type="button">Contribuir</button>} />)
+    expect(screen.getByRole("button", { name: "Contribuir" })).toBeTruthy()
   })
 })
 
@@ -694,13 +694,13 @@ describe("MemoriesPlace camera", () => {
 
   it("keeps the title and the add control fixed while the camera moves", () => {
     reducedMotion()
-    render(<MemoriesPlace state={three} action={<button type="button">Agregar recuerdo</button>} />)
+    render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
     const title = screen.getByRole("heading", { name: "Recuerdos" })
     fireEvent.keyDown(stage(), { key: "ArrowLeft" })
     fireEvent.keyDown(stage(), { key: "+" })
     expect(title.style.transform).toBe("")
     expect(stage().querySelector("[data-world]")?.contains(title)).toBe(false)
-    expect(stage().querySelector("[data-world]")?.contains(screen.getByRole("button", { name: "Agregar recuerdo" }))).toBe(false)
+    expect(stage().querySelector("[data-world]")?.contains(screen.getByRole("button", { name: "Contribuir" }))).toBe(false)
   })
 
   it("zooms with the wheel, toward the pointer", () => {
@@ -785,7 +785,36 @@ describe("MemoriesPlace reduced motion", () => {
   })
 })
 
+describe("MemoriesPlace stage", () => {
+  it("clips its overflow instead of hiding it, so nothing can ever scroll the stage sideways (it moves the sphere off center)", () => {
+    render(<MemoriesPlace state={ready()} />)
+    expect(stage().className).toContain("overflow-clip")
+    expect(stage().className).not.toContain("overflow-hidden")
+  })
+})
+
 describe("MemoriesPlace action slot", () => {
+  beforeEach(stubFrames)
+  it("steps aside while a memory is open, so it never sits under Cerrar", () => {
+    render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
+    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    expect(slot.getAttribute("data-covered")).toBeNull()
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    expect(slot.getAttribute("data-covered")).toBe("true")
+    expect(slot.className).toContain("pointer-events-none")
+  })
+
+  it("puts the control in the top bar, on the right, at every size", () => {
+    render(<MemoriesPlace state={ready()} action={<button type="button">Contribuir</button>} />)
+    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    expect(slot.hasAttribute("data-hud")).toBe(true)
+    expect(slot.className).toMatch(/(^|\s)top-\[/)
+    expect(slot.className).toMatch(/(^|\s)right-\[/)
+    expect(slot.className).not.toMatch(/bottom-/)
+    expect(slot.className).toMatch(/(^|\s)h-12(\s|$)/)
+  })
+
   it("hands a function action the stage, so a dialog can mount inside it", () => {
     const seen: Array<HTMLElement | null> = []
     render(
@@ -793,13 +822,13 @@ describe("MemoriesPlace action slot", () => {
         state={ready()}
         action={(container) => {
           seen.push(container)
-          return <button type="button">Agregar recuerdo</button>
+          return <button type="button">Contribuir</button>
         }}
       />,
     )
     const stage = screen.getByRole("heading", { name: "Recuerdos" }).parentElement
     expect(seen.at(-1)).toBe(stage)
-    expect(stage?.contains(screen.getByRole("button", { name: "Agregar recuerdo" }))).toBe(true)
+    expect(stage?.contains(screen.getByRole("button", { name: "Contribuir" }))).toBe(true)
   })
 })
 
@@ -959,7 +988,7 @@ describe("MemoriesPlace as a guest (a shared memory)", () => {
     const dialog = within(screen.getByRole("dialog"))
     expect(dialog.queryByRole("button", { name: "Anterior" })).toBeNull()
     expect(dialog.queryByRole("button", { name: "Siguiente" })).toBeNull()
-    expect(screen.queryByRole("button", { name: "Agregar recuerdo", hidden: true })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Contribuir", hidden: true })).toBeNull()
   })
 
   it("under reduced motion it cuts to the memory and opens it", async () => {

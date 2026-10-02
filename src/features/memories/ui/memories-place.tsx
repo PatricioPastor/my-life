@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react"
+import { BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
 import { ensureGambarinoStylesheet } from "@/features/onboarding/font"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import type { MemoriesFailure, MemoryView } from "../memory-view"
@@ -31,7 +32,7 @@ interface MemoriesPlaceProps {
   /** A faint cool tint for the title's glow. */
   accent?: string
   /**
-   * The "Agregar recuerdo" control, in the bottom-right corner the layout keeps clear. A function receives the
+   * The "+ Contribuir" control, in the top bar on the right, in line with the way back. A function receives the
    * stage element, so a dialog it opens can mount inside it (and keep the magnetic cursor).
    */
   action?: ReactNode | ((container: HTMLElement | null) => ReactNode)
@@ -63,7 +64,7 @@ const FIT_PAD = { top: 112, right: 28, bottom: 168, left: 28 }
 const TITLE_HERO =
   "bottom-[calc(72px+env(safe-area-inset-bottom))] left-[max(1.5rem,calc(env(safe-area-inset-left)+0.5rem))] text-[length:var(--type-display)] leading-[0.9] md:left-[max(5rem,calc(env(safe-area-inset-left)+0.5rem))]"
 const TITLE_LABEL =
-  "top-[calc(max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))+2.5rem)] left-[calc(max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))+0.75rem)] text-[length:var(--type-2)] leading-[1.1]"
+  "top-[calc(max(1rem,calc(env(safe-area-inset-top)+0.25rem))+2.75rem)] left-[calc(max(0.5rem,calc(env(safe-area-inset-left)+0.25rem))+0.75rem)] text-[length:var(--type-2)] leading-[1.1] md:top-[calc(max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))+2.5rem)] md:left-[calc(max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))+0.75rem)]"
 /** Under reduced motion a camera move is a cut: the world fades out for this long, swaps, and fades back. */
 const CUT_OUT_MS = 110
 const CUT_IN_MS = 140
@@ -218,7 +219,8 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView }: M
       aria-label={SPACE_LABEL}
       tabIndex={0}
       data-approach={approach.state.phase}
-      className="mem-stage absolute inset-0 overflow-hidden outline-none"
+      // Clipped, not just hidden: a hidden box still scrolls (a focus, a scrollIntoView), and the whole glass would slide with it.
+      className="mem-stage absolute inset-0 overflow-clip outline-none"
       onKeyDown={onKeyDown}
     >
       <div data-void data-reduced={reduced} aria-hidden="true" className="mem-void absolute inset-0 overflow-hidden">
@@ -294,7 +296,9 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView }: M
       {action && (
         <div
           data-hud
-          className="absolute right-[max(1.5rem,calc(env(safe-area-inset-right)+0.5rem))] bottom-[calc(72px+env(safe-area-inset-bottom))] max-md:bottom-[calc(128px+env(safe-area-inset-bottom))]"
+          // The glass has its own top bar (Cerrar is where this sits): the control steps aside while a memory is open.
+          data-covered={current.phase !== "idle" || undefined}
+          className={`absolute flex h-12 items-center transition-opacity duration-200 data-[covered=true]:pointer-events-none data-[covered=true]:opacity-0 ${BAR_TOP} ${BAR_RIGHT}`}
         >
           {typeof action === "function" ? action(root) : action}
         </div>

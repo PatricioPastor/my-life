@@ -905,6 +905,40 @@ describe("GlassView next and previous", () => {
   })
 })
 
+describe("GlassView top bar", () => {
+  const topOf = (el: Element | null) => (el?.className.match(/(?:^|\s)top-\[[^\s]+/) ?? [])[0]
+
+  it("sets Cerrar and Compartir on the same line as the way back, for guests and members alike", () => {
+    const share = vi.fn().mockResolvedValue({ ok: false, reason: "unavailable" })
+    mount({ share })
+    const bar = within(dialog()).getByRole("button", { name: "Cerrar" }).closest("div")!
+    const close = topOf(bar)
+    expect(close).toBeTruthy()
+    cleanup()
+    render(
+      <GlassView
+        memory={photo}
+        prev={null}
+        next={null}
+        reduced={false}
+        onStep={vi.fn()}
+        onClose={vi.fn()}
+        onRestoreFocus={vi.fn()}
+        lens={null}
+        guestExit={vi.fn()}
+        container={document.body}
+        viewport={DESKTOP}
+      />,
+    )
+    expect(topOf(within(dialog()).getByRole("button", { name: /Universo/ }))).toBe(close)
+  })
+
+  it("keeps the quiet link and the place and views readable: nothing at the faint ink", () => {
+    mount({ memory: view("p", "Una tarde", { place: { lat: 0, lng: 0, name: "Palermo" }, viewCount: 4 }) })
+    expect(dialog().innerHTML).not.toContain("text-ink-faint")
+  })
+})
+
 describe("GlassView caption", () => {
   const LONG = "Una tarde cualquiera que se volvió inolvidable: caminamos sin rumbo, nos reímos de todo y terminamos cenando en la vereda."
   const prev = view("x", "Antes")

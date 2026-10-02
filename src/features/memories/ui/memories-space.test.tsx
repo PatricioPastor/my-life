@@ -55,17 +55,17 @@ afterEach(() => {
 })
 
 describe("MemoriesSpace adding a memory", () => {
-  it("offers Agregar recuerdo once the memories are ready, even when there are none", async () => {
+  it("offers Contribuir once the memories are ready, even when there are none", async () => {
     listMemories.mockResolvedValue({ ok: true, memories: [] })
     render(<MemoriesSpace />)
-    expect(await screen.findByRole("button", { name: "Agregar recuerdo" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Contribuir" })).toBeTruthy()
   })
 
   it.each(["no_session", "unavailable"] as const)("does not offer it when loading failed (%s)", async (reason) => {
     listMemories.mockResolvedValue({ ok: false, reason })
     render(<MemoriesSpace />)
     await screen.findByRole("status")
-    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Contribuir" })).toBeNull()
   })
 
   it("appends the saved memory as a pending orb and leaves the others where they are", async () => {
@@ -76,7 +76,7 @@ describe("MemoriesSpace adding a memory", () => {
     await screen.findByRole("button", { name: /El primer viaje/ })
     const before = screen.getByRole("button", { name: /El primer viaje/ }).getAttribute("style")
 
-    fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+    fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
     fireEvent.change(screen.getByLabelText("Foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
     fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "Una tarde de lluvia" } })
     fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: "2024-03-12" } })

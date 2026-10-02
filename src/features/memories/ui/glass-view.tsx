@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import Link from "next/link"
 import { Dialog } from "radix-ui"
+import { BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
@@ -267,7 +268,7 @@ function GuestExits({ onExit }: { onExit: () => void }) {
         onClick={onExit}
         data-magnetic="light"
         data-cursor-label="Volver al universo"
-        className="press pointer-events-auto absolute top-[max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))] left-[max(1.25rem,calc(env(safe-area-inset-left)+0.25rem))] flex h-12 items-center gap-3 px-3 text-xs tracking-[0.08em] text-ink-muted md:left-[max(2.25rem,calc(env(safe-area-inset-left)+0.5rem))]"
+        className={`press pointer-events-auto absolute ${BAR_TOP} ${BAR_LEFT} flex h-12 items-center gap-3 px-3 text-xs tracking-[0.08em] text-ink-muted`}
       >
         <Chevron />
         <span>Universo</span>
@@ -276,7 +277,7 @@ function GuestExits({ onExit }: { onExit: () => void }) {
         href="/"
         data-magnetic="light"
         data-cursor-label="Entrar"
-        className="press pointer-events-auto absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 flex h-12 -translate-x-1/2 items-center px-4 whitespace-nowrap text-xs tracking-[0.08em] text-ink-faint"
+        className="press pointer-events-auto absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 flex h-12 -translate-x-1/2 items-center px-4 whitespace-nowrap text-xs tracking-[0.08em] text-ink-muted"
       >
         Entrar al universo
       </Link>
@@ -437,7 +438,7 @@ export function GlassView({
           {shown && (
             <>
               {/* Cerrar comes first in the DOM, so it keeps the dialog's initial focus; the row is reversed to show Compartir before it. */}
-              <div className="pointer-events-none absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex flex-row-reverse items-center">
+              <div className={`pointer-events-none absolute ${BAR_TOP} ${BAR_RIGHT} flex flex-row-reverse items-center`}>
                 <Dialog.Close
                   data-magnetic="light"
                   data-cursor-label="Cerrar"

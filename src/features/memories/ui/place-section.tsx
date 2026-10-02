@@ -135,7 +135,7 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
           )}
         </div>
       )}
-      <p id="memory-place-help" className="m-0 text-xs tracking-[0.04em] text-ink-faint">
+      <p id="memory-place-help" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
         {PLACE_COPY.help}
       </p>
     </div>

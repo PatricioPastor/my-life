@@ -152,7 +152,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
         </div>
         <OrbPreview color={value ?? DEFAULT_ORB_COLOR} />
       </div>
-      <p id={NOTE_ID} aria-live="polite" className="m-0 min-h-4 text-xs tracking-[0.04em] text-ink-faint">
+      <p id={NOTE_ID} aria-live="polite" className="m-0 min-h-4 text-xs tracking-[0.04em] text-ink-muted">
         {noteFor({ status, fromPhoto, voice })}
       </p>
     </div>

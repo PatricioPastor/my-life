@@ -14,12 +14,20 @@ describe("titleFontSize", () => {
 })
 
 describe("memoriesKeepOut", () => {
-  it("covers the title, the back control and the add slot on desktop", () => {
+  it("covers the title, the back control and the Contribuir control on desktop", () => {
     const boxes = memoriesKeepOut(1440, 900)
     expect(covers(boxes, 200, 800)).toBe(true) // title, bottom left
     expect(covers(boxes, 80, 50)).toBe(true) // back control, top left
-    expect(covers(boxes, 1380, 830)).toBe(true) // add slot, bottom right
+    expect(covers(boxes, 1380, 50)).toBe(true) // Contribuir, top right
     expect(covers(boxes, 720, 450)).toBe(false) // the open middle
+  })
+
+  it("keeps the top bar clear on a phone, and no longer reserves the bottom-right corner", () => {
+    const boxes = memoriesKeepOut(390, 844)
+    expect(covers(boxes, 60, 40)).toBe(true)
+    expect(covers(boxes, 340, 40)).toBe(true)
+    expect(covers(boxes, 350, 700)).toBe(false)
+    expect(covers(boxes, 195, 40)).toBe(false) // between the two controls, where the label may sit
   })
 
   it("scales the title with the viewport on a phone", () => {

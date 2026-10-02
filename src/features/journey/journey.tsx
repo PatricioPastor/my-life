@@ -182,7 +182,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   return (
     <main
       ref={stageRef}
-      className="ui relative h-svh w-full overflow-hidden bg-void font-sans text-ink"
+      className="ui relative h-svh w-full overflow-clip bg-void font-sans text-ink"
       style={themeVars(params)}
     >
       <div

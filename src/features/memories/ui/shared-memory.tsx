@@ -40,7 +40,7 @@ export function SharedMemory({ memory, shareUrl }: SharedMemoryProps) {
   }, [])
 
   return (
-    <main ref={stage} className="fixed inset-0 overflow-hidden bg-void text-ink">
+    <main ref={stage} className="fixed inset-0 overflow-clip bg-void text-ink">
       {hydrated && (
         <MemoriesPlace
           state={state}

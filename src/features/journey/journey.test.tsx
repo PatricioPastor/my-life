@@ -91,6 +91,15 @@ describe("Journey gate flow", () => {
   })
 })
 
+describe("Journey stage", () => {
+  it("clips its overflow instead of hiding it: the zoomed sky and the portal reach past the screen, and a scrollable stage lets a focus scroll it sideways (the memories glass then sits off center)", () => {
+    const { container } = render(<Journey />)
+    const main = container.querySelector("main")!
+    expect(main.className).toContain("overflow-clip")
+    expect(main.className).not.toContain("overflow-hidden")
+  })
+})
+
 describe("Journey after the gate", () => {
   it("dives into a facet, opens an entry and pages through it", async () => {
     checkHandle.mockResolvedValue({ status: "granted" })

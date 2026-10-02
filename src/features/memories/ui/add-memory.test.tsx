@@ -89,7 +89,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
   return { prepare, upload, create, onCreated, parseGps, suggest, resolveLink, readPalette }
 }
 
-const open = () => fireEvent.click(screen.getByRole("button", { name: "Agregar recuerdo" }))
+const open = () => fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
 const photo = (over: Partial<{ name: string; type: string; size: number }> = {}) => {
   const { name = "foto.jpg", type = "image/jpeg", size = 2000 } = over
   const file = new File(["x"], name, { type })
@@ -110,7 +110,7 @@ const filled = () => {
 }
 
 describe("AddMemory dialog", () => {
-  it("opens from the Agregar recuerdo control into a titled, described dialog", () => {
+  it("opens from the Contribuir control into a titled, described dialog", () => {
     setup()
     expect(screen.queryByRole("dialog")).toBeNull()
     open()
@@ -152,7 +152,7 @@ describe("AddMemory dialog", () => {
 
   it("makes everything behind it unreachable while it is open, and reachable again on close", () => {
     setup()
-    const trigger = screen.getByRole("button", { name: "Agregar recuerdo" })
+    const trigger = screen.getByRole("button", { name: "Contribuir" })
     const covered = (el: HTMLElement) => el.closest("[aria-hidden='true'],[inert]") !== null
     expect(covered(trigger)).toBe(false)
     open()
@@ -165,9 +165,9 @@ describe("AddMemory dialog", () => {
     })
   })
 
-  it("returns focus to the Agregar recuerdo control when it closes", async () => {
+  it("returns focus to the Contribuir control when it closes", async () => {
     setup()
-    const trigger = screen.getByRole("button", { name: "Agregar recuerdo" })
+    const trigger = screen.getByRole("button", { name: "Contribuir" })
     trigger.focus()
     open()
     expect(document.activeElement).not.toBe(trigger)
@@ -1027,6 +1027,12 @@ describe("AddMemory layout", () => {
     expect(actions.className).toContain("pb-[max(")
   })
 
+  it("keeps the single phone column as wide as the sheet, whatever the swatches or the hints want (no sideways overflow)", () => {
+    setup()
+    open()
+    expect(screen.getByTestId("memory-columns").className).toContain(" grid-cols-[minmax(0,1fr)] ")
+  })
+
   it("lays the fields out in two columns on desktop: photo and color on the left, the rest on the right", () => {
     setup()
     open()
@@ -1144,8 +1150,17 @@ describe("AddMemory with a virtual keyboard", () => {
     expect(screen.getByTestId("photo-drop").className).toContain(`${short}:h-20`)
   })
 
+  it("is a plus and the word Contribuir, with the same label for the magnetic cursor", () => {
+    setup()
+    const trigger = screen.getByRole("button", { name: "Contribuir" })
+    expect(trigger.textContent).toBe("Contribuir")
+    expect(trigger.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true")
+    expect(trigger.getAttribute("data-cursor-label")).toBe("Contribuir")
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+  })
+
   it("makes the control to open it at least 44 px tall on a phone", () => {
     setup()
-    expect(screen.getByRole("button", { name: "Agregar recuerdo" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+    expect(screen.getByRole("button", { name: "Contribuir" }).className).toMatch(/(^|\s)h-11(\s|$)/)
   })
 })

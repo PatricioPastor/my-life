@@ -254,7 +254,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
           {notice}
         </p>
       )}
-      <p id={hintId} className="m-0 text-xs tracking-[0.04em] text-ink-faint">
+      <p id={hintId} className="m-0 text-xs tracking-[0.04em] text-ink-muted">
         {unsupported ? RECORDER_COPY.errors.unsupported : AUDIO_COPY.hint}
       </p>
       {problem && (

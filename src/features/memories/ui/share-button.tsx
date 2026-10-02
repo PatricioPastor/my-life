@@ -119,7 +119,7 @@ export function ShareButton({ memory, share, cache }: ShareButtonProps) {
       {/* Always in the page, so a screen reader hears the change; empty when there is nothing to say. */}
       <span
         role="status"
-        className="pointer-events-none absolute top-full right-3 -mt-1 text-[11px] tracking-[0.06em] whitespace-nowrap text-ink-faint"
+        className="pointer-events-none absolute top-full right-3 -mt-1 text-xs tracking-[0.06em] whitespace-nowrap text-ink-muted"
       >
         {message}
       </span>

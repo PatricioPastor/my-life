@@ -57,20 +57,37 @@ describe("safe areas", () => {
     expect(hasInset(screen.getByRole("list"), "top")).toBe(true)
   })
 
-  it("keeps the memories title and the add control above the home indicator", () => {
+  it("keeps the memories title above the home indicator and the Contribuir control below the status bar", () => {
     render(
-      <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Agregar recuerdo</button>} />,
+      <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />,
     )
     expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "bottom")).toBe(true)
-    expect(hasInset(screen.getByRole("button", { name: "Agregar recuerdo" }).parentElement, "bottom")).toBe(true)
+    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement
+    expect(hasInset(slot, "top")).toBe(true)
+    expect(slot?.className).not.toMatch(/(^|\s)(max-md:)?bottom-/)
   })
 
   it("keeps the memories title and the add control clear of a side notch (a phone in landscape)", () => {
     render(
-      <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Agregar recuerdo</button>} />,
+      <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />,
     )
     expect(hasInset(screen.getByRole("heading", { level: 1, name: "Recuerdos" }), "left")).toBe(true)
-    expect(hasInset(screen.getByRole("button", { name: "Agregar recuerdo" }).parentElement, "right")).toBe(true)
+    expect(hasInset(screen.getByRole("button", { name: "Contribuir" }).parentElement, "right")).toBe(true)
+  })
+})
+
+describe("one top bar", () => {
+  it("puts the way back and Contribuir on the same line, at the same distance from the top", () => {
+    render(
+      <>
+        <BackButton label="Universo" hint="Volver" onClick={() => {}} />
+        <MemoriesPlace state={{ status: "ready", memories: [memory] }} action={<button type="button">Contribuir</button>} />
+      </>,
+    )
+    const top = (el: Element | null) => (el?.className.match(/(?:^|\s)top-\[[^\s]+/) ?? [])[0]
+    const back = top(screen.getByRole("button", { name: "Universo" }).parentElement)
+    expect(back).toBeTruthy()
+    expect(top(screen.getByRole("button", { name: "Contribuir" }).parentElement)).toBe(back)
   })
 })
 
