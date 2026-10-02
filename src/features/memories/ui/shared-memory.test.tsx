@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
+import { renderToString } from "react-dom/server"
 import { SharedMemory } from "./shared-memory"
 
 const push = vi.fn()
@@ -87,5 +88,23 @@ describe("SharedMemory", () => {
     render(<SharedMemory memory={memory} shareUrl="https://example.com/m/t" />)
     flyUntilOpen()
     await waitFor(() => expect(screen.getByRole("link", { name: "Entrar al universo" }).getAttribute("href")).toBe("/"))
+  })
+
+  it("lets a guest share it again: Compartir passes on the link they hold, with no server call", async () => {
+    const writeText = vi.fn(async () => undefined)
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } })
+    render(<SharedMemory memory={memory} shareUrl="https://example.com/m/t" />)
+    flyUntilOpen()
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Compartir" }))
+    })
+    expect(writeText).toHaveBeenCalledWith("https://example.com/m/t")
+    expect(track).toHaveBeenCalledWith("memory_shared")
+  })
+
+  it("renders only the dark page on the server: the place waits for the real viewport", () => {
+    const html = renderToString(<SharedMemory memory={memory} shareUrl="https://example.com/m/t" />)
+    expect(html).not.toContain("data-void")
+    expect(html).not.toContain("Una tarde de lluvia")
   })
 })

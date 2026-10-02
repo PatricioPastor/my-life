@@ -45,8 +45,9 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
             boxShadow: `0 0 140px 30px ${orbColor}66`,
           }}
         />
-        <div style={{ display: "flex", flexDirection: "column", gap: 28, minWidth: 0 }}>
-          <div style={{ display: "flex", fontSize: 68, lineHeight: 1.12, letterSpacing: -1 }}>{truncateCaption(caption, 90)}</div>
+        {/* A fixed width (1200 - 2 x 90 padding - 300 orb - 72 gap), so the caption wraps instead of running off the card. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 28, width: 558 }}>
+          <div style={{ display: "flex", fontSize: 60, lineHeight: 1.14, letterSpacing: -1 }}>{truncateCaption(caption, 80)}</div>
           <div style={{ display: "flex", fontSize: 28, letterSpacing: 4, color: "#a9a5b8" }}>patriciopastor</div>
         </div>
       </div>

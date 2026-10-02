@@ -6,6 +6,7 @@ import { Dialog } from "radix-ui"
 import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
+import type { ShareMemoryResult } from "../share/share-view"
 import type { Viewport } from "./camera"
 import { smoothedReader } from "./audio-level"
 import { AUDIO_READINESS_COPY, useAudioReadiness } from "./audio-readiness"
@@ -13,6 +14,7 @@ import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { formatClock } from "./glass-mode"
 import { GlassSphere } from "./glass-orb"
 import type { Lens } from "./lens"
+import { ShareButton } from "./share-button"
 import { swipeStep } from "./swipe"
 import { useAudioLevel } from "./use-audio-level"
 
@@ -45,6 +47,8 @@ interface GlassViewProps {
    * both to the start. Esc and Cerrar still go through `onClose`.
    */
   guestExit?: () => void
+  /** Asks for the link to share a memory (a server action, or the link a guest already holds). Absent: no share control. */
+  share?: (id: string) => Promise<ShareMemoryResult>
 }
 
 /** The caption changes once the camera is this far across a switch (or at once when there is no travel). */
@@ -294,7 +298,7 @@ function GuestExits({ onExit }: { onExit: () => void }) {
         href="/"
         data-magnetic="light"
         data-cursor-label="Entrar"
-        className="press pointer-events-auto absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 flex h-12 -translate-x-1/2 items-center px-4 text-xs tracking-[0.08em] text-ink-faint"
+        className="press pointer-events-auto absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 flex h-12 -translate-x-1/2 items-center px-4 whitespace-nowrap text-xs tracking-[0.08em] text-ink-faint"
       >
         Entrar al universo
       </Link>
@@ -326,6 +330,7 @@ export function GlassView({
   travel,
   switching = false,
   guestExit,
+  share,
 }: GlassViewProps) {
   const guest = guestExit !== undefined
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
@@ -425,13 +430,16 @@ export function GlassView({
         >
           {shown && (
             <>
-              <Dialog.Close
-                data-magnetic="light"
-                data-cursor-label="Cerrar"
-                className="press pointer-events-auto absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted"
-              >
-                Cerrar
-              </Dialog.Close>
+              <div className="pointer-events-none absolute top-[max(1.25rem,calc(env(safe-area-inset-top)+0.25rem))] right-[max(1.25rem,calc(env(safe-area-inset-right)+0.25rem))] flex items-center">
+                {share && <ShareButton memory={shown} share={share} />}
+                <Dialog.Close
+                  data-magnetic="light"
+                  data-cursor-label="Cerrar"
+                  className="press pointer-events-auto flex h-12 items-center px-3 text-xs tracking-[0.08em] text-ink-muted"
+                >
+                  Cerrar
+                </Dialog.Close>
+              </div>
               <GlassSphere
                 memory={shown}
                 photoUrl={photoUrl}

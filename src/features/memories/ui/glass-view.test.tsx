@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
+import type { ShareMemoryResult } from "../share/share-view"
 import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
 import type { Lens } from "./lens"
@@ -51,6 +52,7 @@ interface Props {
   lens: Lens | null
   travel: () => number | null
   switching: boolean
+  share?: (id: string) => Promise<ShareMemoryResult>
 }
 
 const DESKTOP = { width: 1440, height: 900 }
@@ -734,5 +736,30 @@ describe("GlassView as a guest (a shared memory)", () => {
     mount()
     expect(within(dialog()).queryByRole("link", { name: "Entrar al universo" })).toBeNull()
     expect(within(dialog()).queryByRole("button", { name: /Universo/ })).toBeNull()
+  })
+})
+
+describe("GlassView share control", () => {
+  const share = vi.fn<(id: string) => Promise<ShareMemoryResult>>(async () => ({ ok: true, url: "https://example.com/m/t" }))
+  beforeEach(() => share.mockClear())
+
+  it("offers Compartir for an approved memory when it can share", () => {
+    mount({ share })
+    expect(within(dialog()).getByRole("button", { name: "Compartir" })).toBeTruthy()
+  })
+
+  it("never offers it for a pending memory", () => {
+    mount({ memory: { ...photo, status: "pending" }, share })
+    expect(within(dialog()).queryByRole("button", { name: "Compartir" })).toBeNull()
+  })
+
+  it("offers nothing when there is no way to share", () => {
+    mount()
+    expect(within(dialog()).queryByRole("button", { name: "Compartir" })).toBeNull()
+  })
+
+  it("keeps Cerrar beside it", () => {
+    mount({ share })
+    expect(within(dialog()).getByRole("button", { name: "Cerrar" })).toBeTruthy()
   })
 })

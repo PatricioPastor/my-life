@@ -5,6 +5,7 @@ import { ensureGambarinoStylesheet } from "@/features/onboarding/font"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import type { MemoriesFailure, MemoryView } from "../memory-view"
 import { approachSizes, ladderOf } from "../photo-ladder"
+import type { ShareMemoryResult } from "../share/share-view"
 import { orderByDate } from "./approach"
 import { parallaxOffset, worldBounds } from "./camera"
 import { createCameraController } from "./camera-controller"
@@ -38,6 +39,8 @@ interface MemoriesPlaceProps {
    * `onExit` (the start) instead of flying back to the overview. There is no previous or next.
    */
   guest?: { memoryId: string; onExit: () => void }
+  /** Asks for the link to share a memory; the glass offers "Compartir" for approved ones when it is given. */
+  share?: (id: string) => Promise<ShareMemoryResult>
 }
 
 const PORCELAIN = "#f3f0ea"
@@ -66,7 +69,7 @@ const CUT_IN_MS = 140
  * given; loading it is the container's job, and the way back belongs to the journey. The title, the add control and
  * the dialogs are a HUD: they never move with the camera.
  */
-export function MemoriesPlace({ state, accent, action, guest }: MemoriesPlaceProps) {
+export function MemoriesPlace({ state, accent, action, guest, share }: MemoriesPlaceProps) {
   const reduced = useReducedMotion()
   const viewport = useViewport()
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
@@ -300,6 +303,7 @@ export function MemoriesPlace({ state, accent, action, guest }: MemoriesPlacePro
         onStep={approach.step}
         onClose={guest ? guest.onExit : approach.close}
         guestExit={guest?.onExit}
+        share={share}
         onRestoreFocus={restoreFocus}
         onWarm={warm}
         lens={glass}

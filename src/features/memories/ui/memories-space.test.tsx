@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { MemoriesSpace } from "./memories-space"
@@ -8,6 +8,7 @@ const prepareUpload = vi.fn()
 const createMemory = vi.fn()
 const suggestPlace = vi.fn()
 const resolveMapsLink = vi.fn()
+const shareMemory = vi.fn()
 const uploadToCloudinary = vi.fn()
 vi.mock("../actions", () => ({
   listMemories: () => listMemories(),
@@ -15,6 +16,7 @@ vi.mock("../actions", () => ({
   createMemory: (input: unknown) => createMemory(input),
   suggestPlace: (input: unknown) => suggestPlace(input),
   resolveMapsLink: (input: unknown) => resolveMapsLink(input),
+  shareMemory: (input: unknown) => shareMemory(input),
 }))
 vi.mock("./cloudinary-upload", () => ({ uploadToCloudinary: (o: unknown) => uploadToCloudinary(o) }))
 vi.mock("@/shared/analytics", () => ({ track: vi.fn() }))
@@ -82,5 +84,28 @@ describe("MemoriesSpace adding a memory", () => {
     const orb = screen.getByRole("button", { name: /Una tarde de lluvia.*pendiente/i })
     expect(orb.getAttribute("data-pending")).toBe("true")
     expect(screen.getByRole("button", { name: /El primer viaje/ }).getAttribute("style")).toBe(before)
+  })
+})
+
+describe("MemoriesSpace sharing", () => {
+  it("asks the shareMemory action for the link of the memory open in the glass", async () => {
+    listMemories.mockResolvedValue({ ok: true, memories: [view("a", "Una tarde")] })
+    shareMemory.mockResolvedValue({ ok: false, reason: "not_shareable" })
+    let frames: Array<(now: number) => void> = []
+    let clock = performance.now() + 100
+    vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
+    vi.stubGlobal("cancelAnimationFrame", () => {})
+    render(<MemoriesSpace />)
+    fireEvent.click(await screen.findByRole("button", { name: /Una tarde/ }))
+    for (let i = 0; i < 60 && !screen.queryByRole("dialog"); i++) {
+      const batch = frames
+      frames = []
+      clock += 100
+      act(() => batch.forEach((cb) => cb(clock)))
+    }
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Compartir" }))
+    })
+    expect(shareMemory).toHaveBeenCalledWith({ id: "a" })
   })
 })

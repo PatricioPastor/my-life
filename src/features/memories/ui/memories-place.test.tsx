@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
+import type { ShareMemoryResult } from "../share/share-view"
 import { rimColor } from "../orb-color"
 import { lensGeometry } from "./glass-layout"
 import { GLASS_RELEASE_MS } from "./lens"
@@ -969,5 +970,35 @@ describe("MemoriesPlace as a guest (a shared memory)", () => {
     render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "other", onExit: vi.fn() }} />)
     advance(30)
     expect(phase()).toBe("idle")
+  })
+})
+
+describe("MemoriesPlace sharing", () => {
+  beforeEach(stubFrames)
+
+  const share = () => vi.fn<(id: string) => Promise<ShareMemoryResult>>(async () => ({ ok: true, url: "https://example.com/m/t" }))
+
+  it("offers Compartir in the glass of an approved memory, and asks for that memory's link", async () => {
+    const ask = share()
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: vi.fn(async () => undefined) } })
+    render(<MemoriesPlace state={three} share={ask} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Compartir" }))
+    })
+    expect(ask).toHaveBeenCalledWith("b")
+  })
+
+  it("does not offer it for a pending memory, nor when there is no way to share", () => {
+    render(<MemoriesPlace state={ready(view("a", "Mío", { status: "pending" }))} share={share()} />)
+    fireEvent.click(orbAt(/Mío/))
+    advanceUntil(dialogOpen)
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Compartir" })).toBeNull()
+    cleanup()
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Compartir" })).toBeNull()
   })
 })

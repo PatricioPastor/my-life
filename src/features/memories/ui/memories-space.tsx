@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { createMemory, listMemories, prepareUpload, resolveMapsLink, suggestPlace } from "../actions"
+import { createMemory, listMemories, prepareUpload, resolveMapsLink, shareMemory, suggestPlace } from "../actions"
 import type { MemoryView } from "../memory-view"
 import { AddMemory } from "./add-memory"
 import { uploadToCloudinary } from "./cloudinary-upload"
@@ -27,6 +27,7 @@ export function MemoriesSpace({ accent }: MemoriesSpaceProps) {
     <MemoriesPlace
       state={state}
       accent={accent}
+      share={(id) => shareMemory({ id })}
       action={
         state.status === "ready"
           ? (container) => (
