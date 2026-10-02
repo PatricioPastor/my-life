@@ -7,6 +7,7 @@ import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
 import type { Viewport } from "./camera"
 import { smoothedReader } from "./audio-level"
+import { AUDIO_READINESS_COPY, useAudioReadiness } from "./audio-readiness"
 import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { formatClock } from "./glass-mode"
 import { GlassSphere } from "./glass-orb"
@@ -97,6 +98,19 @@ function GlassVoice({
     return () => el?.pause()
   }, [audio])
 
+  // The audio is made in the background after the upload: until the route answers it, the control only says so.
+  const readiness = useAudioReadiness(memory.audio?.url ?? null).status
+  const failed = status === "error" || readiness === "unavailable"
+  const processing = readiness === "processing"
+  const waiting = processing || readiness === "checking"
+  const label = failed
+    ? AUDIO_READINESS_COPY.unavailable
+    : processing
+      ? AUDIO_READINESS_COPY.processing
+      : status === "playing"
+        ? "Pausar audio"
+        : "Reproducir audio"
+
   const toggle = () => {
     if (!audio) return
     if (status === "playing") audio.pause()
@@ -114,9 +128,9 @@ function GlassVoice({
         >
           <button
             type="button"
-            disabled={status === "error"}
-            aria-pressed={status === "error" ? undefined : status === "playing"}
-            aria-label={status === "error" ? "Audio no disponible" : status === "playing" ? "Pausar audio" : "Reproducir audio"}
+            disabled={failed || waiting}
+            aria-pressed={failed || processing ? undefined : status === "playing"}
+            aria-label={label}
             data-magnetic="light"
             data-cursor-label={status === "playing" ? "Pausar" : "Escuchar"}
             data-state={status}
@@ -126,13 +140,19 @@ function GlassVoice({
           >
             {status === "playing" ? <PauseIcon /> : <PlayIcon />}
           </button>
-          <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">
-            {played > 0 ? `${formatClock(played * 1000)} / ${formatClock(memory.audio.durationMs)}` : formatClock(memory.audio.durationMs)}
-          </span>
+          {processing ? (
+            <span role="status" className="text-xs tracking-[0.08em] text-ink-muted">
+              {AUDIO_READINESS_COPY.processing}
+            </span>
+          ) : (
+            <span className="text-xs tracking-[0.08em] text-ink-muted tabular-nums">
+              {played > 0 ? `${formatClock(played * 1000)} / ${formatClock(memory.audio.durationMs)}` : formatClock(memory.audio.durationMs)}
+            </span>
+          )}
         </div>
       )}
-      {memory.audio && (
-        // `crossOrigin` lets Web Audio read it (the signed Cloudinary response must allow CORS); without it a browser mutes it.
+      {memory.audio && readiness === "ready" && (
+        // Same origin now (our audio route), so `crossOrigin` is harmless; it keeps Web Audio able to read it either way.
         <audio
           ref={setAudio}
           src={memory.audio.url}

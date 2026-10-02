@@ -4,9 +4,17 @@ import type { MemoryView } from "../memory-view"
 import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
 import type { Lens } from "./lens"
+import * as readiness from "./audio-readiness"
 
 // jsdom has no Web Audio: a voice that is loud while it plays stands in for the analyser.
 vi.mock("./use-audio-level", () => ({ useAudioLevel: (_source: unknown, active: boolean) => () => (active ? 0.6 : 0) }))
+
+// The readiness of the audio route is its own tested hook; here it is steered, except in the one test that runs it.
+vi.mock("./audio-readiness", async (original) => ({
+  ...(await original<typeof import("./audio-readiness")>()),
+  useAudioReadiness: vi.fn(),
+}))
+const readyAudio = () => ({ status: "ready" as const, retry: vi.fn() })
 
 const view = (id: string, caption: string, over: Partial<MemoryView> = {}): MemoryView => ({
   id,
@@ -26,7 +34,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   ...over,
 })
 
-const voice = { url: "https://res.cloudinary.com/demo/video/a.mp3", durationMs: 65000 }
+const voice = { url: "/api/memories/a/audio", durationMs: 65000 }
 const photo = view("p", "Una tarde de lluvia")
 const both = view("b", "La casa nueva", { audio: voice })
 const audioOnly = view("a", "Mamá cantando", { width: null, height: null, thumbUrl: null, fullUrl: null, audio: voice })
@@ -74,6 +82,7 @@ let pause: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   frames = []
+  vi.mocked(readiness.useAudioReadiness).mockImplementation(readyAudio)
   vi.stubGlobal("matchMedia", undefined)
   vi.stubGlobal("AudioContext", undefined)
   vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
@@ -252,7 +261,7 @@ describe("GlassView audio button", () => {
     expect(audioButton().getAttribute("aria-pressed")).toBe("false")
   })
 
-  it("loads the voice with CORS, from the signed URL", () => {
+  it("loads the voice with CORS, from our own audio route", () => {
     mount({ memory: both })
     const audio = dialog().querySelector("audio")!
     expect(audio.getAttribute("src")).toBe(voice.url)
@@ -291,6 +300,90 @@ describe("GlassView audio button", () => {
     pause.mockClear()
     unmount()
     expect(pause).toHaveBeenCalled()
+  })
+})
+
+describe("GlassView audio that is still processing", () => {
+  const asks = () => vi.mocked(readiness.useAudioReadiness)
+
+  it("asks the readiness of the memory's own audio route, and of nothing for a photo", () => {
+    mount({ memory: both })
+    expect(asks()).toHaveBeenCalledWith(voice.url)
+    asks().mockClear()
+    mount({ memory: photo })
+    expect(asks()).toHaveBeenCalledWith(null)
+  })
+
+  it("says it is processing, quietly, and offers no playing yet", () => {
+    asks().mockImplementation(() => ({ status: "processing", retry: vi.fn() }))
+    mount({ memory: both })
+    const button = within(dialog()).getByRole("button", { name: "Procesando audio…" }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(within(dialog()).getByText("Procesando audio…", { selector: "[role=status]" })).toBeTruthy()
+    expect(within(dialog()).queryByText("1:05")).toBeNull()
+    // Nothing is fetched from the route by the player until it is ready (it would only answer 503).
+    expect(dialog().querySelector("audio")).toBeNull()
+  })
+
+  it("does not flash the processing copy while it is only checking", () => {
+    asks().mockImplementation(() => ({ status: "checking", retry: vi.fn() }))
+    mount({ memory: both })
+    expect(within(dialog()).queryByText("Procesando audio…")).toBeNull()
+    expect((audioButton() as HTMLButtonElement).disabled).toBe(true)
+    expect(within(dialog()).getByText("1:05")).toBeTruthy()
+  })
+
+  it("says when it gave up", () => {
+    asks().mockImplementation(() => ({ status: "unavailable", retry: vi.fn() }))
+    mount({ memory: both })
+    expect(audioButton().getAttribute("aria-label")).toBe("Audio no disponible")
+    expect((audioButton() as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("turns into the play control, with its length, once the audio is ready", () => {
+    asks().mockImplementation(() => ({ status: "processing", retry: vi.fn() }))
+    const { again } = mount({ memory: both })
+    asks().mockImplementation(readyAudio)
+    again({ memory: both })
+    expect(audioButton().getAttribute("aria-label")).toBe("Reproducir audio")
+    expect((audioButton() as HTMLButtonElement).disabled).toBe(false)
+    expect(within(dialog()).getByText("1:05")).toBeTruthy()
+    expect(dialog().querySelector("audio")!.getAttribute("src")).toBe(voice.url)
+  })
+
+  it("retries on its own against the route until it answers, then plays", async () => {
+    vi.useFakeTimers()
+    try {
+      const actual = await vi.importActual<typeof import("./audio-readiness")>("./audio-readiness")
+      asks().mockImplementation(actual.useAudioReadiness)
+      const answers = [
+        new Response(null, { status: 503, headers: { "X-Audio-State": "processing" } }),
+        new Response(null, { status: 206 }),
+      ]
+      const fetchMock = vi.fn(() => Promise.resolve(answers.shift()!))
+      vi.stubGlobal("fetch", fetchMock)
+      mount({ memory: audioOnly })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(within(dialog()).getByRole("button", { name: "Procesando audio…" })).toBeTruthy()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(actual.RETRY_DELAYS_MS[0])
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      fireEvent.click(audioButton())
+      expect(play).toHaveBeenCalledTimes(1)
+      expect(audioButton().getAttribute("aria-label")).toBe("Pausar audio")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps the analyser's source usable: a same-origin audio keeps crossOrigin and feeds the level", () => {
+    mount({ memory: both })
+    const audio = dialog().querySelector("audio")!
+    expect(audio.crossOrigin).toBe("anonymous")
+    expect(audio.getAttribute("src")).toMatch(/^\/api\/memories\//)
   })
 })
 
