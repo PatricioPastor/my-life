@@ -51,7 +51,8 @@ export function readExifWithExifr(file: Blob): Promise<PhotoExif | undefined> {
 
 export const parsePhotoTimeWithExifr: PhotoTimeParser = (file) => readExifWithExifr(file)
 
-const CLOCK = /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?/
+/** The whole value is the clock: anything after the seconds means it is not one (exifr already strips the NUL padding). */
+const CLOCK = /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?$/
 
 /**
  * The camera's wall clock (`YYYY:MM:DD HH:MM:SS`) as the form's date and time, to the minute and with no time zone, or

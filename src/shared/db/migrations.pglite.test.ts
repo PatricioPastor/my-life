@@ -152,6 +152,27 @@ describe("the address", () => {
   })
 })
 
+describe("the time a memory happened", () => {
+  it("is inserted by app_user under row-level security and read back as the same wall clock", async () => {
+    const result = await asVisitor("carol", async (tx) => {
+      const inserted = await tx.query<{ id: string }>(insertMemory("carol", ', "happened_time"', ", '18:42'"))
+      const read = await tx.query<{ happened_time: string | null }>(
+        "SELECT happened_time::text AS happened_time FROM memories WHERE id = $1",
+        [inserted.rows[0].id],
+      )
+      return read.rows
+    })
+    expect(result).toEqual({ ok: true, value: [{ happened_time: "18:42:00" }] })
+  })
+
+  it("cannot be changed by app_user once the memory is saved (no UPDATE grant)", async () => {
+    const result = await asVisitor("carol", (tx) =>
+      tx.query(`UPDATE memories SET happened_time = '07:05' WHERE id = '${PENDING_OWN}'`),
+    )
+    expect(result).toMatchObject({ ok: false, error: { code: "42501" } })
+  })
+})
+
 describe("what app_user can and cannot do", () => {
   it("cannot UPDATE related_memory_id (no grant)", async () => {
     const result = await asVisitor("carol", (tx) =>
