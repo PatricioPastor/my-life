@@ -555,6 +555,61 @@ describe("GlassView player", () => {
       expect(progress().value).toBe("50")
     })
 
+    it("does not seek on a press that only grabs the thumb: nothing moved, nothing to seek to", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 12.6 })
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", pointerId: 1, clientX: 10, clientY: 10 })
+      fireEvent.pointerUp(progress(), { pointerType: "mouse", pointerId: 1, clientX: 10, clientY: 10 })
+      expect(audio.currentTime).toBe(12.6)
+    })
+
+    it("seeks on a click on the track (the value jumped to where it was pressed)", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 5 })
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", pointerId: 1, clientX: 80, clientY: 10 })
+      fireEvent.change(progress(), { target: { value: "45" } })
+      fireEvent.pointerUp(progress(), { pointerType: "mouse", pointerId: 1, clientX: 80, clientY: 10 })
+      expect(audio.currentTime).toBe(45)
+    })
+
+    it("holds the pointer while dragging, so letting go outside the track still ends the drag", () => {
+      mount({ memory: both })
+      const capture = vi.fn()
+      progress().setPointerCapture = capture
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", pointerId: 7, clientX: 10, clientY: 10 })
+      expect(capture).toHaveBeenCalledWith(7)
+    })
+
+    it("seeks and clears the draft when the pointer is lost without a release", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 5 })
+      fireEvent.pointerDown(progress(), { pointerType: "mouse", pointerId: 1, clientX: 10, clientY: 10 })
+      fireEvent.change(progress(), { target: { value: "40" } })
+      fireEvent.lostPointerCapture(progress(), { pointerId: 1 })
+      expect(audio.currentTime).toBe(40)
+      act(() => {
+        audio.dispatchEvent(new Event("timeupdate"))
+      })
+      expect(progress().value).toBe("40")
+    })
+
+    it("drops the draft, without seeking, when the browser cancels the drag (a scroll took the touch)", () => {
+      mount({ memory: both })
+      const audio = dialog().querySelector("audio")!
+      Object.defineProperty(audio, "currentTime", { configurable: true, writable: true, value: 5 })
+      fireEvent.pointerDown(progress(), { pointerType: "touch", pointerId: 1, clientX: 10, clientY: 10 })
+      fireEvent.change(progress(), { target: { value: "40" } })
+      fireEvent.pointerCancel(progress(), { pointerType: "touch", pointerId: 1 })
+      expect(audio.currentTime).toBe(5)
+      act(() => {
+        audio.dispatchEvent(new Event("timeupdate"))
+      })
+      expect(progress().value).toBe("5")
+    })
+
     it("is not a swipe: dragging the scrubber sideways does not turn the page", () => {
       const prev = view("x", "Antes")
       const next = view("y", "Después")
@@ -1028,6 +1083,23 @@ describe("GlassView caption", () => {
       fireEvent.click(button)
       expect(titleOf(LONG).className).toContain("line-clamp-3")
       expect(toggle()!.getAttribute("aria-expanded")).toBe("false")
+    })
+
+    it("offers Ver más when only the text around the title is cut (a short screen), and then scrolls it all", () => {
+      vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) {
+        return this.hasAttribute("data-glass-panel") ? 160 : 40
+      })
+      vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+        return this.hasAttribute("data-glass-panel") ? 90 : 40
+      })
+      mount({ memory: view("s", "Una tarde de lluvia", { place: { lat: 1, lng: 2, name: "Palermo, Buenos Aires" } }) })
+      expect(toggle()!.textContent).toBe("Ver más")
+      fireEvent.click(toggle()!)
+      const panel = caption().querySelector<HTMLElement>("[data-glass-panel]")!
+      expect(panel.getAttribute("data-expanded")).toBe("true")
+      expect(panel.className).toContain("overflow-y-auto")
+      expect(panel.className).toContain("pointer-events-auto")
+      expect(panel.className).toContain("min-h-0")
     })
 
     it("starts collapsed on the next memory", () => {

@@ -70,7 +70,7 @@ describe("SharedMemory", () => {
   it("clips its page instead of hiding the overflow, so it can never be scrolled off center", () => {
     const { container } = render(<SharedMemory memory={memory} shareUrl="https://example.com/m/t" />)
     const main = container.querySelector("main")!
-    expect(main.className).toContain("overflow-clip")
+    expect(main.className).toContain("clip-overflow")
     expect(main.className).not.toContain("overflow-hidden")
   })
 

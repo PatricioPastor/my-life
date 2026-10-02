@@ -8,6 +8,7 @@ import { AudioScrubber } from "./audio-scrubber"
 import { FrequencyBars } from "./frequency-bars"
 import type { LensGeometry } from "./glass-layout"
 import { effectiveVolume, rememberVolume, wantsToggle, type VolumePref } from "./player-model"
+import { useVolume } from "./use-volume"
 import { useAudioGraph } from "./use-audio-level"
 import { VolumeControl } from "./volume-control"
 
@@ -32,6 +33,8 @@ const BARS_HEIGHT = 0.12
 /** The controls under the sphere on a wide screen: as wide as the sphere (and a bit more), within these limits (CSS px). */
 const ROW_MIN = 380
 const ROW_MAX = 480
+/** A player taller than one row (52 px, see `playerHeight`) is the phone's two stacked rows. */
+const STACKED_PLAYER_MIN = 60
 /** On a phone the controls take the width of the screen (less its margins) up to this. */
 const STACK_MAX = 420
 
@@ -60,7 +63,8 @@ export function GlassVoice({
   const [status, setStatus] = useState<VoiceStatus>("idle")
   // How far it has played (whole seconds), for the scrubber and its time.
   const [played, setPlayed] = useState(0)
-  const [volume, setVolume] = useState<VolumePref>(() => rememberVolume())
+  // Read after mount (the server cannot know it), so the first render matches the server markup.
+  const volume = useVolume()
   const root = useRef<HTMLDivElement>(null)
   // The element itself, for the one thing a handler must write to it (the seek).
   const element = useRef<HTMLAudioElement | null>(null)
@@ -106,7 +110,7 @@ export function GlassVoice({
     element.current.currentTime = seconds
     setPlayed(Math.floor(seconds))
   }
-  const changeVolume = (next: VolumePref) => setVolume(rememberVolume(next))
+  const changeVolume = (next: VolumePref) => void rememberVolume(next)
 
   // Space or K plays and pauses from anywhere in the open glass, except where typing or a slider owns the key.
   const playable = open && audio !== null && !failed && !waiting
@@ -127,7 +131,7 @@ export function GlassVoice({
   const { diameter, center } = geometry
   const total = memory.audio.durationMs / 1000
   // On a phone the progress has a row of its own across the screen, and the volume another under it.
-  const stacked = geometry.player > 60
+  const stacked = geometry.player > STACKED_PLAYER_MIN
   const rowWidth = stacked ? STACK_MAX : Math.min(Math.max(Math.round(diameter * 1.25), ROW_MIN), ROW_MAX)
   const playing = status === "playing"
   return (

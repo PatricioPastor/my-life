@@ -885,6 +885,15 @@
   }
 }
 
+/* A box that cannot be scrolled at all, not even by a focus or a scrollIntoView (`overflow: hidden` still scrolls
+   programmatically). `hidden` comes first: a browser without `clip` (Safari before 16) keeps it, the rest take `clip`. */
+@layer components {
+  .clip-overflow {
+    overflow: hidden;
+    overflow: clip;
+  }
+}
+
 /* Onboarding: a full-screen layer above the journey. */
 @layer components {
   .ob {

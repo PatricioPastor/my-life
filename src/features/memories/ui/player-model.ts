@@ -30,7 +30,9 @@ export interface VolumePref {
   muted: boolean
 }
 
-const FULL: VolumePref = { volume: 1, muted: false }
+/** Full volume: what the server renders, and what a visitor with nothing kept starts at. */
+export const FULL_VOLUME: VolumePref = { volume: 1, muted: false }
+const FULL = FULL_VOLUME
 
 /** What actually comes out: the chosen level, or nothing while muted. */
 export const effectiveVolume = (pref: VolumePref): number => (pref.muted ? 0 : pref.volume)
@@ -80,6 +82,13 @@ export function saveVolume(pref: VolumePref, storage: WritableStorage | null = b
 }
 
 let session: VolumePref | null = null
+const listeners = new Set<() => void>()
+
+/** Told when the volume changes (see `useVolume`). Returns the way to stop listening. */
+export function subscribeVolume(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 /**
  * The volume for this page session: read once from storage, then held in memory, so it carries from one memory to the
@@ -89,6 +98,7 @@ export function rememberVolume(next?: VolumePref, storage?: (ReadableStorage & W
   if (next) {
     session = next
     saveVolume(next, storage)
+    listeners.forEach((listener) => listener())
   }
   session ??= loadVolume(storage)
   return session

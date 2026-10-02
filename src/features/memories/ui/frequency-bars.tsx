@@ -36,12 +36,20 @@ export function FrequencyBars({ graph, playing, reduced, className, style }: Fre
 
   useEffect(() => {
     const bars = root.current?.children
-    if (!bars || reduced) return
+    if (!bars) return
     const model = (state.current ??= {
       heights: new Array<number>(BAR_COUNT).fill(0),
       targets: new Float32Array(BAR_COUNT),
       written: new Array<number>(BAR_COUNT).fill(BAR_REST),
     })
+    if (reduced) {
+      // Reduced motion turned on (maybe while it plays): the bars drop to the baseline and stay there, not frozen mid-height.
+      model.heights.fill(0)
+      model.targets.fill(0)
+      model.written.fill(BAR_REST)
+      for (let i = 0; i < BAR_COUNT; i++) (bars[i] as HTMLElement).style.transform = restStyle.transform
+      return
+    }
     let raf = 0
     let last: number | null = null
     let stopped = false

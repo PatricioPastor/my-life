@@ -95,7 +95,7 @@ describe("Journey stage", () => {
   it("clips its overflow instead of hiding it: the zoomed sky and the portal reach past the screen, and a scrollable stage lets a focus scroll it sideways (the memories glass then sits off center)", () => {
     const { container } = render(<Journey />)
     const main = container.querySelector("main")!
-    expect(main.className).toContain("overflow-clip")
+    expect(main.className).toContain("clip-overflow")
     expect(main.className).not.toContain("overflow-hidden")
   })
 })

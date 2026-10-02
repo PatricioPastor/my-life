@@ -26,15 +26,21 @@ export function AudioScrubber({ elapsed, total, disabled, onSeek }: AudioScrubbe
   // Where a drag is, while the pointer is down; the voice keeps playing from its own clock until it is released.
   const [draft, setDraft] = useState<number | null>(null)
   const dragging = useRef(false)
+  // The last value the drag reached (null until the value actually moves): a press that only grabs the thumb has nothing to seek to.
+  const dragged = useRef<number | null>(null)
 
   const max = Math.max(Math.round(total), 1)
   const shown = Math.min(draft ?? elapsed, max)
 
-  const release = (value: number) => {
+  // Ends the drag, once however many events say so. A drag that moved seeks (a click on the track is a drag that jumped
+  // there); a press that did not move, or one the browser cancelled, seeks nowhere.
+  const end = (commit: boolean) => {
     if (!dragging.current) return
+    const value = dragged.current
     dragging.current = false
+    dragged.current = null
     setDraft(null)
-    onSeek(seekTarget(value, total))
+    if (commit && value !== null) onSeek(seekTarget(value, total))
   }
 
   return (
@@ -54,15 +60,25 @@ export function AudioScrubber({ elapsed, total, disabled, onSeek }: AudioScrubbe
         style={{ "--fill": `${fillPercent(shown, max)}%` } as RangeStyle}
         onChange={(event) => {
           const value = Number(event.currentTarget.value)
-          if (dragging.current) setDraft(value)
-          else onSeek(seekTarget(value, total))
+          if (dragging.current) {
+            dragged.current = value
+            setDraft(value)
+          } else onSeek(seekTarget(value, total))
         }}
-        onPointerDown={() => {
+        onPointerDown={(event) => {
           dragging.current = true
+          dragged.current = null
+          // Hold the pointer, so letting go outside the track still reaches this slider and ends the drag.
+          try {
+            event.currentTarget.setPointerCapture?.(event.pointerId)
+          } catch {
+            // The pointer is already gone: its up event will not come, and lostpointercapture ends the drag.
+          }
         }}
-        onPointerUp={(event) => release(Number(event.currentTarget.value))}
-        onPointerCancel={(event) => release(Number(event.currentTarget.value))}
-        onBlur={(event) => release(Number(event.currentTarget.value))}
+        onPointerUp={() => end(true)}
+        onPointerCancel={() => end(false)}
+        onLostPointerCapture={() => end(true)}
+        onBlur={() => end(true)}
       />
       <span className="w-10 shrink-0 text-xs tracking-[0.04em] text-ink-muted tabular-nums">{formatClock(total * 1000)}</span>
     </>

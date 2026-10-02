@@ -788,7 +788,7 @@ describe("MemoriesPlace reduced motion", () => {
 describe("MemoriesPlace stage", () => {
   it("clips its overflow instead of hiding it, so nothing can ever scroll the stage sideways (it moves the sphere off center)", () => {
     render(<MemoriesPlace state={ready()} />)
-    expect(stage().className).toContain("overflow-clip")
+    expect(stage().className).toContain("clip-overflow")
     expect(stage().className).not.toContain("overflow-hidden")
   })
 })
@@ -803,6 +803,24 @@ describe("MemoriesPlace action slot", () => {
     advanceUntil(dialogOpen)
     expect(slot.getAttribute("data-covered")).toBe("true")
     expect(slot.className).toContain("pointer-events-none")
+  })
+
+  it("is inert while covered: out of the tab order and out of the accessibility tree, and back after", () => {
+    render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
+    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    expect(slot.hasAttribute("inert")).toBe(false)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    expect(slot.hasAttribute("inert")).toBe(true)
+  })
+
+  it("vanishes at once when the glass opens and only returns after the glass has gone, so it never overlaps Cerrar", () => {
+    render(<MemoriesPlace state={three} action={<button type="button">Contribuir</button>} />)
+    const slot = screen.getByRole("button", { name: "Contribuir" }).parentElement!
+    // Covered: no fade, no delay. Uncovered: a fade that waits out the glass's own 200 ms exit.
+    expect(slot.className).toContain("data-[covered=true]:duration-0")
+    expect(slot.className).toContain("data-[covered=true]:delay-0")
+    expect(slot.className).toMatch(/(^|\s)delay-\[?2\d\d/)
   })
 
   it("puts the control in the top bar, on the right, at every size", () => {

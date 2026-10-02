@@ -128,22 +128,26 @@ function GlassCaption({
   const expanded = expandedFor === memory.id
   const clipped = clippedFor === memory.id
   const title = useRef<HTMLHeadingElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
 
-  // Whether the title is cut by its line clamp. Only measured while collapsed (open, it has no clamp to measure), and
-  // again whenever its box changes (a rotation, a resize, the font arriving).
+  // Whether something is cut: the title by its line clamp, or the whole text (title, date, place, views) by the room
+  // under the sphere, where nothing scrolls until it is open. Only measured while collapsed (open, the panel scrolls),
+  // and again whenever a box changes (a rotation, a resize, the font arriving).
   useLayoutEffect(() => {
-    const el = title.current
-    if (!el || expandedFor === memory.id) return
+    const boxes: HTMLElement[] = []
+    if (title.current) boxes.push(title.current)
+    if (panel.current) boxes.push(panel.current)
+    if (boxes.length === 0 || expandedFor === memory.id) return
     const measure = () => {
-      const cut = el.scrollHeight > el.clientHeight + 1
+      const cut = boxes.some((el) => el.scrollHeight > el.clientHeight + 1)
       setClippedFor((now) => (cut ? memory.id : now === memory.id ? null : now))
     }
     measure()
     if (typeof ResizeObserver === "undefined") return
     const observer = new ResizeObserver(measure)
-    observer.observe(el)
+    boxes.forEach((el) => observer.observe(el))
     return () => observer.disconnect()
-  }, [memory.id, memory.caption, expandedFor])
+  }, [memory.id, memory.caption, memory.place, expandedFor])
 
   const prevButton = (
     <button
@@ -217,6 +221,7 @@ function GlassCaption({
       }
     >
       <div
+        ref={panel}
         data-glass-panel
         data-expanded={expanded || undefined}
         // A drag on the text that is open scrolls it; the swipe only turns the page on a mostly horizontal one.

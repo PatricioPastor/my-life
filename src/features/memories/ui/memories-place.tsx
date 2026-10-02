@@ -220,7 +220,7 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView }: M
       tabIndex={0}
       data-approach={approach.state.phase}
       // Clipped, not just hidden: a hidden box still scrolls (a focus, a scrollIntoView), and the whole glass would slide with it.
-      className="mem-stage absolute inset-0 overflow-clip outline-none"
+      className="mem-stage absolute inset-0 clip-overflow outline-none"
       onKeyDown={onKeyDown}
     >
       <div data-void data-reduced={reduced} aria-hidden="true" className="mem-void absolute inset-0 overflow-hidden">
@@ -298,7 +298,11 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView }: M
           data-hud
           // The glass has its own top bar (Cerrar is where this sits): the control steps aside while a memory is open.
           data-covered={current.phase !== "idle" || undefined}
-          className={`absolute flex h-12 items-center transition-opacity duration-200 data-[covered=true]:pointer-events-none data-[covered=true]:opacity-0 ${BAR_TOP} ${BAR_RIGHT}`}
+          // Out of the tab order and the accessibility tree too, not only out of sight.
+          inert={current.phase !== "idle"}
+          // It vanishes at once when the glass opens, and fades back only after the glass's own exit (200 ms), so the
+          // two controls are never on screen together.
+          className={`absolute flex h-12 items-center transition-opacity delay-200 duration-200 data-[covered=true]:pointer-events-none data-[covered=true]:opacity-0 data-[covered=true]:delay-0 data-[covered=true]:duration-0 ${BAR_TOP} ${BAR_RIGHT}`}
         >
           {typeof action === "function" ? action(root) : action}
         </div>
