@@ -1784,3 +1784,42 @@ describe("GlassView contribute control", () => {
     expect(buttons.indexOf(button())).toBe(buttons.indexOf(within(dialog()).getByRole("button", { name: "Compartir" })) + 1)
   })
 })
+
+describe("GlassView place in the caption", () => {
+  const at = (name: string | null, address: string | null) => ({ lat: -34.59, lng: -58.43, name, address })
+  const meta = () => dialog().querySelector("[data-glass-text]")!
+
+  it("shows the place name, then the street address under it", () => {
+    mount({ memory: view("p", "La casa nueva", { place: at("UOCRA", "Av. Rivadavia 1234, Junín") }) })
+    const name = within(dialog()).getByText("UOCRA")
+    const address = within(dialog()).getByText("Av. Rivadavia 1234, Junín")
+    expect(name.compareDocumentPosition(address) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(meta().contains(address)).toBe(true)
+  })
+
+  it("shows only the name when the street is unknown, and only the address when there is no name", () => {
+    mount({ memory: view("p", "Uno", { place: at("Palermo, Buenos Aires", null) }) })
+    expect(within(dialog()).getByText("Palermo, Buenos Aires")).toBeTruthy()
+    expect(dialog().querySelector("[data-glass-address]")).toBeNull()
+    cleanup()
+    mount({ memory: view("p", "Dos", { place: at(null, "Honduras 4000, Buenos Aires") }) })
+    expect(within(dialog()).getByText("Honduras 4000, Buenos Aires")).toBeTruthy()
+  })
+
+  it("does not repeat the same thing twice", () => {
+    mount({ memory: view("p", "Tres", { place: at("Plaza Italia", "plaza italia") }) })
+    expect(within(dialog()).getAllByText(/plaza italia/i)).toHaveLength(1)
+  })
+
+  it("never shows the coordinates", () => {
+    mount({ memory: view("p", "Cuatro", { place: at("UOCRA", "Av. Rivadavia 1234, Junín") }) })
+    expect(dialog().textContent).not.toMatch(/34\.59|58\.43/)
+  })
+
+  it("keeps the address at 12 px or more, in the muted ink", () => {
+    mount({ memory: view("p", "Cinco", { place: at("UOCRA", "Av. Rivadavia 1234, Junín") }) })
+    const address = within(dialog()).getByText("Av. Rivadavia 1234, Junín")
+    expect(address.className).toContain("text-xs")
+    expect(address.className).toContain("text-ink-muted")
+  })
+})

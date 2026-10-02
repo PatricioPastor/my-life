@@ -7,10 +7,10 @@ import { cleanPlaceName } from "./place-name"
  *
  * Formats (assumptions: these are the documented and commonly seen shapes; Google does not publish a stable URL
  * grammar, so anything else is "no location" rather than a guess):
- *  - `/maps/@<lat>,<lng>,<zoom>z`, the viewport centre;
+ *  - `...!3d<lat>!4d<lng>` in the `data=` part, the pin itself: always preferred over `@`, which is only the viewport;
+ *  - `?q=<lat>,<lng>`, `?query=<lat>,<lng>` (the `api=1` search form) and `?ll=<lat>,<lng>`: also pins, in that order;
+ *  - `/maps/@<lat>,<lng>,<zoom>z`, the viewport centre: the last resort, when the link carries no pin;
  *  - `/maps/place/<Name>/@<lat>,<lng>,...`, with the name URL-decoded (`+` is a space);
- *  - `...!3d<lat>!4d<lng>` in the `data=` part, the pin itself: preferred over `@`, which is only the viewport;
- *  - `?q=<lat>,<lng>`, `?query=<lat>,<lng>` (the `api=1` search form) and `?ll=<lat>,<lng>`;
  *  - `maps.google.com` and country domains (`google.com.ar`, `google.co.uk`, `google.es`...).
  */
 
@@ -97,12 +97,14 @@ export function parseMapsLink(input: unknown): MapsLinkParse {
   const candidates: Candidate[] = []
   const pin = PIN.exec(haystack)
   if (pin) candidates.push([pin[1], pin[2]])
-  const viewport = VIEWPORT.exec(haystack)
-  if (viewport) candidates.push([viewport[1], viewport[2]])
+  // Then the pins the query string carries (`q`, `query`, `ll`), and only last the `@` viewport: it is where the map is
+  // centred, which is near the place but is not the place.
   for (const key of QUERY_KEYS) {
     const pair = PAIR.exec(url.searchParams.get(key) ?? "")
     if (pair) candidates.push([pair[1], pair[2]])
   }
+  const viewport = VIEWPORT.exec(haystack)
+  if (viewport) candidates.push([viewport[1], viewport[2]])
 
   for (const [latText, lngText] of candidates) {
     const lat = Number(latText)

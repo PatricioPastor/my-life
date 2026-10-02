@@ -246,6 +246,12 @@ function GlassCaption({
             {formatMemoryDate(memory.happenedOn)}
           </p>
           {memory.place?.name && <p className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted">{memory.place.name}</p>}
+          {/* The street address, when it says more than the name does (never the same thing twice). */}
+          {memory.place?.address && !sameText(memory.place.address, memory.place.name) && (
+            <p data-glass-address className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted [overflow-wrap:anywhere]">
+              {memory.place.address}
+            </p>
+          )}
           {/* Plain, quiet text: not a control, and `aria-live="off"` so the count catching up after an open is not announced. */}
           {views && (
             <p data-glass-views aria-live="off" className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted tabular-nums">
@@ -269,6 +275,9 @@ function GlassCaption({
 }
 
 const TEXT_ID = "memory-glass-text"
+
+/** Whether two lines of text say the same thing (ignoring case and spacing). */
+const sameText = (a: string, b: string | null) => b !== null && a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /** What a guest has instead of the journey's way back: "Universo" on top, and a quiet way in below. Both go to the start. */
 function GuestExits({ onExit }: { onExit: () => void }) {

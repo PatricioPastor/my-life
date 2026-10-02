@@ -1,31 +1,52 @@
 import { describe, expect, it, vi } from "vitest"
 import { resolveMapsLinkWith, resolveMapsLocation, type ResolveLinkDeps } from "./resolve-maps-link"
+import type { PlaceDescription } from "./reverse-geocoder"
+
+const DESCRIBED: PlaceDescription = { label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }
 
 const FULL = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z/data=!3d-34.58123!4d-58.42087"
 
 function make(over: Partial<ResolveLinkDeps> = {}) {
-  const reverse = vi.fn<(lat: number, lng: number) => Promise<string | null>>(async () => "Palermo, Buenos Aires")
+  const reverse = vi.fn<(lat: number, lng: number) => Promise<PlaceDescription | null>>(async () => DESCRIBED)
   const follow = vi.fn<ResolveLinkDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const deps: ResolveLinkDeps = { follow, geocoder: () => ({ reverse }), log: vi.fn(), ...over }
   return { deps, reverse, follow }
 }
 
 describe("resolveMapsLocation", () => {
-  it("keeps the exact coordinates (the pin wins over the viewport) and takes the label from the URL", async () => {
+  it("keeps the exact pin (it wins over the viewport), keeps the URL's name as the label, and adds the street address of the pin", async () => {
     const { deps, reverse } = make()
-    expect(await resolveMapsLocation(FULL, deps)).toEqual({ ok: true, lat: -34.58123, lng: -58.42087, label: "Plaza Italia" })
-    expect(reverse).not.toHaveBeenCalled()
+    expect(await resolveMapsLocation(FULL, deps)).toEqual({
+      ok: true,
+      lat: -34.58123,
+      lng: -58.42087,
+      label: "Plaza Italia",
+      address: "Honduras 4000, Buenos Aires",
+    })
+    expect(reverse).toHaveBeenCalledTimes(1)
+    expect(reverse).toHaveBeenCalledWith(-34.58123, -58.42087)
   })
 
-  it("reverse-geocodes the rounded position when the URL has no name", async () => {
+  it("geocodes the pin, not the viewport centre, when a link carries both", async () => {
+    const { deps, reverse } = make()
+    await resolveMapsLocation(
+      "https://www.google.com/maps/place/UOCRA/@-34.5871224,-58.4302571,17z/data=!3m1!4b1!4m6!3m5!1s0x1:0x2!8m2!3d-34.5869912!4d-58.4298013",
+      deps,
+    )
+    expect(reverse).toHaveBeenCalledWith(-34.586991, -58.429801)
+  })
+
+  it("names a nameless link by reverse geocoding its exact position, and takes the address from the same answer", async () => {
     const { deps, reverse } = make()
     expect(await resolveMapsLocation("https://www.google.com/maps/@-34.5937,-58.4251,15z", deps)).toEqual({
       ok: true,
       lat: -34.5937,
       lng: -58.4251,
       label: "Palermo, Buenos Aires",
+      address: "Honduras 4000, Buenos Aires",
     })
-    expect(reverse).toHaveBeenCalledWith(-34.59, -58.43)
+    expect(reverse).toHaveBeenCalledTimes(1)
+    expect(reverse).toHaveBeenCalledWith(-34.5937, -58.4251)
   })
 
   it("trims the stored position to 6 decimals", async () => {
@@ -36,19 +57,20 @@ describe("resolveMapsLocation", () => {
     })
   })
 
-  it("never sends the exact coordinates to the geocoder", async () => {
+  it("sends the geocoder the position trimmed to the stored 6 decimals", async () => {
     const { deps, reverse } = make()
-    await resolveMapsLocation("https://www.google.com/maps/@-34.5937,-58.4251,15z", deps)
-    expect(JSON.stringify(reverse.mock.calls)).not.toMatch(/34\.5937|58\.4251/)
+    await resolveMapsLocation("https://www.google.com/maps/@-34.59371234,-58.42509876,15z", deps)
+    expect(reverse).toHaveBeenCalledWith(-34.593712, -58.425099)
   })
 
-  it("has a null label, but still resolves, when geocoding finds nothing or throws", async () => {
+  it("has no label and no address, but still resolves, when geocoding finds nothing or throws", async () => {
     const none = make({ geocoder: () => ({ reverse: async () => null }) })
     expect(await resolveMapsLocation("https://www.google.com/maps/@1.5,2.5,3z", none.deps)).toEqual({
       ok: true,
       lat: 1.5,
       lng: 2.5,
       label: null,
+      address: null,
     })
     const boom = make({
       geocoder: () => {
@@ -69,6 +91,7 @@ describe("resolveMapsLocation", () => {
       lat: -34.58123,
       lng: -58.42087,
       label: "Plaza Italia",
+      address: "Honduras 4000, Buenos Aires",
     })
     expect(follow).toHaveBeenCalledWith("https://maps.app.goo.gl/AbCd")
   })
@@ -127,10 +150,11 @@ describe("resolveMapsLocation", () => {
     expect(await resolveMapsLocation(42, deps)).toEqual({ ok: false, reason: "not_maps_link" })
   })
 
-  it("trims a long label to 120 characters", async () => {
-    const { deps } = make({ geocoder: () => ({ reverse: async () => "x".repeat(300) }) })
+  it("trims a long label to 120 characters and a long address to 200", async () => {
+    const { deps } = make({ geocoder: () => ({ reverse: async () => ({ label: "x".repeat(300), address: "y".repeat(300) }) }) })
     const out = await resolveMapsLocation("https://www.google.com/maps/@1.5,2.5,3z", deps)
     expect(out.ok && [...out.label!].length).toBe(120)
+    expect(out.ok && [...out.address!].length).toBe(200)
   })
 })
 
@@ -147,9 +171,15 @@ describe("resolveMapsLinkWith (the server action)", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("returns the position and the label", async () => {
+  it("returns the position, the label and the address", async () => {
     const { deps } = withSession()
-    expect(await resolveMapsLinkWith(deps, { url: FULL })).toEqual({ ok: true, lat: -34.58123, lng: -58.42087, label: "Plaza Italia" })
+    expect(await resolveMapsLinkWith(deps, { url: FULL })).toEqual({
+      ok: true,
+      lat: -34.58123,
+      lng: -58.42087,
+      label: "Plaza Italia",
+      address: "Honduras 4000, Buenos Aires",
+    })
   })
 
   it("passes the typed failures through", async () => {

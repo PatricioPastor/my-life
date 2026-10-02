@@ -1,7 +1,7 @@
 import type { LocationSource } from "../photo-details"
-import { roundCoordinate } from "./coordinates"
-import { cleanPlaceName } from "./place-name"
+import { cleanPlaceAddress, cleanPlaceName } from "./place-name"
 import { resolveMapsLocation, type ResolveLinkDeps } from "./resolve-maps-link"
+import type { PlaceDescription } from "./reverse-geocoder"
 
 /** What a memory stores about its place: the exact position. All null, or latitude, longitude and source together. */
 export interface PlaceColumns {
@@ -51,20 +51,23 @@ function copyOf(related: PlaceColumns | null | undefined): PlaceColumns {
   }
 }
 
+const NO_DESCRIPTION: PlaceDescription = { label: null, address: null }
+
 /**
- * The place name for a position, or null. The geocoder is a third party: it only ever receives the position rounded
- * to 2 decimals (about 1 km), whatever precision is passed in. A geocoding failure never throws: it only drops the name.
+ * The name and the street address of a position. The geocoder is asked about the exact position (the visitor consented
+ * to keeping the exact place and its address). A geocoding failure never throws: it only drops the name and the address.
  */
-export async function nameOf(
+export async function describeOf(
   deps: Pick<DecidePlaceDeps, "geocoder" | "log">,
   latitude: number,
   longitude: number,
-): Promise<string | null> {
+): Promise<PlaceDescription> {
   try {
-    return cleanPlaceName(await deps.geocoder().reverse(roundCoordinate(latitude), roundCoordinate(longitude)))
+    const found = await deps.geocoder().reverse(latitude, longitude)
+    return { label: cleanPlaceName(found?.label), address: cleanPlaceAddress(found?.address) }
   } catch (error) {
     deps.log(`Naming a place failed (${error instanceof Error ? error.name : "unknown"}).`)
-    return null
+    return NO_DESCRIPTION
   }
 }
 
@@ -90,17 +93,18 @@ export async function decidePlace(input: DecidePlaceInput, deps: DecidePlaceDeps
       longitude: link.lng,
       locationSource: "link",
       placeName: cleanPlaceName(link.label),
-      placeAddress: null,
+      placeAddress: cleanPlaceAddress(link.address),
     }
   }
 
   if (!input.photo) return inherited
   const { latitude, longitude } = input.photo
+  const described = await describeOf(deps, latitude, longitude)
   return {
     latitude,
     longitude,
     locationSource: "photo",
-    placeName: await nameOf(deps, latitude, longitude),
-    placeAddress: null,
+    placeName: described.label,
+    placeAddress: described.address,
   }
 }

@@ -80,7 +80,10 @@ function setup(
   over: Partial<CreateMemoryDeps> = {},
   opts: { recent?: number; info?: AssetInfo | null; audio?: AudioInfo | null } = {},
 ) {
-  const reverse = vi.fn<ReverseGeocoder["reverse"]>(async () => "Palermo, Buenos Aires")
+  const reverse = vi.fn<ReverseGeocoder["reverse"]>(async () => ({
+    label: "Palermo, Buenos Aires",
+    address: "Honduras 4000, Buenos Aires",
+  }))
   const follow = vi.fn<CreateMemoryDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(),
@@ -417,7 +420,7 @@ describe("createMemoryWith: photo details", () => {
 })
 
 describe("createMemoryWith: the place", () => {
-  it("stores the photo position, source photo and geocoded name when the visitor opted in", async () => {
+  it("stores the photo position, source photo, geocoded name and street address when the visitor opted in", async () => {
     const { full, repository, reverse } = setup({}, { info: photo() })
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
@@ -426,16 +429,17 @@ describe("createMemoryWith: the place", () => {
       longitude: -74.006,
       locationSource: "photo",
       placeName: "Palermo, Buenos Aires",
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    // The name is looked up from a rounded position (2 decimals), never the exact one.
-    expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
+    // The address needs the exact position: that is what the geocoder is asked about.
+    expect(reverse).toHaveBeenCalledWith(40.7128, -74.006)
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
 
-  it("never sends the exact coordinates to the geocoder", async () => {
+  it("never geocodes without the visitor's consent", async () => {
     const { full, reverse } = setup({}, { info: photo() })
-    await createMemoryWith(full, input({ shareLocation: true }))
-    expect(JSON.stringify(reverse.mock.calls)).not.toMatch(/40\.712|74\.006/)
+    await createMemoryWith(full, input({ shareLocation: false }))
+    expect(reverse).not.toHaveBeenCalled()
   })
 
   it("does not geocode, and stores no place, without consent", async () => {
@@ -497,12 +501,14 @@ describe("createMemoryWith: a Google Maps link", () => {
       longitude: -58.4208,
       locationSource: "link",
       placeName: "Plaza Italia",
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    expect(reverse).not.toHaveBeenCalled()
+    // The URL's name stays the name; the address is geocoded from the exact pin.
+    expect(reverse).toHaveBeenCalledWith(-34.581, -58.4208)
     expect(result).toMatchObject({ ok: true, locationSaved: true })
   })
 
-  it("stores the exact link position and names a nameless link by reverse geocoding its rounded position", async () => {
+  it("stores the exact link position and names a nameless link by reverse geocoding its exact position", async () => {
     const { full, repository, reverse } = setup()
     await createMemoryWith(full, input({ shareLocation: true, mapsUrl: NAMELESS }))
     const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
@@ -511,8 +517,9 @@ describe("createMemoryWith: a Google Maps link", () => {
       longitude: -74.006009,
       locationSource: "link",
       placeName: "Palermo, Buenos Aires",
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
+    expect(reverse).toHaveBeenCalledWith(40.712812, -74.006009)
   })
 
   it("resolves a short link on the server", async () => {

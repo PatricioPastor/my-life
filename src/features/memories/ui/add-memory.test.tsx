@@ -58,9 +58,9 @@ function setup(over: Partial<AddMemoryProps> = {}) {
   const create = vi.fn<AddMemoryProps["create"]>(async () => ({ ok: true, memory: MEMORY, locationSaved: false }))
   // The photo has no GPS unless a test says so; the answer is what exifr reports, with its exact decimals.
   const parseGps = vi.fn(async (): Promise<{ latitude: number; longitude: number } | undefined> => undefined)
-  const suggest = vi.fn(async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo, Buenos Aires" }))
+  const suggest = vi.fn(async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }))
   const resolveLink = vi.fn(
-    async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }),
+    async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: "Av. Rivadavia 1234, Buenos Aires" }),
   )
   const readPalette = vi.fn(async (): Promise<PhotoPalette> => ({ colors: SWATCHES, fromPhoto: true }))
   const onCreated = vi.fn()
@@ -448,7 +448,7 @@ describe("AddMemory closing", () => {
 })
 
 describe("AddMemory place section", () => {
-  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar dónde se sacó la foto" }) as HTMLInputElement
+  const checkbox = () => screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
   const HELP = "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo."
   // What exifr reports for the photo: exact values, more than 2 decimals.
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
@@ -467,7 +467,40 @@ describe("AddMemory place section", () => {
     expect(screen.queryByRole("checkbox")).toBeNull()
   })
 
-  it("sends the exact position to the suggestion call (the server rounds it before geocoding)", async () => {
+  it("says plainly that the exact place and its address will be seen by the people who can enter", () => {
+    expect(PLACE_COPY.consent).toBe("Guardar el lugar exacto y su dirección. Lo verán las personas que pueden entrar.")
+  })
+
+  it("shows the street address under the suggested place", async () => {
+    const { parseGps } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(screen.getByText("Honduras 4000, Buenos Aires")).toBeTruthy()
+  })
+
+  it("shows no address line when the street is unknown", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    suggest.mockResolvedValue({ ok: true, label: "Palermo, Buenos Aires", address: null })
+    pickWithGps()
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(document.getElementById("memory-place-address")).toBeNull()
+  })
+
+  it("shows the address of a pasted link under the link's own name", async () => {
+    const { parseGps, resolveLink } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    resolveLink.mockResolvedValue({ ok: true, lat: -34.58, lng: -58.42, label: "UOCRA", address: "Av. Rivadavia 1234, Junín" })
+    fireEvent.change(screen.getByRole("textbox", { name: /link de Google Maps/ }), { target: { value: "https://maps.app.goo.gl/AbCd" } })
+    expect(await screen.findByText("Según el link: UOCRA")).toBeTruthy()
+    expect(screen.getByText("Av. Rivadavia 1234, Junín")).toBeTruthy()
+    expect(screen.queryByText("Honduras 4000, Buenos Aires")).toBeNull()
+  })
+
+  it("sends the exact position to the suggestion call (the server geocodes exactly it, to the stored 6 decimals)", async () => {
     const { suggest, parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
@@ -488,7 +521,7 @@ describe("AddMemory place section", () => {
   it("shows the coordinates (2 decimals), and does not block, when the place has no name", async () => {
     const { parseGps, suggest, create } = setup()
     parseGps.mockResolvedValue(EXACT)
-    suggest.mockResolvedValue({ ok: true, label: null })
+    suggest.mockResolvedValue({ ok: true, label: null, address: null })
     open()
     pick(photo())
     fill()
@@ -508,11 +541,11 @@ describe("AddMemory place section", () => {
   it("shows a loading state while the place is being named", async () => {
     const { parseGps, suggest } = setup()
     parseGps.mockResolvedValue(EXACT)
-    let finish!: (r: { ok: true; label: string }) => void
+    let finish!: (r: SuggestPlaceResult) => void
     suggest.mockImplementation(() => new Promise((resolve) => (finish = resolve)))
     pickWithGps()
     expect(await screen.findByText(PLACE_COPY.naming)).toBeTruthy()
-    await act(async () => finish({ ok: true, label: "Palermo, Buenos Aires" }))
+    await act(async () => finish({ ok: true, label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }))
     expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
   })
 
@@ -573,7 +606,7 @@ describe("AddMemory place section", () => {
   it("starts over, unchecked, when another photo is picked, and ignores a slow answer for the old one", async () => {
     const { parseGps, suggest } = setup()
     parseGps.mockResolvedValue(EXACT)
-    let finishFirst!: (r: { ok: true; label: string }) => void
+    let finishFirst!: (r: SuggestPlaceResult) => void
     suggest.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
     open()
     pick(photo({ name: "uno.jpg" }))
@@ -582,7 +615,7 @@ describe("AddMemory place section", () => {
     parseGps.mockResolvedValue(undefined)
     pick(photo({ name: "dos.jpg" }))
     expect(await screen.findByText(PLACE_COPY.noGps)).toBeTruthy()
-    await act(async () => finishFirst({ ok: true, label: "Palermo, Buenos Aires" }))
+    await act(async () => finishFirst({ ok: true, label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }))
     expect(screen.queryByText("Parece que fue en Palermo, Buenos Aires")).toBeNull()
     expect(screen.getByText(PLACE_COPY.noGps)).toBeTruthy()
   })
@@ -639,7 +672,7 @@ describe("AddMemory place section", () => {
 describe("AddMemory Google Maps link", () => {
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
   const LINK = "https://maps.app.goo.gl/AbCd"
-  const checkbox = () => screen.getByRole("checkbox", { name: "Guardar dónde se sacó la foto" }) as HTMLInputElement
+  const checkbox = () => screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
   const input = () => screen.getByRole("textbox", { name: /link de Google Maps/ }) as HTMLInputElement
   const paste = (value: string) => fireEvent.change(input(), { target: { value } })
 
@@ -729,18 +762,18 @@ describe("AddMemory Google Maps link", () => {
 
   it("shows the rounded coordinates when the link has no name", async () => {
     const { resolveLink } = await openWithoutGps()
-    resolveLink.mockResolvedValue({ ok: true, lat: 40.71, lng: -74.01, label: null })
+    resolveLink.mockResolvedValue({ ok: true, lat: 40.71, lng: -74.01, label: null, address: null })
     paste(LINK)
     expect(await screen.findByText("Cerca de 40.71, -74.01")).toBeTruthy()
   })
 
   it("shows a loading state while the link is read", async () => {
     const { resolveLink } = await openWithGps()
-    let finish!: (r: { ok: true; lat: number; lng: number; label: string }) => void
+    let finish!: (r: ResolveMapsLinkResult) => void
     resolveLink.mockImplementation(() => new Promise((resolve) => (finish = resolve)))
     paste(LINK)
     expect(await screen.findByText(PLACE_COPY.linkReading)).toBeTruthy()
-    await act(async () => finish({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }))
+    await act(async () => finish({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: "Av. Rivadavia 1234, Buenos Aires" }))
     expect(await screen.findByText("Según el link: Plaza Italia")).toBeTruthy()
     expect(screen.queryByText(PLACE_COPY.linkReading)).toBeNull()
   })
@@ -795,14 +828,14 @@ describe("AddMemory Google Maps link", () => {
 
   it("keeps only the answer for the latest link", async () => {
     const { resolveLink } = await openWithGps()
-    let finishFirst!: (r: { ok: true; lat: number; lng: number; label: string }) => void
+    let finishFirst!: (r: ResolveMapsLinkResult) => void
     resolveLink.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
     paste("https://maps.app.goo.gl/First")
     await waitFor(() => expect(resolveLink).toHaveBeenCalledTimes(1))
-    resolveLink.mockResolvedValueOnce({ ok: true, lat: 40.71, lng: -74.01, label: "Nueva York" })
+    resolveLink.mockResolvedValueOnce({ ok: true, lat: 40.71, lng: -74.01, label: "Nueva York", address: null })
     paste("https://maps.app.goo.gl/Second")
     expect(await screen.findByText("Según el link: Nueva York")).toBeTruthy()
-    await act(async () => finishFirst({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" }))
+    await act(async () => finishFirst({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: "Av. Rivadavia 1234, Buenos Aires" }))
     expect(screen.queryByText("Según el link: Plaza Italia")).toBeNull()
     expect(screen.getByText("Según el link: Nueva York")).toBeTruthy()
   })

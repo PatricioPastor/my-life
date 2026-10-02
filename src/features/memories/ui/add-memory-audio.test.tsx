@@ -110,8 +110,8 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           create={create}
           upload={upload}
           parseGps={async () => undefined}
-          suggest={async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo" })}
-          resolveLink={async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia" })}
+          suggest={async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo", address: null })}
+          resolveLink={async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: null })}
           readPalette={readPalette}
           readAudioDuration={readAudioDuration}
           levelEnv={{ createContext: () => null }}

@@ -1,16 +1,18 @@
 import { describe, expect, it, vi } from "vitest"
 import { decidePlace, type DecidePlaceDeps } from "./decide-place"
+import type { PlaceDescription } from "./reverse-geocoder"
 
 const NONE = { latitude: null, longitude: null, locationSource: null, placeName: null, placeAddress: null }
-// Exact, as read from the photo's EXIF: Nominatim must only ever see it rounded to 2 decimals.
+// Exact, as read from the photo's EXIF: the geocoder gets exactly it (6 decimals), because the address needs it.
 const PHOTO = { latitude: -34.593712, longitude: -58.421589 }
 const LINK = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z"
 const LINK_NO_NAME = "https://www.google.com/maps/@40.712812,-74.006009,12z"
+const DESCRIBED: PlaceDescription = { label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }
 
-const make = (label: string | null | Error = "Palermo, Buenos Aires") => {
-  const reverse = vi.fn<(lat: number, lng: number) => Promise<string | null>>(async () => {
-    if (label instanceof Error) throw label
-    return label
+const make = (answer: PlaceDescription | null | Error = DESCRIBED) => {
+  const reverse = vi.fn<(lat: number, lng: number) => Promise<PlaceDescription | null>>(async () => {
+    if (answer instanceof Error) throw answer
+    return answer
   })
   const follow = vi.fn<DecidePlaceDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const deps: DecidePlaceDeps = { geocoder: () => ({ reverse }), follow, log: vi.fn() }
@@ -30,26 +32,40 @@ describe("decidePlace: no link (the photo GPS path)", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("stores the exact photo position, the source photo and the name geocoded from a rounded position", async () => {
+  it("stores the exact photo position, the source photo, the name and the street address", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toEqual({
       latitude: -34.593712,
       longitude: -58.421589,
       locationSource: "photo",
       placeName: "Palermo, Buenos Aires",
-      placeAddress: null,
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    // Nominatim is a third party: it only ever receives 2 decimals.
+    // The address needs the exact position: that is what the geocoder is asked about.
     expect(reverse).toHaveBeenCalledTimes(1)
-    expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
+    expect(reverse).toHaveBeenCalledWith(-34.593712, -58.421589)
   })
 
-  it("keeps the location, with no name, when geocoding finds nothing", async () => {
+  it("keeps the location, with no name and no address, when geocoding finds nothing", async () => {
     const { deps } = make(null)
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toMatchObject({
       latitude: -34.593712,
       locationSource: "photo",
       placeName: null,
+      placeAddress: null,
+    })
+  })
+
+  it("keeps the name when there is no street, and the address when there is no area", async () => {
+    const onlyName = make({ label: "Palermo, Buenos Aires", address: null })
+    expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, onlyName.deps)).toMatchObject({
+      placeName: "Palermo, Buenos Aires",
+      placeAddress: null,
+    })
+    const onlyAddress = make({ label: null, address: "Honduras 4000" })
+    expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, onlyAddress.deps)).toMatchObject({
+      placeName: null,
+      placeAddress: "Honduras 4000",
     })
   })
 
@@ -58,14 +74,16 @@ describe("decidePlace: no link (the photo GPS path)", () => {
     expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)).toMatchObject({
       latitude: -34.593712,
       placeName: null,
+      placeAddress: null,
     })
     expect(JSON.stringify(vi.mocked(deps.log).mock.calls)).not.toMatch(/34\.59/)
   })
 
-  it("caps the stored name at 120 characters", async () => {
-    const { deps } = make("x".repeat(300))
+  it("caps the stored name at 120 characters and the address at 200", async () => {
+    const { deps } = make({ label: "x".repeat(300), address: "y".repeat(300) })
     const out = await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO }, deps)
     expect([...out.placeName!]).toHaveLength(120)
+    expect([...out.placeAddress!]).toHaveLength(200)
   })
 
   it("only an explicit true opts in", async () => {
@@ -81,28 +99,30 @@ describe("decidePlace: no link (the photo GPS path)", () => {
 })
 
 describe("decidePlace: a Google Maps link", () => {
-  it("stores the link position, the source link and the name from the URL", async () => {
+  it("stores the link position and source; the name is the one in the URL and the address is geocoded from the exact pin", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK, photo: null }, deps)).toEqual({
       latitude: -34.581,
       longitude: -58.4208,
       locationSource: "link",
       placeName: "Plaza Italia",
-      placeAddress: null,
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    expect(reverse).not.toHaveBeenCalled()
+    expect(reverse).toHaveBeenCalledTimes(1)
+    expect(reverse).toHaveBeenCalledWith(-34.581, -58.4208)
   })
 
-  it("reverse-geocodes the rounded position when the link carries no name", async () => {
+  it("names a nameless link by reverse geocoding its exact position, and takes the address from the same answer", async () => {
     const { deps, reverse } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK_NO_NAME, photo: null }, deps)).toEqual({
       latitude: 40.712812,
       longitude: -74.006009,
       locationSource: "link",
       placeName: "Palermo, Buenos Aires",
-      placeAddress: null,
+      placeAddress: "Honduras 4000, Buenos Aires",
     })
-    expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
+    expect(reverse).toHaveBeenCalledTimes(1)
+    expect(reverse).toHaveBeenCalledWith(40.712812, -74.006009)
   })
 
   it("wins over the photo position", async () => {
@@ -123,12 +143,18 @@ describe("decidePlace: a Google Maps link", () => {
     })
   })
 
-  it("keeps the location, with no name, when naming the link position fails", async () => {
+  it("keeps the location and the URL's name, with no address, when geocoding fails", async () => {
     const { deps } = make(new Error("down"))
+    expect(await decidePlace({ shareLocation: true, mapsUrl: LINK, photo: null }, deps)).toMatchObject({
+      latitude: -34.581,
+      locationSource: "link",
+      placeName: "Plaza Italia",
+      placeAddress: null,
+    })
     expect(await decidePlace({ shareLocation: true, mapsUrl: LINK_NO_NAME, photo: null }, deps)).toMatchObject({
       latitude: 40.712812,
-      locationSource: "link",
       placeName: null,
+      placeAddress: null,
     })
   })
 

@@ -1,6 +1,6 @@
 import "server-only"
-import { isApproximatePosition } from "./coordinates"
-import { composePlaceLabel, type AddressParts, type ReverseGeocoder } from "./reverse-geocoder"
+import { exactCoordinate, isValidPosition } from "./coordinates"
+import { describePlace, type AddressParts, type PlaceDescription, type ReverseGeocoder } from "./reverse-geocoder"
 
 /**
  * Reverse geocoding through the public Nominatim service (OpenStreetMap).
@@ -8,9 +8,10 @@ import { composePlaceLabel, type AddressParts, type ReverseGeocoder } from "./re
  * Usage policy constraints this adapter honours (https://operations.osmfoundation.org/policies/nominatim/):
  *  - an identifying `User-Agent` (the app, the site and a contact), never a library default;
  *  - at most one request per second (a minimum gap between outgoing calls);
- *  - results are cached, and only ever for positions rounded to 2 decimals, so repeated cells cost nothing;
- *  - no bulk use: one lookup per photo the visitor picks.
- * The `zoom=14` level asks for neighbourhood detail, which is all the label needs.
+ *  - results are cached by exact position, so the same spot (a photo and its Maps link, a retry) costs one request;
+ *  - no bulk use: one lookup per photo (or pasted link) the visitor picks.
+ * The position is the exact one (6 decimals): the visitor consents to keeping the exact place and its address, and a
+ * street address needs it. `zoom=18` asks for street-level detail (the road and the house number).
  */
 
 const ENDPOINT = "https://nominatim.openstreetmap.org/reverse"
@@ -35,7 +36,7 @@ export function buildUserAgent(siteUrl: string, contact: string): string {
 }
 
 export class NominatimReverseGeocoder implements ReverseGeocoder {
-  private readonly cache = new Map<string, string>()
+  private readonly cache = new Map<string, PlaceDescription>()
   private lastRequestAt = Number.NEGATIVE_INFINITY
   private readonly fetchImpl: typeof globalThis.fetch
   private readonly now: () => number
@@ -49,10 +50,12 @@ export class NominatimReverseGeocoder implements ReverseGeocoder {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   }
 
-  async reverse(lat: number, lng: number): Promise<string | null> {
-    // Only rounded positions are ever looked up: the exact location of a photo never reaches a third party.
-    if (!isApproximatePosition(lat, lng)) return null
-    const key = `${lat},${lng}`
+  async reverse(lat: number, lng: number): Promise<PlaceDescription | null> {
+    if (!isValidPosition(lat, lng)) return null
+    // The stored precision: more decimals than the database keeps would only split the cache.
+    const exactLat = exactCoordinate(lat)
+    const exactLng = exactCoordinate(lng)
+    const key = `${exactLat},${exactLng}`
     const cached = this.cache.get(key)
     if (cached !== undefined) return cached
 
@@ -64,11 +67,11 @@ export class NominatimReverseGeocoder implements ReverseGeocoder {
       const url = new URL(ENDPOINT)
       url.search = new URLSearchParams({
         format: "jsonv2",
-        zoom: "14",
+        zoom: "18",
         addressdetails: "1",
         "accept-language": "es",
-        lat: String(lat),
-        lon: String(lng),
+        lat: String(exactLat),
+        lon: String(exactLng),
       }).toString()
 
       const response = await this.fetchImpl(url, {
@@ -78,16 +81,16 @@ export class NominatimReverseGeocoder implements ReverseGeocoder {
       })
       if (!response.ok) return null
       const body = (await response.json()) as { address?: AddressParts } | null
-      const label = composePlaceLabel(body?.address)
-      if (label) this.remember(key, label)
-      return label
+      const description = describePlace(body?.address)
+      if (description) this.remember(key, description)
+      return description
     } catch {
       return null
     }
   }
 
-  private remember(key: string, label: string) {
-    this.cache.set(key, label)
+  private remember(key: string, description: PlaceDescription) {
+    this.cache.set(key, description)
     if (this.cache.size > NOMINATIM_CACHE_LIMIT) {
       const oldest = this.cache.keys().next().value
       if (oldest !== undefined) this.cache.delete(oldest)

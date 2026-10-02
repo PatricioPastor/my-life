@@ -6,11 +6,11 @@ import { PLACE_COPY } from "./place-model"
 
 export type ResolveLink = (input: { url: string }) => Promise<ResolveMapsLinkResult>
 
-/** What the form knows about the Google Maps link the visitor pasted. Positions are already rounded by the server. */
+/** What the form knows about the Google Maps link the visitor pasted. The position is the pin's exact one. */
 export type MapsLinkState =
   | { status: "idle" }
   | { status: "resolving" }
-  | { status: "ok"; lat: number; lng: number; label: string | null }
+  | { status: "ok"; lat: number; lng: number; label: string | null; address: string | null }
   | { status: "error"; message: string }
 
 /**
@@ -58,7 +58,7 @@ export function useMapsLink(resolve: ResolveLink, debounceMs: number, onResolved
         }
         if (mine !== run.current) return
         if (answer?.ok) {
-          setState({ status: "ok", lat: answer.lat, lng: answer.lng, label: answer.label })
+          setState({ status: "ok", lat: answer.lat, lng: answer.lng, label: answer.label, address: answer.address })
           onResolved()
         } else {
           setState({

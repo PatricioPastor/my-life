@@ -1,4 +1,4 @@
-import { isValidPosition, roundCoordinate } from "./coordinates"
+import { exactCoordinate, isValidPosition } from "./coordinates"
 import type { ReverseGeocoder } from "./reverse-geocoder"
 
 export interface SuggestPlaceDeps {
@@ -10,14 +10,15 @@ export interface SuggestPlaceDeps {
 }
 
 export type SuggestPlaceResult =
-  | { ok: true; label: string | null }
+  | { ok: true; label: string | null; address: string | null }
   | { ok: false; reason: "no_session" | "invalid" }
 
 /**
- * Names the place of a position. It needs a session and refuses anything that is not a real position (outside the
- * globe, the 0,0 no-fix point, not a number). The browser may send the photo's exact position, but the geocoder is
- * a third party: it is only ever asked about the position rounded to 2 decimals. It never fails because of the
- * geocoder: no label is `{ ok: true, label: null }` and the form shows the coordinates instead.
+ * Names the place of a position and finds its street address. It needs a session and refuses anything that is not a
+ * real position (outside the globe, the 0,0 no-fix point, not a number). The browser sends the photo's exact position
+ * and the geocoder is asked about exactly it (to the 6 decimals the database keeps): the address needs it, and nothing
+ * is stored unless the visitor then consents. It never fails because of the geocoder: no answer is
+ * `{ ok: true, label: null, address: null }` and the form shows the coordinates instead.
  */
 export async function suggestPlaceWith(deps: SuggestPlaceDeps, input: unknown): Promise<SuggestPlaceResult> {
   const visitor = await deps.currentVisitor()
@@ -25,14 +26,15 @@ export async function suggestPlaceWith(deps: SuggestPlaceDeps, input: unknown): 
 
   const { lat, lng } = (typeof input === "object" && input !== null ? input : {}) as { lat?: unknown; lng?: unknown }
   if (!isValidPosition(lat, lng)) return { ok: false, reason: "invalid" }
-  const rounded = { lat: roundCoordinate(lat as number), lng: roundCoordinate(lng as number) }
-  // A position that only rounds to the 0,0 no-fix point has nothing to name.
-  if (!isValidPosition(rounded.lat, rounded.lng)) return { ok: false, reason: "invalid" }
+  const exact = { lat: exactCoordinate(lat as number), lng: exactCoordinate(lng as number) }
+  // A position that only trims to the 0,0 no-fix point has nothing to name.
+  if (!isValidPosition(exact.lat, exact.lng)) return { ok: false, reason: "invalid" }
 
   try {
-    return { ok: true, label: await deps.geocoder().reverse(rounded.lat, rounded.lng) }
+    const described = await deps.geocoder().reverse(exact.lat, exact.lng)
+    return { ok: true, label: described?.label ?? null, address: described?.address ?? null }
   } catch (error) {
     deps.log(`Suggesting a place failed (${error instanceof Error ? error.name : "unknown"}).`)
-    return { ok: true, label: null }
+    return { ok: true, label: null, address: null }
   }
 }

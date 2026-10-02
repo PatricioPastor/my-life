@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
+import type { PlaceDescription } from "./reverse-geocoder"
 import { suggestPlaceWith } from "./suggest-place"
 
+const PALERMO: PlaceDescription = { label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }
+
 const make = (over: Partial<Parameters<typeof suggestPlaceWith>[0]> = {}) => {
-  const reverse = vi.fn<(lat: number, lng: number) => Promise<string | null>>(async () => "Palermo, Buenos Aires")
+  const reverse = vi.fn<(lat: number, lng: number) => Promise<PlaceDescription | null>>(async () => PALERMO)
   const deps = {
     currentVisitor: async () => ({ handle: "ana" }),
     geocoder: () => ({ reverse }),
@@ -19,21 +22,27 @@ describe("suggestPlaceWith", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("returns the label for a rounded position", async () => {
+  it("returns the label and the street address", async () => {
     const { deps, reverse } = make()
-    expect(await suggestPlaceWith(deps, { lat: -34.59, lng: -58.42 })).toEqual({ ok: true, label: "Palermo, Buenos Aires" })
+    expect(await suggestPlaceWith(deps, { lat: -34.59, lng: -58.42 })).toEqual({
+      ok: true,
+      label: "Palermo, Buenos Aires",
+      address: "Honduras 4000, Buenos Aires",
+    })
     expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
   })
 
-  it("accepts an exact position but only ever geocodes it rounded to 2 decimals", async () => {
+  it("geocodes the exact position, to 6 decimals, not a rounded one", async () => {
     const { deps, reverse } = make()
-    expect(await suggestPlaceWith(deps, { lat: -34.593712, lng: -58.421589 })).toEqual({
-      ok: true,
-      label: "Palermo, Buenos Aires",
-    })
+    await suggestPlaceWith(deps, { lat: -34.59371234, lng: -58.42158949 })
     expect(reverse).toHaveBeenCalledTimes(1)
-    expect(reverse).toHaveBeenCalledWith(-34.59, -58.42)
-    expect(JSON.stringify(reverse.mock.calls)).not.toMatch(/593712|421589/)
+    expect(reverse).toHaveBeenCalledWith(-34.593712, -58.421589)
+  })
+
+  it("accepts a position that is only a few metres from the 0,0 point", async () => {
+    const { deps, reverse } = make()
+    expect(await suggestPlaceWith(deps, { lat: 0.001, lng: -0.002 })).toMatchObject({ ok: true })
+    expect(reverse).toHaveBeenCalledWith(0.001, -0.002)
   })
 
   it.each([
@@ -41,7 +50,6 @@ describe("suggestPlaceWith", () => {
     ["longitude out of range", { lat: 0.5, lng: 181 }],
     ["strings", { lat: "-34.59", lng: "-58.42" }],
     ["the 0,0 no-fix position", { lat: 0, lng: 0 }],
-    ["a position that rounds to 0,0", { lat: 0.001, lng: -0.002 }],
     ["NaN", { lat: Number.NaN, lng: 1 }],
     ["missing fields", { lat: 1 }],
     ["null", null],
@@ -52,16 +60,16 @@ describe("suggestPlaceWith", () => {
     expect(reverse).not.toHaveBeenCalled()
   })
 
-  it("returns a null label when geocoding finds nothing or throws", async () => {
+  it("returns no label and no address when geocoding finds nothing or throws", async () => {
     const { deps } = make({ geocoder: () => ({ reverse: async () => null }) })
-    expect(await suggestPlaceWith(deps, { lat: 1.5, lng: 2.5 })).toEqual({ ok: true, label: null })
+    expect(await suggestPlaceWith(deps, { lat: 1.5, lng: 2.5 })).toEqual({ ok: true, label: null, address: null })
 
     const boom = make({
       geocoder: () => {
         throw new Error("secret detail")
       },
     })
-    expect(await suggestPlaceWith(boom.deps, { lat: 1.5, lng: 2.5 })).toEqual({ ok: true, label: null })
+    expect(await suggestPlaceWith(boom.deps, { lat: 1.5, lng: 2.5 })).toEqual({ ok: true, label: null, address: null })
     const logged = vi.mocked(boom.deps.log).mock.calls
     expect(logged).toHaveLength(1)
     expect(String(logged[0][0])).not.toContain("secret detail")

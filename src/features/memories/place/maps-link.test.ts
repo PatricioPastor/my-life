@@ -26,6 +26,59 @@ describe("parseMapsLink: coordinates", () => {
     expect(parseMapsLink(url)).toEqual(loc(-34.6089, -58.3797, "Café Tortoni"))
   })
 
+  describe("the pin, not the viewport centre", () => {
+    it("takes the place pin of a shared place link, whose @ is only where the map is centred", () => {
+      // Real shape of "Compartir" on a place in the desktop app: the @ is the viewport, the !3d!4d pair is the pin.
+      const url =
+        "https://www.google.com/maps/place/UOCRA/@-34.5871224,-58.4302571,17z/data=!3m1!4b1!4m6!3m5!1s0x95bcb5a1f2b6a4b7:0x4c2e5a3d1e9f8a10!8m2!3d-34.5869912!4d-58.4298013!16s%2Fg%2F11b6d3k2zv?entry=ttu"
+      expect(parseMapsLink(url)).toEqual(loc(-34.5869912, -58.4298013, "UOCRA"))
+    })
+
+    it("takes the pin of a short link's long form, with the mobile data parameters", () => {
+      const url =
+        "https://www.google.com/maps/place/Av.+Rivadavia+1234,+B6000+Jun%C3%ADn,+Provincia+de+Buenos+Aires/@-34.5896,-60.9468,17z/data=!3m1!4b1!4m6!3m5!1s0x95b9a5c0:0x2!8m2!3d-34.5898101!4d-60.9465222!16s%2Fg%2F1"
+      expect(parseMapsLink(url)).toMatchObject({ kind: "location", lat: -34.5898101, lng: -60.9465222 })
+    })
+
+    it("takes ?q=lat,lng (a dropped pin) over the @ centre", () => {
+      expect(parseMapsLink("https://www.google.com/maps?q=-34.58712,-58.43025&ll=-34.5,-58.4&z=15")).toEqual(
+        loc(-34.58712, -58.43025),
+      )
+      expect(parseMapsLink("https://www.google.com/maps/@-34.5,-58.4,15z?q=-34.58712,-58.43025")).toEqual(
+        loc(-34.58712, -58.43025),
+      )
+    })
+
+    it("takes the api=1 query= pin over the @ centre", () => {
+      expect(parseMapsLink("https://www.google.com/maps/search/?api=1&query=-34.58712,-58.43025")).toEqual(
+        loc(-34.58712, -58.43025),
+      )
+    })
+
+    it("takes ll= over the @ centre, but after a pin and after q", () => {
+      expect(parseMapsLink("https://www.google.com/maps/@-34.5,-58.4,15z?ll=-34.58712,-58.43025")).toEqual(
+        loc(-34.58712, -58.43025),
+      )
+      expect(parseMapsLink("https://www.google.com/maps?ll=-34.5,-58.4&q=-34.58712,-58.43025")).toEqual(
+        loc(-34.58712, -58.43025),
+      )
+    })
+
+    it("keeps every decimal of the pin (the server trims to 6)", () => {
+      expect(parseMapsLink("https://www.google.com/maps/data=!3d-34.587123456!4d-58.430257891")).toEqual(
+        loc(-34.587123456, -58.430257891),
+      )
+    })
+
+    it("falls back to the @ centre only when there is no pin at all", () => {
+      expect(parseMapsLink("https://www.google.com/maps/@-34.5871224,-58.4302571,17z")).toEqual(loc(-34.5871224, -58.4302571))
+    })
+
+    it("skips a pin that is not a real position and uses the next one", () => {
+      expect(parseMapsLink("https://www.google.com/maps/@-34.5,-58.4,15z/data=!3d0!4d0")).toEqual(loc(-34.5, -58.4))
+    })
+  })
+
   it("reads !3d!4d when there is nothing else", () => {
     expect(parseMapsLink("https://www.google.com/maps/data=!4m2!3d40.7128!4d-74.006")).toEqual(loc(40.7128, -74.006))
   })

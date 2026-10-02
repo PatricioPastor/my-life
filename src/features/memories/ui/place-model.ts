@@ -6,7 +6,7 @@ export const PLACE_COPY = {
   naming: "Buscando el lugar…",
   noGps: "Esta foto no trae ubicación.",
   mapLink: "Ver en el mapa",
-  consent: "Guardar dónde se sacó la foto",
+  consent: "Guardar el lugar exacto y su dirección. Lo verán las personas que pueden entrar.",
   help: "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo.",
   notSaved: "No pudimos guardar el lugar.",
   linkLabelFound: "¿No fue ahí? Pega un link de Google Maps",

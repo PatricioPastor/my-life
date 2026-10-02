@@ -27,7 +27,12 @@ interface PlaceSectionProps {
 /** The place to show: the link's when it resolved (it replaces the photo's suggestion), else the photo's. */
 function shownPlace(place: PhotoPlace, link: MapsLinkState) {
   if (link.status === "ok") {
-    return { lat: link.lat, lng: link.lng, text: link.label ? linkPlaceLabel(link.label) : coordinatesLabel(link.lat, link.lng) }
+    return {
+      lat: link.lat,
+      lng: link.lng,
+      text: link.label ? linkPlaceLabel(link.label) : coordinatesLabel(link.lat, link.lng),
+      address: link.address,
+    }
   }
   if (place.status === "found") {
     const text = place.naming
@@ -35,7 +40,7 @@ function shownPlace(place: PhotoPlace, link: MapsLinkState) {
       : place.label
         ? suggestionLabel(place.label)
         : coordinatesLabel(place.lat, place.lng)
-    return { lat: place.lat, lng: place.lng, text }
+    return { lat: place.lat, lng: place.lng, text, address: place.naming ? null : place.address }
   }
   return null
 }
@@ -88,6 +93,11 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
           </a>
         )}
       </div>
+      {shown?.address && (
+        <p id="memory-place-address" className="m-0 text-xs tracking-[0.04em] text-ink-muted [overflow-wrap:anywhere]">
+          {shown.address}
+        </p>
+      )}
       {shown && (
         <label htmlFor="memory-location" className={cn("flex cursor-pointer items-center gap-3 text-ink", disabled && "cursor-default")}>
           <input

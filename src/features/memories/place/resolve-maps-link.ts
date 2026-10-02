@@ -1,7 +1,7 @@
-import { exactCoordinate, isValidPosition, roundCoordinate } from "./coordinates"
+import { exactCoordinate, isValidPosition } from "./coordinates"
 import type { FollowResult } from "./follow-short-link"
 import { parseMapsLink, type MapsLinkParse } from "./maps-link"
-import { cleanPlaceName } from "./place-name"
+import { cleanPlaceAddress, cleanPlaceName } from "./place-name"
 import type { ReverseGeocoder } from "./reverse-geocoder"
 
 export interface ResolveLinkDeps {
@@ -15,14 +15,18 @@ export interface ResolveLinkDeps {
 
 export type ResolveLinkFailure = "not_maps_link" | "unreadable"
 
-/** The exact position (6 decimals) with a short label (the place name from the URL, or a geocoded one). */
-export type ResolvedLink = { ok: true; lat: number; lng: number; label: string | null }
+/**
+ * The exact position (6 decimals) of the pin, with a short label (the place name from the URL, else a geocoded one) and
+ * the street address of that position, when it has one.
+ */
+export type ResolvedLink = { ok: true; lat: number; lng: number; label: string | null; address: string | null }
 
 const failed = (reason: ResolveLinkFailure) => ({ ok: false, reason }) as const
 
 /**
- * Trims the position to the stored precision and finds a label: the URL's own place name first, else reverse
- * geocoding (never fatal), which only ever receives the position rounded to 2 decimals.
+ * Trims the position to the stored precision and describes it: the label is the URL's own place name (it stays the name,
+ * for example "UOCRA"), else the geocoded one; the street address always comes from reverse geocoding the exact pin
+ * (never fatal: without it the place just has no address).
  */
 async function located(
   parsed: Extract<MapsLinkParse, { kind: "location" }>,
@@ -32,15 +36,14 @@ async function located(
   const lng = exactCoordinate(parsed.lng)
   if (!isValidPosition(lat, lng)) return failed("unreadable")
 
-  let label = cleanPlaceName(parsed.name)
-  if (!label) {
-    try {
-      label = cleanPlaceName(await deps.geocoder().reverse(roundCoordinate(lat), roundCoordinate(lng)))
-    } catch (error) {
-      deps.log(`Naming a linked place failed (${error instanceof Error ? error.name : "unknown"}).`)
-    }
+  let geocoded: { label: string | null; address: string | null } = { label: null, address: null }
+  try {
+    const found = await deps.geocoder().reverse(lat, lng)
+    geocoded = { label: cleanPlaceName(found?.label), address: cleanPlaceAddress(found?.address) }
+  } catch (error) {
+    deps.log(`Naming a linked place failed (${error instanceof Error ? error.name : "unknown"}).`)
   }
-  return { ok: true, lat, lng, label }
+  return { ok: true, lat, lng, label: cleanPlaceName(parsed.name) ?? geocoded.label, address: geocoded.address }
 }
 
 /**
