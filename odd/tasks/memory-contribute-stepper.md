@@ -61,7 +61,7 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
 - [x] **T1 Palette:** curated 12-hue palette (gamut and glow tested), picker integration, random default for audio-only, hashed hue on read for colorless memories. Route: delegated writer (4+ files). Done in `53981ed`.
 - [x] **T2 Date and time:** the migration, the domain, the server and the DTO; client EXIF date parse; recording and file times; the form fields with a source hint; the time shown in the viewers. Route: delegated writer (server plus UI). Done in `e1f940d`.
 - [x] **T3 Stepper:** three steps, concentric radius tokens, copy rewrite, single column, focus and announcements, tests updated. Route: delegated writer (2+ non-trivial files). Done in `d8dbd34`, after the T2-advisory prelude `2f80414`.
-- [ ] **T4 Header:** Contribuir redesign and alignment, "Recuerdos" alignment, shared with the glass view. Route: delegated writer.
+- [x] **T4 Header:** Contribuir redesign and alignment, "Recuerdos" alignment, shared with the glass view. Route: delegated writer (2+ non-trivial files). Done in `eebb5d3`.
 - [ ] **T5 Verify and deliver:** browser screenshots at 390 px and desktop, design detector, full test/lint/typecheck. Apply the migration with authorization, then fast-forward `main` after approval.
 
 ## Checks
@@ -144,13 +144,57 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
   - Evidence: RED observed before each step (`memory-steps`: missing module; form model: 2 failing; picker note: 1 failing; `add-memory-steps.test.tsx`: 31 of 31 failing; audio section: 3 failing). `pnpm vitest run src/features/memories src/shared/db`: 97 files, 2404 tests passed. `pnpm test`: 188 files, 3314 tests passed. `pnpm lint`: exit 0. `pnpm typecheck`: exit 0.
   - Size: `d8dbd34` is +1763 / −614 lines (+872 / −160 of them tests); the prelude is +26 / −1. This is advisory only: the work unit is one behavior (the stepper and the surfaces it is drawn with).
   - Not verifiable without a browser (for T5): Gambarino's optical vertical centring in the 44 and 48 px controls with `leading-none`; the 12 px formats line in Gambarino; the native date and time inputs at 48 px on iOS; the phone sheet's top edge moving between steps of different heights; browsers without `@starting-style` (older Safari) show the new step without the slide.
+- 2026-10-02: **T3 not reviewed, by the user's decision.** The T3 review could not start: `lens_context_budget_exceeded` (23 files, 2,442 lines from `d19ca43`). The user chose to continue without reviewing T3, so the reviewed boundary advances to `03f1d9a` by that decision, not by an approval.
+- 2026-10-02: **T4 done**, commit `eebb5d3` `feat(memories): a contribute button that mirrors the way back`.
+  - T4 route: delegated writer (2+ non-trivial files).
+  - **The control.** `ui/contribute-button.tsx`: `ContributeButton` is the plus mark and the word "Contribuir". It uses `BAR_CONTROL`, the same class set as `BackButton`: `h-(--bar-row)` (48 px), `px-(--bar-pad)` (12 px), `gap-3`, `text-xs`, `tracking-[0.08em]`, inherited Silkscreen, `text-ink-muted`, `.press`. Its focus ring is the shared `.ui button:focus-visible`.
+    - The mark sits in the chevron's 14 px box: a 1 px ring (r 6.5) in lavanda `#a39ef9` at 75%, around a 1.5 px square-capped plus in the label's ink. It has a soft glow with no offset: `drop-shadow(0 0 4px #a39ef980)`.
+    - There is no border, radius, backdrop or `t-label`. The accessible name stays "Contribuir", with `data-cursor-label`. As `Dialog.Trigger asChild` it gets `aria-haspopup="dialog"` and `aria-expanded`, because it spreads every prop and ref it is given (React 19).
+    - Both the AddMemory trigger and the glass view's Contribuir use it, and the glass still hands over the open memory.
+  - **Geometry at the source.** Tailwind only sees literal classes, so the numbers became tokens in `globals.css` `:root`. They follow the T3 token pattern.
+    - Phone values: `--bar-y` 1rem, `--bar-x` 0.5rem, `--bar-notch` 0.25rem. Inside `@variant md` they become 1.75rem, 2.25rem and 0.5rem. The production build flattens this to `@media (min-width:48rem){:root{…}}`.
+    - `--bar-top` is `max(--bar-y, env(top) + notch)`. `--bar-left` and `--bar-right` use the same expression, each against its own inset, so the sides mirror by construction.
+    - The other tokens: `--bar-row` 3rem, `--bar-pad` 0.75rem, `--bar-ink` 3px (the chevron tip is at x 4, less a miter of 1.06), `--bar-gap` 0px (the row's own 16 px under its label already separates them) and `--title-bearing` 0.02em.
+    - `top-bar.ts` exports `BAR_TOP` `top-(--bar-top)`, `BAR_LEFT`, `BAR_RIGHT`, `BAR_CONTROL` and `BAR_TITLE`. `BAR_TITLE` is `top: calc(bar-top + bar-row + bar-gap)` and `left: calc(bar-left + bar-pad + bar-ink − title-bearing)`. No class spells out a rem or an `env()`.
+  - **Mirrored numbers** (no safe-area insets; the left side's computed values did not change):
+
+    | | Phone (< 768 px) | md (≥ 768 px) |
+    |---|---|---|
+    | Bar top | 16 | 28 |
+    | Left box inset (back) | 8 | 36 |
+    | Right box inset (Contribuir) | 8 (was 12) | 36 |
+    | Back chevron ink from the left edge | 8 + 12 + 2.94 ≈ 23 | ≈ 51 |
+    | Contribuir label ink from the right edge | 8 + 12 + trailing tracking 0.96 + Silkscreen side bearing ≈ 22–23 | ≈ 50–51 |
+    | "Recuerdos" top | 16 + 48 + 0 = 64 (was 60) | 28 + 48 + 0 = 76 (was 68) |
+    | "Recuerdos" box left | 23 − 0.4 ≈ 22.6 (was 20) | 51 − 0.45 ≈ 50.6 (was 48) |
+
+  - **Same row and timing.** Both are `h-(--bar-row) items-center` at `BAR_TOP`.
+    - The Contribuir slot (`data-hud`) is now mounted with a visitor's space, empty while the memories load. Its `rise` wrapper therefore starts with the way back's, and the two arrive together whenever the load finishes within the rise's 360 ms delay.
+    - The rise sits on an inner wrapper, because an animation's filled opacity would outrank the slot's covered fade under the glass. A guest gets no slot.
+    - Reduced motion: `.rise` falls back to the shared fade.
+  - **Also aligned.** In the glass view, Cerrar (the right end) and a guest's Universo use `BAR_CONTROL`. On phones the glass's right-hand row therefore moves 4 px toward the edge, mirroring Universo. The facet place and entry screens use `BackButton` and are unchanged: same computed insets, same box.
+  - Choice: the mark stays leading ("⊕ Contribuir"), so the right edge that mirrors the chevron is the label's last letter, not the mark. A trailing mark would put two icons at the outer edges, but would read "Contribuir ⊕".
+  - Evidence: RED observed before each step. `top-bar.test.ts`: 8 of 8 failing. `contribute-button.test.tsx`: missing module. Integration: 11 failing across `mobile-layout`, `memories-place`, `glass-view` and `add-memory`.
+    - The compiled CSS was checked with `@tailwindcss/postcss` in production mode: every `--bar-*` utility resolves to its variable.
+    - `pnpm vitest run src/features/journey src/features/memories src/shared/lib`: 105 files, 2410 tests passed.
+    - `pnpm test`: 189 files, 3337 tests passed.
+    - `pnpm lint`: exit 0. `pnpm typecheck`: exit 0.
+  - Size: +418 / −80 (+298 / −30 of them tests).
+  - Not verifiable without a browser (for T5):
+    - Silkscreen's trailing side bearing, and whether the trailing letter-spacing is painted. Together they decide whether the label's right ink lands within about 1 px of the chevron's 23 / 51 px.
+    - Gambarino's real "R" side bearing (0.02em is an estimate).
+    - Whether the 14 px ring reads at the chevron's optical weight.
+    - The glow's strength on the void.
+    - The 4 / 8 px lower "Recuerdos" on phone and md.
+    - A slow load: the control appears mid-rise, or after it.
 
 ## Follow-ups
 
 - ~~`create-memory.ts` still stores `DEFAULT_ORB_COLOR` (`#8ab4ff`) when a memory has no pick and no dominant color.~~ **Resolved in T2 (`e1f940d`):** it stores `null`, and the read path gives the curated hue of the id.
 - `src/types/exifr-lite.d.ts` (outside the T2 surface) still declares only `gps` and says only the GPS reader is used. `photo-exif.ts` augments the module with `parse`. Move that declaration into the `.d.ts` and drop the unused `gps` declaration.
 - ~~Optional: a PGlite test that app_user can insert `happened_time`.~~ **Resolved in the T3 prelude (`2f80414`).**
+- `ui/memories-space.tsx` (outside the T4 surface) still calls the control "the pill in the top bar" in the `ContributeState` comment.
 
 ## Next step
 
-Review T3 from the reviewed boundary `d19ca43` (`2f80414`, `d8dbd34`, and this record), then T4 header.
+Assess T4 from the reviewed boundary `03f1d9a` (`eebb5d3` and this record), then T5: browser screenshots at 390 px and desktop, including the optical checks listed under T4.
