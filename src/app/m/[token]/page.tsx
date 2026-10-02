@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
-import { formatMemoryDate } from "@/features/memories/format"
+import { formatMemoryWhen } from "@/features/memories/format"
 import { findSharedMemory } from "@/features/memories/share/shared-memory"
 import { SharedMemory } from "@/features/memories/ui/shared-memory"
 import { resolveSiteUrl } from "@/shared/site/site-url"
@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!result.ok) return { robots: NOINDEX }
 
   const { memory, ogImageUrl } = result
-  const description = `${formatMemoryDate(memory.happenedOn)} · ${BYLINE}`
+  const description = `${formatMemoryWhen(memory.happenedOn, memory.happenedTime)} · ${BYLINE}`
   // A photo previews as its signed 1200x630 crop; an audio-only memory as a card drawn on the server.
   const image = ogImageUrl ?? `${resolveSiteUrl(process.env)}/m/${token}/og`
   return {

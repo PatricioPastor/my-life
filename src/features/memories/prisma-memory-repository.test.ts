@@ -13,6 +13,8 @@ const row = {
   publicId: "memories/abc",
   caption: "hello",
   happenedOn: new Date("2024-06-15T00:00:00.000Z"),
+  // A `time(0)` column arrives as a Date on 1970-01-01, the wall-clock time in its UTC fields.
+  happenedTime: new Date("1970-01-01T18:42:00.000Z") as Date | null,
   width: 10,
   height: 20,
   status: "approved" as const,
@@ -38,11 +40,11 @@ const row = {
   audioDurationMs: null as number | null,
 }
 
-/** What the domain holds for `row`: the four audio columns become one `audio` value. */
+/** What the domain holds for `row`: the four audio columns become one `audio` value, and the time is `HH:MM`. */
 const domainRow = (() => {
   const { audioPublicId: _a, audioFormat: _b, audioBytes: _c, audioDurationMs: _d, ...rest } = row
   void [_a, _b, _c, _d]
-  return { ...rest, audio: null }
+  return { ...rest, happenedTime: "18:42", audio: null }
 })()
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
@@ -84,6 +86,7 @@ const input: NewMemory = {
   publicId: "memories/abc",
   caption: "hello",
   happenedOn: new Date("2024-06-15T00:00:00.000Z"),
+  happenedTime: "18:42",
   width: 10,
   height: 20,
   kind: "image",
@@ -212,6 +215,7 @@ describe("PrismaMemoryRepository", () => {
           publicId: "memories/abc",
           caption: "hello",
           happenedOn: input.happenedOn,
+          happenedTime: new Date("1970-01-01T18:42:00.000Z"),
           width: 10,
           height: 20,
           kind: "image",
@@ -281,6 +285,39 @@ describe("PrismaMemoryRepository", () => {
       expect(memory.placeAddress).toBe("Broadway 100, Nueva York")
       expect(memory.locationSource).toBe("photo")
       expect(memory.orbColor).toBe("#ff9a3c")
+    })
+
+    it.each([
+      ["00:00", "1970-01-01T00:00:00.000Z"],
+      ["07:05", "1970-01-01T07:05:00.000Z"],
+      ["23:59", "1970-01-01T23:59:00.000Z"],
+    ])("writes the time %s as the UTC fields of 1970-01-01, the shape Prisma sends to a time(0) column", async (time, iso) => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).createPending("ana", { ...input, happenedTime: time })
+      const [{ data }] = tx.memory.create.mock.calls[0] as unknown as [{ data: { happenedTime: Date } }]
+      expect(data.happenedTime.toISOString()).toBe(iso)
+    })
+
+    it("writes no time when there is none", async () => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).createPending("ana", { ...input, happenedTime: null })
+      expect(tx.memory.create).toHaveBeenCalledWith({ data: expect.objectContaining({ happenedTime: null }) })
+    })
+
+    it.each([
+      ["1970-01-01T00:00:00.000Z", "00:00"],
+      ["1970-01-01T07:05:00.000Z", "07:05"],
+      ["1970-01-01T23:59:00.000Z", "23:59"],
+    ])("reads the time(0) value %s back as %s, from its UTC fields whatever the server's zone", async (iso, time) => {
+      const { db } = fakeDb([{ ...row, happenedTime: new Date(iso) }])
+      const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(memory.happenedTime).toBe(time)
+    })
+
+    it("reads a row with no time back as null", async () => {
+      const { db } = fakeDb([{ ...row, happenedTime: null }])
+      const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+      expect(memory.happenedTime).toBeNull()
     })
 
     it("reads an older row with no orb color back as null", async () => {

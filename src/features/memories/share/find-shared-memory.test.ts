@@ -78,6 +78,14 @@ describe("findSharedMemoryWith", () => {
     expect(await findSharedMemoryWith(full, TOKEN)).toEqual({ ok: false, reason: "not_found" })
   })
 
+  it("sends the time it happened with the date, so the shared page can show both", async () => {
+    const { full } = setup({}, memory({ happenedTime: "18:42" }))
+    const result = await findSharedMemoryWith(full, TOKEN)
+    expect(result.ok && result.memory).toMatchObject({ happenedOn: "2024-03-12", happenedTime: "18:42" })
+    const without = await findSharedMemoryWith(setup({}, memory({ happenedTime: null })).full, TOKEN)
+    expect(without.ok && without.memory.happenedTime).toBeNull()
+  })
+
   it("returns the glass DTO of an approved photo: sizes, coarse place and orb color, no handle", async () => {
     const { full } = setup()
     const result = await findSharedMemoryWith(full, TOKEN)

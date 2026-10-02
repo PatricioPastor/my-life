@@ -84,7 +84,15 @@ describe("MemoriesSpace adding a memory", () => {
     fireEvent.change(screen.getByLabelText("¿Cuándo fue?"), { target: { value: "2024-03-12" } })
     fireEvent.click(screen.getByRole("button", { name: "Guardar recuerdo" }))
 
-    await waitFor(() => expect(createMemory).toHaveBeenCalledWith({ ticket: "t", caption: "Una tarde de lluvia", happenedOn: "2024-03-12", shareLocation: false }))
+    await waitFor(() =>
+      expect(createMemory).toHaveBeenCalledWith({
+        ticket: "t",
+        caption: "Una tarde de lluvia",
+        happenedOn: "2024-03-12",
+        happenedTime: null,
+        shareLocation: false,
+      }),
+    )
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), { timeout: 3000 })
     const orb = screen.getByRole("button", { name: /Una tarde de lluvia.*pendiente/i })
     expect(orb.getAttribute("data-pending")).toBe("true")
@@ -198,6 +206,7 @@ describe("MemoriesSpace contributing from a memory", () => {
         ticket: "t",
         caption: "El día después",
         happenedOn: "2023-07-04",
+        happenedTime: null,
         shareLocation: false,
         relatedMemoryId: parent.id,
         samePlace: true,

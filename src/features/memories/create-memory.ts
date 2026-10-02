@@ -9,7 +9,7 @@ import {
 import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import type { Memory, StoredAudio } from "./memory"
-import { chooseOrbColor } from "./orb-color"
+import { chooseOrbColor, isGlowColor, isHexColor } from "./orb-color"
 import { extractPhotoDetails, NO_PHOTO_DETAILS } from "./photo-details"
 import { decidePlace, type PlaceColumns } from "./place/decide-place"
 import type { FollowResult } from "./place/follow-short-link"
@@ -165,6 +165,8 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
         publicId: photoId,
         caption: typeof input.caption === "string" ? input.caption : "",
         happenedOn: parseDay(input.happenedOn),
+        // A wall clock, read as it is: the validation refuses anything that is not `HH:MM`.
+        happenedTime: input.happenedTime,
         width: photo?.width ?? null,
         height: photo?.height ?? null,
         audio,
@@ -209,8 +211,12 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     )
 
     // The visitor's pick when it is a valid glowing color; else the photo's own dominant color, lifted to glow; else
-    // (an audio-only memory with no pick) the default cool tone.
-    const orbColor = chooseOrbColor(input.orbColor, details.dominantColor)
+    // nothing. A memory with neither (an audio-only one with no pick) stores no color, so it reads back as the curated
+    // hue of its id (see `toMemoryView`): the id only exists after the insert, and a stored default would hide that hue.
+    const orbColor =
+      isGlowColor(input.orbColor) || isHexColor(details.dominantColor)
+        ? chooseOrbColor(input.orbColor, details.dominantColor)
+        : null
 
     try {
       const row = { ...validation.value, ...details, ...place, orbColor }

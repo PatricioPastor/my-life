@@ -1,4 +1,4 @@
-import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
+import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE, isWallClockTime } from "../memory"
 import { MAX_AUDIO_MS, checkAudio, checkPhoto } from "../upload-limits"
 import type { CreateMemoryResult, PrepareUploadFailure } from "../upload-view"
 
@@ -14,6 +14,7 @@ export const COPY = {
   caption: "Escribe entre 1 y 140 caracteres.",
   dateFuture: "La fecha no puede ser futura.",
   dateInvalid: "Elige una fecha entre 1900 y hoy.",
+  timeInvalid: "Elige una hora válida o déjala vacía.",
   rateLimited: "Ya agregaste 5 recuerdos hoy. Vuelve mañana.",
   unavailable: "No pudimos guardar tu recuerdo. Intenta de nuevo más tarde.",
   noSession: "Vuelve a entrar con tu usuario para agregar recuerdos.",
@@ -26,6 +27,7 @@ export interface FormErrors {
   audio?: string
   caption?: string
   date?: string
+  time?: string
   /** An error about the whole submission, not one field. */
   form?: string
 }
@@ -55,12 +57,14 @@ interface FormValues {
   caption: string
   /** `YYYY-MM-DD` or empty. */
   date: string
+  /** `HH:MM` or empty: the time is optional. */
+  time?: string
   /** `YYYY-MM-DD`, the visitor's local today. */
   today: string
 }
 
 /** The same rules the server enforces, so mistakes are caught before anything is uploaded. */
-export function validateForm({ file, audio = null, recording = false, caption, date, today }: FormValues): FormErrors {
+export function validateForm({ file, audio = null, recording = false, caption, date, time = "", today }: FormValues): FormErrors {
   const errors: FormErrors = {}
   // A memory is a photo, an audio or both, so neither one is required on its own.
   if (recording) errors.audio = COPY.audioRecording
@@ -84,6 +88,9 @@ export function validateForm({ file, audio = null, recording = false, caption, d
 
   if (!DAY.test(date) || date < EARLIEST_DAY) errors.date = COPY.dateInvalid
   else if (date > today) errors.date = COPY.dateFuture
+
+  // A wall clock with no time zone: only its form is checked, and the date rules above stay the same.
+  if (time !== "" && !isWallClockTime(time)) errors.time = COPY.timeInvalid
   return errors
 }
 
@@ -98,6 +105,7 @@ export function messageForFailure(failure: Failure): FormErrors {
       else if (error === "caption_empty" || error === "caption_too_long") errors.caption = COPY.caption
       else if (error === "date_in_future") errors.date = COPY.dateFuture
       else if (error === "date_invalid" || error === "date_too_old") errors.date = COPY.dateInvalid
+      else if (error === "time_invalid") errors.time = COPY.timeInvalid
     }
     return Object.keys(errors).length > 0 ? errors : { form: COPY.unavailable }
   }

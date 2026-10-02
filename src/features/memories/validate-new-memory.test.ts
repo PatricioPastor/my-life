@@ -9,6 +9,7 @@ function input(overrides: Partial<NewMemoryInput> = {}): NewMemoryInput {
     publicId: "memories/abc123",
     caption: "A night on the roof",
     happenedOn: new Date("2024-06-15T00:00:00.000Z"),
+    happenedTime: null,
     width: 1200,
     height: 800,
     audio: null,
@@ -95,6 +96,41 @@ describe("validateNewMemory", () => {
     })
   })
 
+  describe("happenedTime", () => {
+    it.each(["00:00", "07:05", "18:42", "23:59"])("accepts the wall-clock time %s and keeps it as it is", (happenedTime) => {
+      const result = validateNewMemory(input({ happenedTime }), NOW)
+      expect(result.ok && result.value.happenedTime).toBe(happenedTime)
+    })
+
+    it.each([
+      ["null", null],
+      ["undefined", undefined],
+      ["an empty string", ""],
+    ])("treats %s as no time", (_name, happenedTime) => {
+      const result = validateNewMemory(input({ happenedTime }), NOW)
+      expect(result.ok && result.value.happenedTime).toBeNull()
+    })
+
+    it.each([
+      ["24:00", "24:00"],
+      ["12:60", "12:60"],
+      ["a single-digit hour", "7:05"],
+      ["seconds", "18:42:00"],
+      ["no colon", "1842"],
+      ["letters", "aa:bb"],
+      ["spaces", " 18:42"],
+      ["a number", 1842],
+      ["an object", { hour: 18 }],
+    ])("rejects %s", (_name, happenedTime) => {
+      expect(errorsOf({ happenedTime })).toEqual(["time_invalid"])
+    })
+
+    it("leaves the date rules as they are: a time never makes a future date pass, or today fail", () => {
+      expect(errorsOf({ happenedOn: new Date("2026-10-02T00:00:00.000Z"), happenedTime: "00:00" })).toEqual(["date_in_future"])
+      expect(errorsOf({ happenedOn: new Date("2026-10-01T00:00:00.000Z"), happenedTime: "23:59" })).toEqual([])
+    })
+  })
+
   describe("dimensions", () => {
     it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("rejects width %s", (width) => {
       expect(errorsOf({ width })).toEqual(["width_invalid"])
@@ -120,9 +156,10 @@ describe("validateNewMemory", () => {
   })
 
   it("reports every failing field at once", () => {
-    expect(errorsOf({ caption: "", width: 0, height: 0, publicId: "" })).toEqual([
+    expect(errorsOf({ caption: "", width: 0, height: 0, publicId: "", happenedTime: "25:00" })).toEqual([
       "public_id_empty",
       "caption_empty",
+      "time_invalid",
       "width_invalid",
       "height_invalid",
     ])

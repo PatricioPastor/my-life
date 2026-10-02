@@ -63,6 +63,7 @@ export function toMemoryView(
     id: memory.id,
     caption: memory.caption,
     happenedOn: memory.happenedOn.toISOString().slice(0, 10),
+    happenedTime: memory.happenedTime ?? null,
     status: memory.status,
     width: memory.width,
     height: memory.height,

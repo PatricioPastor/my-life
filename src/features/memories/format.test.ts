@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatMemoryDate, truncateCaption } from "./format"
+import { formatMemoryDate, formatMemoryWhen, truncateCaption } from "./format"
 
 describe("formatMemoryDate", () => {
   it("formats an ISO date in Spanish", () => {
@@ -9,6 +9,26 @@ describe("formatMemoryDate", () => {
   it("reads the calendar date in UTC, whatever the local zone", () => {
     expect(formatMemoryDate("2024-01-01T00:00:00.000Z")).toBe("1 de enero de 2024")
     expect(formatMemoryDate("2024-12-31T00:00:00.000Z")).toBe("31 de diciembre de 2024")
+  })
+})
+
+describe("formatMemoryWhen", () => {
+  it("adds the time after the date when it is known", () => {
+    expect(formatMemoryWhen("2024-03-14", "18:42")).toBe("14 de marzo de 2024 · 18:42")
+  })
+
+  it("keeps the wall-clock time as it was written: no time zone moves it", () => {
+    expect(formatMemoryWhen("2024-12-31", "23:59")).toBe("31 de diciembre de 2024 · 23:59")
+    expect(formatMemoryWhen("2024-01-01", "00:00")).toBe("1 de enero de 2024 · 00:00")
+  })
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["an empty string", ""],
+    ["something that is not a time", "18h42"],
+  ])("is only the date when the time is %s", (_name, time) => {
+    expect(formatMemoryWhen("2024-03-12", time as string | null | undefined)).toBe("12 de marzo de 2024")
   })
 })
 

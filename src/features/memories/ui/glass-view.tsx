@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Keyboar
 import Link from "next/link"
 import { Dialog } from "radix-ui"
 import { BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
-import { formatMemoryDate } from "../format"
+import { formatMemoryWhen } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
 import type { ShareMemoryResult } from "../share/share-view"
@@ -242,8 +242,9 @@ function GlassCaption({
           >
             {memory.caption}
           </Dialog.Title>
-          <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted">
-            {formatMemoryDate(memory.happenedOn)}
+          {/* The date, and the time it happened when it is known (tabular, so the digits do not shift). */}
+          <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted tabular-nums">
+            {formatMemoryWhen(memory.happenedOn, memory.happenedTime)}
           </p>
           {memory.place?.name && <p className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted">{memory.place.name}</p>}
           {/* The street address, when it says more than the name does (never the same thing twice). */}

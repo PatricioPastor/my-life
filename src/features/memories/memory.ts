@@ -22,6 +22,11 @@ export interface Memory {
   caption: string
   /** Calendar date the memory happened, as UTC midnight. */
   happenedOn: Date
+  /**
+   * The local wall-clock time it happened, `HH:MM` (24 h), or null when it was not given. Optional only so fixtures
+   * written before it existed stay valid (like `MemoryView.photo`); the repository always sets it.
+   */
+  happenedTime?: string | null
   /** The photo's size; null when there is no photo. */
   width: number | null
   height: number | null
@@ -46,7 +51,10 @@ export interface Memory {
   placeAddress: string | null
   /** Where the location came from; set if and only if the location is. */
   locationSource: LocationSource | null
-  /** `#rrggbb` the orb glows in. Null only for rows stored before orb colors existed. */
+  /**
+   * `#rrggbb` the orb glows in. Null when nothing was picked and the photo gave no dominant color (and for rows stored
+   * before orb colors existed): the DTO then gets the curated hue of the memory's id (see `orbHueFor`).
+   */
   orbColor: string | null
   /** How many distinct visitors opened it (kept by the database; the visitors themselves never leave it). */
   viewCount: number
@@ -62,20 +70,31 @@ export interface MemoryCore {
   publicId: string | null
   caption: string
   happenedOn: Date
+  /** `HH:MM`, the local wall-clock time it happened, or null. */
+  happenedTime: string | null
   width: number | null
   height: number | null
   /** At least one of `publicId` and `audio` is set. */
   audio: StoredAudio | null
 }
 
-/** Unvalidated input, same shape as {@link MemoryCore}. */
-export type NewMemoryInput = MemoryCore
+/**
+ * Unvalidated input, the shape of {@link MemoryCore}, except the time: whatever the browser sent, which the
+ * validation reads (nothing, null and "" mean no time).
+ */
+export type NewMemoryInput = Omit<MemoryCore, "happenedTime"> & { happenedTime?: unknown }
 
 /**
  * What is stored for a new memory: the validated submission plus what the server learned from the photo, and the
- * orb color the server settled on (always a valid, glowing `#rrggbb`).
+ * orb color the server settled on (a valid, glowing `#rrggbb`, or null when there is nothing to go by: the read path
+ * then gives it the curated hue of its id, which the database only knows after the insert).
  */
-export type NewMemory = MemoryCore & PhotoDetails & { orbColor: string; relatedMemoryId: string | null }
+export type NewMemory = MemoryCore & PhotoDetails & { orbColor: string | null; relatedMemoryId: string | null }
 
 export const CAPTION_MAX_LENGTH = 140
 export const EARLIEST_MEMORY_DATE = new Date("1900-01-01T00:00:00.000Z")
+
+const WALL_CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/** True for a 24 h wall-clock time `HH:MM` ("00:00" to "23:59"), the only form a memory's time takes. */
+export const isWallClockTime = (value: unknown): value is string => typeof value === "string" && WALL_CLOCK_TIME.test(value)

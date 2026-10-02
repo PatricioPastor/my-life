@@ -29,6 +29,7 @@ const memory = (over: Partial<MemoryView> = {}): MemoryView => ({
   id: "11111111-1111-4111-8111-111111111111",
   caption: "Una tarde de lluvia",
   happenedOn: "2024-03-12",
+  happenedTime: null,
   status: "approved",
   width: 800,
   height: 600,
@@ -82,6 +83,12 @@ describe("/m/[token] metadata", () => {
     expect(meta.title).toBe("Una tarde de lluvia")
     expect(meta.description).toBe("12 de marzo de 2024 · Un recuerdo de patriciopastor")
     expect(meta.openGraph).toMatchObject({ title: "Una tarde de lluvia", description: meta.description, type: "website" })
+  })
+
+  it("adds the time it happened to the date, when the memory has one", async () => {
+    find.mockResolvedValue(found({ happenedTime: "18:42" }))
+    const meta = await generateMetadata(params())
+    expect(meta.description).toBe("12 de marzo de 2024 · 18:42 · Un recuerdo de patriciopastor")
   })
 
   it("is noindex and nofollow, so a shared memory never gets indexed", async () => {

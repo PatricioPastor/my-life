@@ -15,6 +15,8 @@ import { readAudioDuration, type ReadAudioDuration } from "./audio-duration"
 import { AudioSection } from "./audio-section"
 import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
+import { WHEN_COPY, deriveWhen, localWhen, usableWhen, type When, type WhenOverrides } from "./memory-when"
+import { readPhotoTaken, type PhotoTimeParser } from "./photo-exif"
 import type { GpsParser } from "./photo-gps"
 import { OrbColorPicker } from "./orb-color-picker"
 import { orbSwatches, swatchFor } from "./photo-palette"
@@ -40,6 +42,8 @@ export interface AddMemoryProps {
   resolveLink: ResolveLink
   /** Reads the GPS of the picked photo in the browser. Defaults to exifr, loaded on demand (a seam for tests). */
   parseGps?: GpsParser
+  /** Reads when the picked photo was taken (its EXIF dates). Defaults to the same exifr read as the GPS (a seam for tests). */
+  parsePhotoTime?: PhotoTimeParser
   /** Reads the colors of the picked photo for the orb swatches. Defaults to a small canvas in the browser (a seam for tests). */
   readPalette?: ReadPalette
   /** The random source the orb hue of a memory with no photo tones is drawn from (a seam for tests). Defaults to `Math.random`. */
@@ -60,8 +64,13 @@ export interface AddMemoryProps {
   /** Controlled open state, for a parent that opens it from elsewhere (a memory's own Contribuir). Absent: it opens itself. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  /** The visitor's local `YYYY-MM-DD` (a seam for tests). */
+  /** The visitor's local `YYYY-MM-DD` (a seam for tests). Defaults to the date on `clock`. */
   today?: string
+  /**
+   * The visitor's own clock (a seam for tests): when a recording starts, and what "later than now" means for a date and
+   * time found in a photo or a file. Defaults to the browser's.
+   */
+  clock?: () => Date
   /** How long the typing of a link must pause before it is resolved. */
   linkDebounceMs?: number
   /** How long the confirmation stays before the dialog closes. */
@@ -80,6 +89,8 @@ const FIELD_CLASS = cn(
 const LABEL_CLASS = "t-label text-ink-muted"
 const ERROR_CLASS = "t-body m-0 text-[length:var(--type-1)] leading-snug text-signal"
 
+const browserClock = () => new Date()
+
 function buttonLabel(phase: Phase): string {
   if (phase.kind === "uploading") return `Subiendo… ${phase.percent}%`
   if (phase.kind === "saving") return "Guardando…"
@@ -95,14 +106,25 @@ function MemoryForm({
   onLockChange: (locked: boolean) => void
   onClose: () => void
 }) {
-  const [today] = useState(() => props.today ?? localToday())
+  const clock = props.clock ?? browserClock
+  const [today] = useState(() => props.today ?? localToday(clock()))
   const [picked, setPicked] = useState<{ file: File; url: string } | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [caption, setCaption] = useState("")
   // Contributed from a memory: the date starts at its date (the visitor can change it), and the chip can be removed.
   const [relation, setRelation] = useState<RelatedMemory | null>(props.related ?? null)
-  const [date, setDate] = useState(props.related?.happenedOn ?? "")
+  // "¿Cuándo fue?" fills itself: each source keeps its own date and time, and the fields show what the visitor typed in
+  // each one, else the best source's (see `deriveWhen`). The related memory's date stays a source even once its chip is
+  // removed: it is the date the form started from.
+  const [relatedWhen] = useState(() =>
+    usableWhen(props.related ? { date: props.related.happenedOn, time: null } : null, clock()),
+  )
+  const [photoWhen, setPhotoWhen] = useState<When | null>(null)
+  const [recordWhen, setRecordWhen] = useState<When | null>(null)
+  const [fileWhen, setFileWhen] = useState<When | null>(null)
+  const [typed, setTyped] = useState<WhenOverrides>({})
+  const photoRun = useRef(0)
   // Off by default: the visitor opts in to keeping the place of this photo.
   // `auto` marks consent that a resolved link ticked by itself; `prior` is what the visitor had chosen before it did.
   // Only the visitor's own tick counts for the photo's position: clearing or editing the link gives `prior` back.
@@ -122,6 +144,16 @@ function MemoryForm({
   const recorder = useAudioRecorder(props.recorderEnv)
   const clip = recorder.clip
   const hasAudio = clip !== null && (recorder.state.phase === "recorded" || recorder.state.phase === "playing")
+  // A source only counts while what it came from is still there: removing the photo or the audio recomputes the fields.
+  const when = deriveWhen(
+    {
+      photo: picked ? photoWhen : null,
+      recording: hasAudio && recorder.state.source === "recording" ? recordWhen : null,
+      file: hasAudio && recorder.state.source === "file" ? fileWhen : null,
+      related: relatedWhen,
+    },
+    typed,
+  )
   // With a photo its own tones come first, then the curated hues; with only a voice, the curated hues alone.
   const tones = picked && palette.status === "ready" ? palette.colors : []
   const swatches = picked ? (palette.status === "ready" ? orbSwatches(tones) : []) : hasAudio ? ORB_HUES : []
@@ -143,11 +175,12 @@ function MemoryForm({
   const timer = useRef<number | undefined>(undefined)
   const previewUrl = useRef<string | null>(null)
 
-  // Closing the form cancels an upload in flight and frees the preview.
+  // Closing the form cancels an upload in flight, drops a photo still being read and frees the preview.
   useEffect(
     () => () => {
       controller.current?.abort()
       window.clearTimeout(timer.current)
+      photoRun.current += 1
       if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
     },
     [],
@@ -168,6 +201,7 @@ function MemoryForm({
     if (check !== "ok") {
       resetPlace()
       resetColors()
+      forgetTaken()
       setPicked(null)
       setErrors((e) => ({ ...e, photo: check === "too_large" ? COPY.photoSize : COPY.photoType }))
       return
@@ -177,6 +211,27 @@ function MemoryForm({
     setErrors((e) => ({ ...e, photo: undefined, media: undefined }))
     void readPlace(file)
     void readColors(file)
+    void readTaken(file)
+  }
+
+  /** When the picked photo was taken, from its EXIF. Each read supersedes the one before: a late answer is ignored. */
+  async function readTaken(file: File) {
+    const mine = ++photoRun.current
+    setPhotoWhen(null)
+    const taken = await readPhotoTaken(file, props.parsePhotoTime)
+    if (mine !== photoRun.current) return
+    setPhotoWhen(usableWhen(taken, clock()))
+  }
+
+  function forgetTaken() {
+    photoRun.current += 1
+    setPhotoWhen(null)
+  }
+
+  /** The recording's moment is when the visitor pressed Grabar, on their own clock. */
+  function startRecording() {
+    setRecordWhen(localWhen(clock()))
+    return recorder.start()
   }
 
   function removePhoto() {
@@ -188,6 +243,7 @@ function MemoryForm({
     setChosenColor(null)
     resetPlace()
     resetColors()
+    forgetTaken()
     // The consent was for the photo's place; a pasted link that resolved keeps its own.
     if (!linkPlace) setShareLocation(false)
     setErrors((e) => ({ ...e, photo: undefined }))
@@ -210,6 +266,8 @@ function MemoryForm({
       setErrors((e) => ({ ...e, audio: COPY.audioLong }))
       return
     }
+    // Only approximate: a file's date is when it last changed (a copy or an export moves it).
+    setFileWhen(usableWhen(localWhen(file.lastModified), clock()))
     recorder.load(file, duration)
   }
 
@@ -258,10 +316,11 @@ function MemoryForm({
           : null,
       recording: recorder.state.phase === "recording" || recorder.state.phase === "requesting",
       caption,
-      date,
+      date: when.date,
+      time: when.time,
       today,
     })
-    if (found.media || found.photo || found.audio || found.caption || found.date) {
+    if (found.media || found.photo || found.audio || found.caption || found.date || found.time) {
       setErrors(found)
       return
     }
@@ -331,7 +390,9 @@ function MemoryForm({
       const created = await props.create({
         ticket: prepared.upload.ticket,
         caption: caption.trim(),
-        happenedOn: date,
+        happenedOn: when.date,
+        // The visitor's wall clock as it is, or none: the server stores it with no time zone.
+        happenedTime: when.time || null,
         shareLocation: share,
         // Only the link goes up: the server resolves it again and ignores anything else the browser saw.
         ...(linkPlace ? { mapsUrl: link.text.trim() } : {}),
@@ -358,6 +419,9 @@ function MemoryForm({
   const count = [...caption].length
   const photoDescribedBy = ["memory-photo-hint", errors.photo && "memory-photo-error"].filter(Boolean).join(" ")
   const captionDescribedBy = ["memory-caption-count", errors.caption && "memory-caption-error"].filter(Boolean).join(" ")
+  const whenHint = when.hint ? "memory-when-hint" : null
+  const dateDescribedBy = [whenHint, errors.date && "memory-date-error"].filter(Boolean).join(" ")
+  const timeDescribedBy = [whenHint, errors.time && "memory-time-error"].filter(Boolean).join(" ")
 
   return (
     <form noValidate onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -466,7 +530,7 @@ function MemoryForm({
             </div>
 
             <AudioSection
-              recorder={recorder}
+              recorder={{ ...recorder, start: startRecording }}
               color={orbColor ?? DEFAULT_ORB_COLOR}
               disabled={busy || phase.kind === "done"}
               error={errors.audio ?? errors.media}
@@ -523,21 +587,50 @@ function MemoryForm({
               <label htmlFor="memory-date" className={LABEL_CLASS}>
                 ¿Cuándo fue?
               </label>
-              <input
-                id="memory-date"
-                type="date"
-                value={date}
-                min={EARLIEST_MEMORY_DATE.toISOString().slice(0, 10)}
-                max={today}
-                onChange={(e) => setDate(e.target.value)}
-                disabled={busy || phase.kind === "done"}
-                aria-describedby={errors.date ? "memory-date-error" : undefined}
-                aria-invalid={errors.date ? true : undefined}
-                className={cn(FIELD_CLASS, "[color-scheme:dark]")}
-              />
+              {/* The date, and an optional time beside it. Both fill themselves from the photo or the audio. */}
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,8.5rem)] gap-2">
+                <input
+                  id="memory-date"
+                  type="date"
+                  value={when.date}
+                  min={EARLIEST_MEMORY_DATE.toISOString().slice(0, 10)}
+                  max={today}
+                  onChange={(e) => setTyped((t) => ({ ...t, date: e.target.value }))}
+                  disabled={busy || phase.kind === "done"}
+                  aria-describedby={dateDescribedBy || undefined}
+                  aria-invalid={errors.date ? true : undefined}
+                  className={cn(FIELD_CLASS, "tabular-nums [color-scheme:dark]")}
+                />
+                <input
+                  id="memory-time"
+                  type="time"
+                  aria-label={WHEN_COPY.time}
+                  value={when.time}
+                  onChange={(e) => setTyped((t) => ({ ...t, time: e.target.value }))}
+                  disabled={busy || phase.kind === "done"}
+                  aria-describedby={timeDescribedBy || undefined}
+                  aria-invalid={errors.time ? true : undefined}
+                  className={cn(FIELD_CLASS, "tabular-nums [color-scheme:dark]")}
+                />
+              </div>
+              {/* Where the date and time came from, until the visitor edits them. */}
+              {when.hint && (
+                <p
+                  id="memory-when-hint"
+                  data-approximate={when.approximate || undefined}
+                  className="m-0 text-xs tracking-[0.04em] text-ink-muted"
+                >
+                  {when.hint}
+                </p>
+              )}
               {errors.date && (
                 <p id="memory-date-error" className={ERROR_CLASS}>
                   {errors.date}
+                </p>
+              )}
+              {errors.time && (
+                <p id="memory-time-error" className={ERROR_CLASS}>
+                  {errors.time}
                 </p>
               )}
             </div>
@@ -607,7 +700,7 @@ function MemoryForm({
 
 /**
  * The "Contribuir" control (a plus and the word, in the space's top bar) and the dialog it opens: a photo and/or an audio (recorded or uploaded), the color of
- * the orb, a few words, a date and the place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
+ * the orb, a few words, a date with an optional time (filled in from the photo or the audio) and the place. The dialog is part of the dark dimension (a translucent panel with a fine cool rim), mounted inside the stage
  * like the viewer. On phones it is a bottom sheet (one scroll region, the submit always in reach); on tablets and
  * desktops it is a two-column card that fits without scrolling.
  */

@@ -33,6 +33,11 @@ export interface CreateMemoryInput {
   /** `YYYY-MM-DD`, the visitor calendar date. */
   happenedOn: string
   /**
+   * `HH:MM` (24 h), the visitor's local wall-clock time, or null when they left it empty. Optional: the server stores it
+   * as it is, with no time zone, and refuses anything that is not a valid `HH:MM`.
+   */
+  happenedTime?: string | null
+  /**
    * The visitor ticked "Guardar dónde se sacó la foto". Only an explicit `true` counts; the server alone decides what
    * is stored (the exact location, and only when the photo has valid GPS).
    */

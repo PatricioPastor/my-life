@@ -4,6 +4,11 @@ export interface MemoryView {
   caption: string
   /** `YYYY-MM-DD`, the calendar date it happened. */
   happenedOn: string
+  /**
+   * `HH:MM`, the local wall-clock time it happened, or null when it was not given (no time zone: it reads the same
+   * everywhere). The server always sends it; it is optional so older DTOs and fixtures stay valid, like `photo`.
+   */
+  happenedTime?: string | null
   /** `pending` only ever appears for the visitor's own memories. */
   status: "approved" | "pending"
   /** The photo's size, or null when the memory has no photo (it is only an audio). */

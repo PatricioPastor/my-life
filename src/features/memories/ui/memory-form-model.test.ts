@@ -47,6 +47,21 @@ describe("validateForm", () => {
     expect(validateForm({ ...ok, date: "1899-12-31" }).date).toBe(COPY.dateInvalid)
     expect(validateForm({ ...ok, date: "1900-01-01" }).date).toBeUndefined()
   })
+
+  it("takes no time, or a 24 h HH:MM, like the server", () => {
+    expect(validateForm({ ...ok, time: "" })).toEqual({})
+    expect(validateForm({ ...ok, time: "00:00" })).toEqual({})
+    expect(validateForm({ ...ok, time: "23:59" })).toEqual({})
+    expect(validateForm({ ...ok, time: "24:00" }).time).toBe(COPY.timeInvalid)
+    expect(validateForm({ ...ok, time: "7:05" }).time).toBe(COPY.timeInvalid)
+    expect(validateForm({ ...ok, time: "18:42:07" }).time).toBe(COPY.timeInvalid)
+    expect(COPY.timeInvalid).toBe("Elige una hora válida o déjala vacía.")
+  })
+
+  it("never lets the time change the date rules", () => {
+    expect(validateForm({ ...ok, date: "2026-10-02", time: "00:00" }).date).toBe(COPY.dateFuture)
+    expect(validateForm({ ...ok, date: "2026-10-01", time: "23:59" })).toEqual({})
+  })
 })
 
 describe("messageForFailure", () => {
@@ -73,6 +88,7 @@ describe("messageForFailure", () => {
       date: COPY.dateInvalid,
     })
     expect(messageForFailure({ ok: false, reason: "invalid", errors: ["width_invalid"] })).toEqual({ form: COPY.unavailable })
+    expect(messageForFailure({ ok: false, reason: "invalid", errors: ["time_invalid"] })).toEqual({ time: COPY.timeInvalid })
   })
 })
 

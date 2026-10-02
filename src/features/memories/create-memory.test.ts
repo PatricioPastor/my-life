@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}))
 import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, squareTransform } from "./cloudinary-url"
 import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
+import { toMemoryView } from "./list-memories"
 import type { Memory } from "./memory"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
 import { MAX_AUDIO_BYTES, MAX_AUDIO_MS, MAX_UPLOAD_BYTES } from "./upload-limits"
@@ -54,6 +55,7 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   publicId: PID,
   caption: "Una tarde",
   happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+  happenedTime: null,
   width: 4032,
   height: 3024,
   status: "pending",
@@ -118,6 +120,7 @@ const input = (
     ticket: string
     caption: string
     happenedOn: string
+    happenedTime: unknown
     shareLocation: unknown
     mapsUrl: unknown
     orbColor: unknown
@@ -208,6 +211,47 @@ describe("createMemoryWith: validation", () => {
     const tooFar = await createMemoryWith(setup().full, input({ happenedOn: "2026-10-03" }))
     expect(tooFar).toMatchObject({ ok: false, reason: "invalid" })
   })
+
+  it.each([
+    ["an hour past 23", "24:00"],
+    ["seconds", "18:42:07"],
+    ["a number", 1842],
+  ])("refuses a time that is %s, destroying the asset without inserting", async (_name, happenedTime) => {
+    const { full, repository, assets } = setup()
+    expect(await createMemoryWith(full, input({ happenedTime }))).toEqual({ ok: false, reason: "invalid", errors: ["time_invalid"] })
+    expect(assets.destroy).toHaveBeenCalledWith(PID)
+    expect(repository.createPending).not.toHaveBeenCalled()
+  })
+})
+
+describe("createMemoryWith: the time it happened", () => {
+  const saved = async (over: Parameters<typeof input>[0]) => {
+    const { full, repository } = setup()
+    await createMemoryWith(full, input(over))
+    return vi.mocked(repository.createPending).mock.calls[0][1]
+  }
+
+  it("stores the visitor's wall-clock time next to the date", async () => {
+    expect(await saved({ happenedTime: "18:42" })).toMatchObject({
+      happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+      happenedTime: "18:42",
+    })
+  })
+
+  it.each([
+    ["not sent", undefined],
+    ["null", null],
+    ["empty", ""],
+  ])("stores no time when it is %s", async (_name, happenedTime) => {
+    expect(await saved({ happenedTime })).toMatchObject({ happenedTime: null })
+  })
+
+  it("answers the new memory with its time", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.createPending).mockResolvedValueOnce(stored({ happenedTime: "18:42" }))
+    const result = await createMemoryWith(full, input({ happenedTime: "18:42" }))
+    expect(result.ok && result.memory).toMatchObject({ happenedOn: "2024-03-12", happenedTime: "18:42" })
+  })
 })
 
 describe("createMemoryWith: asset verification", () => {
@@ -261,6 +305,7 @@ describe("createMemoryWith: rate limit and insert", () => {
       publicId: PID,
       caption: "Una tarde",
       happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+      happenedTime: null,
       width: 640,
       height: 480,
       kind: "image",
@@ -275,7 +320,8 @@ describe("createMemoryWith: rate limit and insert", () => {
       placeName: null,
       placeAddress: null,
       locationSource: null,
-      orbColor: DEFAULT_ORB_COLOR,
+      // No pick and no dominant color: nothing is stored, and the read path gives it its own curated hue.
+      orbColor: null,
       relatedMemoryId: null,
       audio: null,
     })
@@ -293,6 +339,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         id: "11111111-1111-4111-8111-111111111111",
         caption: "Una tarde",
         happenedOn: "2024-03-12",
+        happenedTime: null,
         status: "pending",
         width: 4032,
         height: 3024,
@@ -837,14 +884,39 @@ describe("createMemoryWith: the orb color", () => {
     expect(out.orbColor).toBe(glowColor("#112233"))
   })
 
-  it("falls back to the default cool tone when the photo has no dominant color either", async () => {
+  it("stores no color when the photo has no dominant color either, so the read path gives it its curated hue", async () => {
     const out = await saved({ orbColor: "nope" }, asset())
-    expect(out.orbColor).toBe(DEFAULT_ORB_COLOR)
+    expect(out.orbColor).toBeNull()
+  })
+
+  it("answers with the same color the stored row reads back as, when nothing is picked and nothing is dominant", async () => {
+    const { full, repository } = setup({}, { info: asset() })
+    // The repository echoes what was inserted, the way the database would.
+    vi.mocked(repository.createPending).mockImplementationOnce(async (_handle, row) => stored({ orbColor: row.orbColor }))
+    const result = await createMemoryWith(full, input({ orbColor: "nope" }))
+    if (!result.ok) throw new Error("expected ok")
+    const inserted = vi.mocked(repository.createPending).mock.calls[0][1].orbColor
+    const listed = toMemoryView(stored({ orbColor: inserted }), { cloudName: "demo", apiSecret: "abcd" })
+    expect(inserted).toBeNull()
+    expect(result.memory.orbColor).toBe(orbHueFor(result.memory.id))
+    expect(result.memory.orbColor).toBe(listed?.orbColor)
+    expect(result.memory.orbColor).not.toBe(DEFAULT_ORB_COLOR)
+  })
+
+  it("answers with the color it stored when there is one", async () => {
+    const { full, repository } = setup({}, { info: photo() })
+    vi.mocked(repository.createPending).mockImplementationOnce(async (_handle, row) => stored({ orbColor: row.orbColor }))
+    const result = await createMemoryWith(full, input({ orbColor: "#ff9a3c" }))
+    if (!result.ok) throw new Error("expected ok")
+    expect(vi.mocked(repository.createPending).mock.calls[0][1].orbColor).toBe("#ff9a3c")
+    expect(result.memory.orbColor).toBe("#ff9a3c")
   })
 
   it("never stores a color that would not glow, whatever the browser says", async () => {
     for (const orbColor of ["#000000", "#010101", "#222222", "#ffffff", "#123456", "bad", undefined]) {
       expect(isGlowColor((await saved({ orbColor })).orbColor)).toBe(true)
+      const stored = (await saved({ orbColor }, asset())).orbColor
+      expect(stored === null || isGlowColor(stored)).toBe(true)
     }
   })
 
@@ -877,6 +949,7 @@ describe("createMemoryWith: audio", () => {
       publicId: null,
       caption: "Mi voz",
       happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+      happenedTime: null,
       width: null,
       height: null,
       kind: "image",
@@ -891,7 +964,7 @@ describe("createMemoryWith: audio", () => {
       placeName: null,
       placeAddress: null,
       locationSource: null,
-      orbColor: DEFAULT_ORB_COLOR,
+      orbColor: null,
       relatedMemoryId: null,
       audio: { publicId: AID, format: "m4a", bytes: 321_000, durationMs: 61_235 },
     })
@@ -1016,14 +1089,14 @@ describe("createMemoryWith: audio", () => {
     expect(assets.destroyAudio).not.toHaveBeenCalled()
   })
 
-  it("gives an audio-only memory the color the visitor chose, or the default glow", async () => {
+  it("gives an audio-only memory the color the visitor chose, or none, so it reads back as its curated hue", async () => {
     const chosen = setup()
     await createMemoryWith(chosen.full, audioIn({ orbColor: "#a58cff" }))
     expect(vi.mocked(chosen.repository.createPending).mock.calls[0][1]).toMatchObject({ orbColor: "#a58cff" })
 
     const dark = setup()
     await createMemoryWith(dark.full, audioIn({ orbColor: "#112233" }))
-    expect(vi.mocked(dark.repository.createPending).mock.calls[0][1]).toMatchObject({ orbColor: DEFAULT_ORB_COLOR })
+    expect(vi.mocked(dark.repository.createPending).mock.calls[0][1]).toMatchObject({ orbColor: null })
   })
 
   it("stores a place for an audio-only memory only from a Maps link, never from a photo it does not have", async () => {

@@ -16,6 +16,22 @@ export const MEMORY_LIST_LIMIT = 300
 
 type Db = Pick<PrismaClient, "$transaction" | "memory">
 
+const pad = (n: number) => String(n).padStart(2, "0")
+
+/**
+ * A `time(0)` column, as Prisma reads it: a Date on 1970-01-01 whose UTC fields hold the wall-clock time. Only the UTC
+ * getters are used, so the server's own time zone never moves it.
+ */
+const timeFromDb = (value: Date | null): string | null =>
+  value === null ? null : `${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}`
+
+/** `HH:MM` the way Prisma writes a `time(0)` column: the UTC fields of 1970-01-01 (see `timeFromDb`). */
+function timeToDb(value: string | null): Date | null {
+  if (value === null) return null
+  const [hours, minutes] = value.split(":").map(Number)
+  return new Date(Date.UTC(1970, 0, 1, hours, minutes))
+}
+
 function toDomain(row: MemoryRow): Memory {
   return {
     id: row.id,
@@ -23,6 +39,7 @@ function toDomain(row: MemoryRow): Memory {
     publicId: row.publicId,
     caption: row.caption,
     happenedOn: row.happenedOn,
+    happenedTime: timeFromDb(row.happenedTime),
     width: row.width,
     height: row.height,
     status: row.status,
@@ -111,6 +128,7 @@ export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryR
             publicId: input.publicId,
             caption: input.caption,
             happenedOn: input.happenedOn,
+            happenedTime: timeToDb(input.happenedTime),
             width: input.width,
             height: input.height,
             kind: input.kind,

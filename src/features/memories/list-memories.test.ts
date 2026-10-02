@@ -15,6 +15,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   publicId: "memories/a b",
   caption: "Una tarde",
   happenedOn: new Date("2024-03-12T00:00:00.000Z"),
+  happenedTime: null,
   width: 800,
   height: 600,
   status: "approved",
@@ -73,6 +74,7 @@ describe("listMemoriesWith", () => {
           id: "11111111-1111-4111-8111-111111111111",
           caption: "Una tarde",
           happenedOn: "2024-03-12",
+          happenedTime: null,
           status: "approved",
           width: 800,
           height: 600,
@@ -107,6 +109,16 @@ describe("listMemoriesWith", () => {
       expect(size.url).toContain(`c_fill,g_auto,w_${size.width},h_${size.width}`)
       expect(size.url).toContain("/image/authenticated/s--")
     }
+  })
+
+  it("sends the wall-clock time it happened, as stored, and null when there is none", async () => {
+    const { full } = deps({}, [
+      memory({ id: "a", happenedTime: "18:42" }),
+      memory({ id: "b", happenedTime: null }),
+      memory({ id: "c", happenedTime: undefined }),
+    ])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories.map((m) => m.happenedTime)).toEqual(["18:42", null, null])
   })
 
   it("sends the number of distinct viewers, as it is stored, and never who they are", async () => {

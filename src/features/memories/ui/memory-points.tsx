@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type Ref } from "react"
-import { formatMemoryDate, truncateCaption } from "../format"
+import { formatMemoryWhen, truncateCaption } from "../format"
 import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
 import { approachSizes, ladderOf, PHOTO_RUNGS, pickSize } from "../photo-ladder"
@@ -424,7 +424,7 @@ export function MemoryPoints({
         {memories.map((memory, index) => {
           const orb = orbMetrics(orbDepth(memory.id))
           const drift = driftFor(memory.id)
-          const date = formatMemoryDate(memory.happenedOn)
+          const date = formatMemoryWhen(memory.happenedOn, memory.happenedTime)
           const pending = memory.status === "pending"
           const thumb = pickSize(ladderOf(memory), thumbCss, dpr)?.url ?? null
           const style: PointStyle = {

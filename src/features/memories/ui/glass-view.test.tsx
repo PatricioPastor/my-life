@@ -154,6 +154,18 @@ describe("GlassView as a dialog", () => {
     expect(dialog().textContent).not.toMatch(/34\.59|58\.42/)
   })
 
+  it("shows the time after the date, in tabular numerals, when the memory has one", () => {
+    mount({ memory: view("p", "Una tarde de lluvia", { happenedTime: "18:42" }) })
+    const when = within(dialog()).getByText("12 de marzo de 2024 · 18:42")
+    expect(when.className).toContain("tabular-nums")
+  })
+
+  it("shows only the date when the memory has no time", () => {
+    mount({ memory: view("p", "Una tarde de lluvia", { happenedTime: null }) })
+    expect(within(dialog()).getByText("12 de marzo de 2024")).toBeTruthy()
+    expect(dialog().textContent).not.toContain("·")
+  })
+
   it("sets the caption in Gambarino", () => {
     mount()
     expect(within(dialog()).getByText("Una tarde de lluvia").className).toContain("t-title")

@@ -1,6 +1,7 @@
 import {
   CAPTION_MAX_LENGTH,
   EARLIEST_MEMORY_DATE,
+  isWallClockTime,
   type MemoryCore,
   type NewMemoryInput,
 } from "./memory"
@@ -14,6 +15,7 @@ export type MemoryValidationError =
   | "date_invalid"
   | "date_in_future"
   | "date_too_old"
+  | "time_invalid"
   | "width_invalid"
   | "height_invalid"
 
@@ -67,6 +69,11 @@ export function validateNewMemory(input: NewMemoryInput, now: Date = new Date())
     else if (happenedOn < EARLIEST_MEMORY_DATE) errors.push("date_too_old")
   }
 
+  // The time is optional and only ever a wall clock: no time zone, so the date rules above stay the only "when" checks.
+  const time = input.happenedTime
+  const happenedTime = time === undefined || time === null || time === "" ? null : isWallClockTime(time) ? time : undefined
+  if (happenedTime === undefined) errors.push("time_invalid")
+
   if (input.publicId === null) {
     if (input.width !== null) errors.push("width_invalid")
     if (input.height !== null) errors.push("height_invalid")
@@ -75,9 +82,9 @@ export function validateNewMemory(input: NewMemoryInput, now: Date = new Date())
     if (input.height === null || !isPositiveInteger(input.height)) errors.push("height_invalid")
   }
 
-  if (errors.length > 0) return { ok: false, errors }
+  if (errors.length > 0 || happenedTime === undefined) return { ok: false, errors }
   return {
     ok: true,
-    value: { publicId, caption, happenedOn, width: input.width, height: input.height, audio },
+    value: { publicId, caption, happenedOn, happenedTime, width: input.width, height: input.height, audio },
   }
 }

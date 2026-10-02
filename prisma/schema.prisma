@@ -47,6 +47,9 @@ model Memory {
   publicId   String?      @unique @map("public_id")
   caption    String       @db.VarChar(140)
   happenedOn DateTime     @map("happened_on") @db.Date
+  /// The local wall-clock time it happened (no time zone), when the visitor gave or kept one. Prisma reads and writes
+  /// a `time` as a DateTime on 1970-01-01 with the time in its UTC fields; the repository converts it to `HH:MM`.
+  happenedTime DateTime?  @map("happened_time") @db.Time(0)
   /// The photo's size, from Cloudinary. Null exactly when there is no photo.
   width      Int?
   height     Int?
@@ -76,7 +79,8 @@ model Memory {
   /// Set if and only if the location is.
   locationSource LocationSource? @map("location_source")
   /// The color of the memory's orb, `#rrggbb`, chosen by the visitor from their photo (or derived by the server).
-  /// Null only for rows stored before orb colors existed; the client always gets one.
+  /// Null when there was nothing to go by (no pick, no dominant color) and for rows stored before orb colors existed;
+  /// the client always gets one (the curated hue of the id, for those).
   orbColor       String?         @map("orb_color") @db.VarChar(7)
 
   /// The voice of the memory: a Cloudinary `video`-type resource (that is how it stores audio), `authenticated`.

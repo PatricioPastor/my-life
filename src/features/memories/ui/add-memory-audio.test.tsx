@@ -112,6 +112,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           create={create}
           upload={upload}
           parseGps={async () => undefined}
+          parsePhotoTime={async () => undefined}
           suggest={async (): Promise<SuggestPlaceResult> => ({ ok: true, label: "Palermo", address: null })}
           resolveLink={async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: null })}
           readPalette={readPalette}
@@ -120,6 +121,7 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           linkDebounceMs={0}
           onCreated={onCreated}
           today="2026-10-01"
+          clock={() => NOW}
           doneDelayMs={20}
           {...over}
         />
@@ -130,6 +132,11 @@ function setup(over: Partial<AddMemoryProps> = {}) {
   return { prepare, upload, create, onCreated, readAudioDuration, readPalette }
 }
 
+/** The visitor's own clock: 1 October 2026 at 18:30, the same day as `today`. */
+const NOW = new Date(2026, 9, 1, 18, 30, 0)
+/** When the audio files of these tests were last changed, unless a test says otherwise. */
+const FILE_TIME = new Date(2025, 11, 24, 21, 3, 0).getTime()
+
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
 const photo = (over: Partial<{ name: string; type: string; size: number }> = {}) => {
   const { name = "foto.jpg", type = "image/jpeg", size = 2000 } = over
@@ -137,9 +144,9 @@ const photo = (over: Partial<{ name: string; type: string; size: number }> = {})
   Object.defineProperty(file, "size", { value: size })
   return file
 }
-const audioFile = (over: Partial<{ name: string; type: string; size: number }> = {}) => {
-  const { name = "nota.mp3", type = "audio/mpeg", size = 4000 } = over
-  const file = new File(["x"], name, { type })
+const audioFile = (over: Partial<{ name: string; type: string; size: number; lastModified: number }> = {}) => {
+  const { name = "nota.mp3", type = "audio/mpeg", size = 4000, lastModified = FILE_TIME } = over
+  const file = new File(["x"], name, { type, lastModified })
   Object.defineProperty(file, "size", { value: size })
   return file
 }
@@ -617,5 +624,77 @@ describe("AddMemory: layout of the audio section", () => {
       /(^|\s)(overflow-y-auto|overflow-y-scroll|overflow-auto|overflow-scroll)(\s|$)/.test(el.className?.toString() ?? ""),
     )
     expect(scrollers).toEqual([screen.getByTestId("memory-scroll")])
+  })
+})
+
+describe("AddMemory: the date and time from the audio", () => {
+  const dateField = () => screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement
+  const timeField = () => screen.getByLabelText("Hora") as HTMLInputElement
+
+  it("fills the date and the time with the moment the recording started, on the visitor's clock", async () => {
+    setup({ recorderEnv: micEnv() })
+    open()
+    await record()
+    expect(dateField().value).toBe("2026-10-01")
+    expect(timeField().value).toBe("18:30")
+    expect(screen.getByText("Cuando empezaste a grabar")).toBeTruthy()
+  })
+
+  it("fills them from an uploaded audio file's date, marked as only approximate", async () => {
+    setup()
+    open()
+    pickAudio(audioFile())
+    await heard()
+    expect(dateField().value).toBe("2025-12-24")
+    expect(timeField().value).toBe("21:03")
+    const hint = screen.getByText("Según el archivo de audio")
+    expect(hint.getAttribute("data-approximate")).toBe("true")
+  })
+
+  it("clears what the audio filled in when the audio is removed", async () => {
+    setup()
+    open()
+    pickAudio(audioFile())
+    await heard()
+    fireEvent.click(within(group()).getByRole("button", { name: "Quitar audio" }))
+    expect(dateField().value).toBe("")
+    expect(timeField().value).toBe("")
+    expect(screen.queryByText("Según el archivo de audio")).toBeNull()
+  })
+
+  it("ignores a file dated later than now, or with no date at all", async () => {
+    setup()
+    open()
+    pickAudio(audioFile({ lastModified: new Date(2026, 9, 1, 18, 31).getTime() }))
+    await heard()
+    expect(dateField().value).toBe("")
+    fireEvent.click(within(group()).getByRole("button", { name: "Quitar audio" }))
+    pickAudio(audioFile({ name: "otra.mp3", lastModified: 0 }))
+    await heard()
+    expect(dateField().value).toBe("")
+    expect(screen.queryByText("Según el archivo de audio")).toBeNull()
+  })
+
+  it("lets the photo's own date win over the audio's", async () => {
+    const parsePhotoTime = vi.fn(async () => ({ DateTimeOriginal: "2024:03:14 18:42:07" }))
+    setup({ parsePhotoTime })
+    open()
+    pickAudio(audioFile())
+    await heard()
+    pickPhoto(photo())
+    await waitFor(() => expect(dateField().value).toBe("2024-03-14"))
+    expect(timeField().value).toBe("18:42")
+    expect(screen.getByText("Desde tu foto")).toBeTruthy()
+  })
+
+  it("sends the audio's time with the date", async () => {
+    const { create } = setup()
+    open()
+    pickAudio(audioFile())
+    await heard()
+    fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "Mi voz" } })
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({ happenedOn: "2025-12-24", happenedTime: "21:03" })
   })
 })

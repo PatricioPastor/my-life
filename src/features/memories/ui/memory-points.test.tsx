@@ -144,6 +144,13 @@ describe("MemoryPoints markup", () => {
     ])
   })
 
+  it("adds the time to an orb's name and its cursor line when the memory has one", () => {
+    mount([view("a", "Uno", { happenedTime: "18:42" }), view("b", "Dos", { happenedTime: null })])
+    expect(orb(/^Uno/).getAttribute("aria-label")).toBe("Uno, 12 de marzo de 2024 · 18:42")
+    expect(orb(/^Uno/).getAttribute("data-cursor-context")).toBe("12 de marzo de 2024 · 18:42")
+    expect(orb(/^Dos/).getAttribute("aria-label")).toBe("Dos, 12 de marzo de 2024")
+  })
+
   it("draws the links on a canvas behind the orbs that no assistive tech or pointer can reach", () => {
     const { container } = mount(trip)
     const canvas = container.querySelector("canvas[data-edges]") as HTMLCanvasElement

@@ -1,15 +1,17 @@
 import { exactCoordinate, isValidPosition } from "../place/coordinates"
+import { readExifWithExifr } from "./photo-exif"
 
 /** What exifr's GPS reader answers: exact decimal degrees, or nothing when the photo has no GPS block. */
 export type GpsParser = (file: Blob) => Promise<{ latitude: number; longitude: number } | undefined>
 
 /**
- * Reads only the GPS block of the photo, in the browser. exifr is loaded the first time a photo is picked, so it
- * does not weigh on the initial bundle; the "lite" build reads JPEG and HEIC.
+ * Reads the GPS block of the photo, in the browser: the same single EXIF read that tells when the photo was taken
+ * (see `readExifWithExifr`), so a photo is parsed once.
  */
 export const parseGpsWithExifr: GpsParser = async (file) => {
-  const exifr = await import("exifr/dist/lite.esm.mjs")
-  return exifr.gps(file)
+  const found = await readExifWithExifr(file)
+  if (!found || typeof found.latitude !== "number" || typeof found.longitude !== "number") return undefined
+  return { latitude: found.latitude, longitude: found.longitude }
 }
 
 /**

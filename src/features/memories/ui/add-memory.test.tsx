@@ -66,6 +66,8 @@ function setup(over: Partial<AddMemoryProps> = {}) {
     async (): Promise<ResolveMapsLinkResult> => ({ ok: true, lat: -34.58, lng: -58.42, label: "Plaza Italia", address: "Av. Rivadavia 1234, Buenos Aires" }),
   )
   const readPalette = vi.fn(async (): Promise<PhotoPalette> => ({ colors: SWATCHES, fromPhoto: true }))
+  // The photo says nothing about when it was taken unless a test says so; the answer is exifr's raw EXIF dates.
+  const parsePhotoTime = vi.fn<NonNullable<AddMemoryProps["parsePhotoTime"]>>(async () => undefined)
   const onCreated = vi.fn()
   function Stage() {
     const [el, setEl] = useState<HTMLDivElement | null>(null)
@@ -78,12 +80,14 @@ function setup(over: Partial<AddMemoryProps> = {}) {
           create={create}
           upload={upload}
           parseGps={parseGps}
+          parsePhotoTime={parsePhotoTime}
           suggest={suggest}
           resolveLink={resolveLink}
           readPalette={readPalette}
           linkDebounceMs={0}
           onCreated={onCreated}
           today="2026-10-01"
+          clock={() => NOW}
           doneDelayMs={20}
           {...over}
         />
@@ -91,8 +95,11 @@ function setup(over: Partial<AddMemoryProps> = {}) {
     )
   }
   render(<Stage />)
-  return { prepare, upload, create, onCreated, parseGps, suggest, resolveLink, readPalette }
+  return { prepare, upload, create, onCreated, parseGps, parsePhotoTime, suggest, resolveLink, readPalette }
 }
+
+/** The visitor's own clock: 1 October 2026 at 18:30, the same day as `today`. */
+const NOW = new Date(2026, 9, 1, 18, 30, 0)
 
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Contribuir" }))
 const photo = (over: Partial<{ name: string; type: string; size: number }> = {}) => {
@@ -245,6 +252,127 @@ describe("AddMemory photo", () => {
   })
 })
 
+describe("AddMemory date and time", () => {
+  const dateField = () => screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement
+  const timeField = () => screen.getByLabelText("Hora") as HTMLInputElement
+  const TAKEN = { DateTimeOriginal: "2024:03:14 18:42:07" }
+
+  it("has an optional time next to the date", () => {
+    setup()
+    open()
+    expect(timeField().type).toBe("time")
+    expect(timeField().required).toBe(false)
+    expect(timeField().value).toBe("")
+    expect(timeField().className).toContain("tabular-nums")
+  })
+
+  it("fills the date and the exact time from the photo, as the camera wrote them, and says so", async () => {
+    const { parsePhotoTime } = setup()
+    parsePhotoTime.mockResolvedValue(TAKEN)
+    open()
+    const file = photo()
+    pick(file)
+    await waitFor(() => expect(dateField().value).toBe("2024-03-14"))
+    expect(timeField().value).toBe("18:42")
+    expect(parsePhotoTime).toHaveBeenCalledWith(file)
+    const hint = screen.getByText("Desde tu foto")
+    expect(dateField().getAttribute("aria-describedby")).toContain(hint.id)
+    expect(timeField().getAttribute("aria-describedby")).toContain(hint.id)
+  })
+
+  it("sends the time with the date", async () => {
+    const { parsePhotoTime, create } = setup()
+    parsePhotoTime.mockResolvedValue(TAKEN)
+    open()
+    pick(photo())
+    await waitFor(() => expect(timeField().value).toBe("18:42"))
+    fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "Una tarde" } })
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({ happenedOn: "2024-03-14", happenedTime: "18:42" })
+  })
+
+  it("sends a time the visitor typed", async () => {
+    const { create } = setup()
+    filled()
+    fireEvent.change(timeField(), { target: { value: "07:30" } })
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({ happenedOn: "2024-03-12", happenedTime: "07:30" })
+  })
+
+  it("clears what the photo filled in when the photo is removed", async () => {
+    const { parsePhotoTime } = setup()
+    parsePhotoTime.mockResolvedValue(TAKEN)
+    open()
+    pick(photo())
+    await waitFor(() => expect(dateField().value).toBe("2024-03-14"))
+    fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
+    expect(dateField().value).toBe("")
+    expect(timeField().value).toBe("")
+    expect(screen.queryByText("Desde tu foto")).toBeNull()
+  })
+
+  it("never overwrites a field the visitor edited, and drops the hint", async () => {
+    const { parsePhotoTime } = setup()
+    parsePhotoTime.mockResolvedValueOnce(TAKEN).mockResolvedValueOnce({ DateTimeOriginal: "2025:01:02 09:10:00" })
+    open()
+    pick(photo())
+    await waitFor(() => expect(timeField().value).toBe("18:42"))
+    fireEvent.change(timeField(), { target: { value: "20:15" } })
+    expect(screen.queryByText("Desde tu foto")).toBeNull()
+    // Another photo still moves the date the visitor left alone, but not the time they typed.
+    pick(photo({ name: "otra.jpg" }))
+    await waitFor(() => expect(dateField().value).toBe("2025-01-02"))
+    expect(timeField().value).toBe("20:15")
+  })
+
+  it("keeps a date the visitor typed before the photo was read", async () => {
+    const { parsePhotoTime } = setup()
+    parsePhotoTime.mockResolvedValue(TAKEN)
+    open()
+    fireEvent.change(dateField(), { target: { value: "2020-05-05" } })
+    pick(photo())
+    await waitFor(() => expect(timeField().value).toBe("18:42"))
+    expect(dateField().value).toBe("2020-05-05")
+  })
+
+  it("ignores a photo date later than now (a camera with a wrong clock)", async () => {
+    const { parsePhotoTime } = setup()
+    parsePhotoTime.mockResolvedValue({ DateTimeOriginal: "2026:10:01 18:31:00" })
+    open()
+    pick(photo())
+    await waitFor(() => expect(parsePhotoTime).toHaveBeenCalled())
+    await act(async () => {})
+    expect(dateField().value).toBe("")
+    expect(timeField().value).toBe("")
+  })
+
+  it("ignores the answer for a photo that is no longer the picked one", async () => {
+    let slow!: (value: { DateTimeOriginal: string }) => void
+    const { parsePhotoTime } = setup()
+    parsePhotoTime
+      .mockImplementationOnce(() => new Promise((resolve) => (slow = resolve)))
+      .mockResolvedValueOnce({ DateTimeOriginal: "2025:01:02 09:10:00" })
+    open()
+    pick(photo({ name: "primera.jpg" }))
+    pick(photo({ name: "segunda.jpg" }))
+    await waitFor(() => expect(dateField().value).toBe("2025-01-02"))
+    await act(async () => slow(TAKEN))
+    expect(dateField().value).toBe("2025-01-02")
+    expect(timeField().value).toBe("09:10")
+  })
+
+  it("has no time and no hint for a photo that says nothing about when it was taken", async () => {
+    const { parsePhotoTime } = setup()
+    open()
+    pick(photo())
+    await waitFor(() => expect(parsePhotoTime).toHaveBeenCalled())
+    expect(dateField().value).toBe("")
+    expect(screen.queryByText("Desde tu foto")).toBeNull()
+  })
+})
+
 describe("AddMemory submit", () => {
   it("shows each field error, linked to its field, and uploads nothing", () => {
     const { prepare, upload } = setup()
@@ -296,7 +424,13 @@ describe("AddMemory submit", () => {
     await act(async () => finishUpload({ ok: true }))
     const saving = await screen.findByRole("button", { name: "Guardando…" })
     expect((saving as HTMLButtonElement).disabled).toBe(true)
-    expect(create).toHaveBeenCalledWith({ ticket: "ticket-1", caption: "Una tarde de lluvia", happenedOn: "2024-03-12", shareLocation: false })
+    expect(create).toHaveBeenCalledWith({
+      ticket: "ticket-1",
+      caption: "Una tarde de lluvia",
+      happenedOn: "2024-03-12",
+      happenedTime: null,
+      shareLocation: false,
+    })
 
     await act(async () => finishCreate({ ok: true, memory: MEMORY, locationSaved: false }))
     expect((await screen.findByRole("status")).textContent).toBe("Listo. Tu recuerdo quedó pendiente de aprobación.")
@@ -834,6 +968,7 @@ describe("AddMemory Google Maps link", () => {
       ticket: "ticket-1",
       caption: "Una tarde de lluvia",
       happenedOn: "2024-03-12",
+      happenedTime: null,
       shareLocation: true,
       mapsUrl: LINK,
       orbColor: SWATCHES[0],
@@ -1413,6 +1548,20 @@ describe("AddMemory contributed from a memory", () => {
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(createdWith(create)).toMatchObject({ happenedOn: "2023-07-05", relatedMemoryId: RELATED.id })
+  })
+
+  it("says the date is the related memory's, with no time, until a photo tells a better one", async () => {
+    const { parsePhotoTime } = setup({ open: true, related: RELATED })
+    expect(within(dialog()).getByText("Igual que el recuerdo relacionado")).toBeTruthy()
+    expect((screen.getByLabelText("Hora") as HTMLInputElement).value).toBe("")
+    parsePhotoTime.mockResolvedValue({ DateTimeOriginal: "2023:07:05 11:20:00" })
+    pick(photo())
+    await waitFor(() => expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-05"))
+    expect((screen.getByLabelText("Hora") as HTMLInputElement).value).toBe("11:20")
+    expect(within(dialog()).getByText("Desde tu foto")).toBeTruthy()
+    // Without the photo, the related memory's date comes back.
+    fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
+    expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
   })
 
   it("shows a chip that says what it is related to", () => {
