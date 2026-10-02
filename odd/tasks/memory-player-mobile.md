@@ -76,14 +76,14 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
 
 ## Tasks
 
-- [ ] **T1 — Player.** The play button moves to the center of the sphere, over the contrast scrim. Add:
+- [x] **T1 — Player** (`6c98741`). The play button moves to the center of the sphere, over the contrast scrim. Add:
   - live frequency bars;
   - a seekable progress bar with elapsed and total time;
   - a volume control (`GainNode`, with an element fallback);
   - keyboard and screen-reader support.
 
   Route: delegated writer. Trigger: 2+ non-trivial files (`glass-view.tsx`, `use-audio-level.ts`, new player modules, CSS).
-- [ ] **T2 — Volume particles.** The orb throws off particles whose rate and speed follow the live level. They use the orb color, stop when paused, and turn off under reduced motion. Route: the same writer as T1.
+- [x] **T2 — Volume particles** (`13891a1`). The orb throws off particles whose rate and speed follow the live level. They use the orb color, stop when paused, and turn off under reduced motion. Route: the same writer as T1.
 - [ ] **T3 — Readable text.**
   - The caption block is bounded to the viewport, with the title stepping down for long text.
   - Clamp with an expand into a scrollable panel.
@@ -139,6 +139,52 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
 
   Anything outside this feature still needs the user.
 
+- 2026-10-02 — **T1 done** (`6c98741`, route: delegated writer, trigger: 2+ non-trivial files).
+  - **What changed.**
+    - `GlassVoice` moved to `glass-voice.tsx`. The play button is 64 px at the sphere's center over a round contrast scrim (`.mem-glass-scrim`, a radial gradient that fades out before its own edge; opacity only; lighter while playing).
+    - Frequency bars are 28 mirrored bars (`frequency-bars.tsx`, `audio-bars.ts`) drawn under the play, inside the lower sphere, driven by one rAF loop that writes `scaleY`, with a calm baseline and still under reduced motion.
+    - Progress is a native range input (`audio-scrubber.tsx`): a drag seeks on release, a key press seeks at once, and `aria-valuetext` reads "3:12 de 15:32".
+    - Volume (`volume-control.tsx`): a mute toggle plus a 0-100 slider. It is kept for the page session and in localStorage (try/catch) by `player-model.ts`.
+    - `use-audio-level.ts` gained `useAudioGraph`: one analyser feeds level and spectrum, and a `GainNode` sits after it (the bars show the voice, not the knob). Before the graph exists, or without Web Audio, `element.volume` stands in. `useAudioLevel` is now a thin wrapper, so the form's talking orb is unchanged.
+    - Space and K toggle playback inside the open glass. Sliders own their arrows, and a focused button keeps Space.
+    - A pointer-down on the controls does not reach the dialog's swipe.
+  - **Layout.** Bars sit at 0.25-0.37 of the diameter below the center. The controls row sits under the sphere (rim + 4 px, 48 px tall), so the caption offset (+64) and `glassLayout` are unchanged.
+  - **TDD.**
+    - RED, `audio-bars.test.ts` (11) and `player-model.test.ts` (18): the module was missing.
+    - RED, `use-audio-level.test.tsx`: 10 of 20 failed.
+    - RED, `glass-view.test.tsx`: 25 of 126 failed.
+    - GREEN afterwards: 11, 18, 20 and 126.
+  - **Checks.**
+    - `pnpm lint`: clean.
+    - `pnpm typecheck`: clean.
+    - `pnpm test`: 173 files, 2837 tests passed.
+    - `pnpm build`: `/` stays `○`.
+  - **Visual.**
+    - Playwright (Chromium, SwiftShader WebGL) on a temporary harness (deleted) at 390x844 @2x, 1440x900 and 360x740 @2x.
+    - Audio-only and photo+audio (bright synthetic photo), paused and playing; seek by click works.
+    - Reduced motion at 390: bars hold the baseline.
+    - There is no horizontal overflow, and the sphere is centered.
+  - **Open concerns.**
+    - Pre-existing, for T3 and T4: on a short desktop (1440x900) the guest "Entrar al universo" link overlaps the views line of the caption.
+    - On a 360 px screen the progress track is about 140 px (the volume slider drops to 48 px under 380 px).
+- 2026-10-02 — **T2 done** (`13891a1`, route: delegated writer).
+  - **What changed.**
+    - `orb-particles.ts` holds the pure pool: 160 particles as typed arrays, with emission rate and speed from the level (nothing under a 0.05 hiss), drag, a fade, swap-remove, and a 50 ms step clamp.
+    - `particle-canvas.tsx` is a 2D canvas 2.6 diameters wide, drawn above the sphere with `pointer-events: none` and additive blending in `memory.orbColor`. DPR is capped at 2 and `GlassView` mounts it only for audio memories.
+    - Its loop runs only while the voice plays or particles are in flight, and it stops while the tab is hidden or the glass is closed.
+    - Under reduced motion the canvas is not rendered.
+    - `GlassVoice` reports `onPlaying`, and `GlassView` passes it as `emitting`.
+  - **TDD.**
+    - RED, `orb-particles.test.ts` and `particle-canvas.test.tsx`: the modules were missing.
+    - RED, `glass-view.test.tsx`: 2 of 133 failed.
+    - GREEN afterwards: 18, 18 and 133.
+  - **Checks.**
+    - `pnpm lint`: clean.
+    - `pnpm typecheck`: clean.
+    - `pnpm test`: 175 files, 2880 tests passed.
+    - `pnpm build`: `/` stays `○`.
+  - **Visual.** At 1440x900 (orange) and 390x844 (green) the particles are visible but quiet, and tinted with the orb color.
+
 ## Next step
 
-T1 and T2 with one delegated writer.
+T3 (readable text) with a delegated writer. T3 and T4 also own the pre-existing overlap of "Entrar al universo" with the caption on short desktops.
