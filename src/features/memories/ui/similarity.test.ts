@@ -170,6 +170,54 @@ describe("buildEdges", () => {
     expect(buildEdges(items, { threshold: 1.1 })).toEqual([])
   })
 
+  describe("an explicit relation", () => {
+    it("is an edge of full strength whatever the dates and places say", () => {
+      const edges = buildEdges([mem("a", "2020-01-01"), mem("b", "2024-03-12", { relatedId: "a" })])
+      expect(edges).toEqual([{ a: 0, b: 1, weight: 1, explicit: true }])
+    })
+
+    it("is a single edge when both ends point at each other, and keeps the lower index first", () => {
+      const edges = buildEdges([mem("a", "2024-03-12", { relatedId: "b" }), mem("b", "2024-03-12", { relatedId: "a" })])
+      expect(edges).toHaveLength(1)
+      expect(edges[0]).toMatchObject({ a: 0, b: 1, weight: 1, explicit: true })
+    })
+
+    it("is not subject to the threshold", () => {
+      const items = [mem("a", "2020-01-01"), mem("b", "2024-03-12", { relatedId: "a" })]
+      expect(buildEdges(items, { threshold: 1.1 })).toHaveLength(1)
+    })
+
+    it("is never crowded out by the cap, however many other edges its ends already have", () => {
+      // Memory 0 has more same-day neighbours than it may keep; its related memory is from another year.
+      const crowd = Array.from({ length: 8 }, (_, i) => mem(`m${i}`, "2024-03-12"))
+      const items = [...crowd, mem("child", "2019-05-05", { relatedId: "m0" })]
+      const edges = buildEdges(items)
+      expect(edges.some((e) => e.explicit && e.a === 0 && e.b === 8)).toBe(true)
+      const degree = new Array(items.length).fill(0)
+      for (const e of edges.filter((x) => !x.explicit)) {
+        degree[e.a]++
+        degree[e.b]++
+      }
+      expect(Math.max(...degree)).toBeLessThanOrEqual(MAX_EDGES_PER_NODE)
+    })
+
+    it("replaces the similarity edge between the same two memories instead of doubling it", () => {
+      const edges = buildEdges([mem("a", "2024-03-12"), mem("b", "2024-03-12", { relatedId: "a" })])
+      expect(edges).toHaveLength(1)
+      expect(edges[0]).toMatchObject({ weight: 1, explicit: true })
+    })
+
+    it("ignores a relation to a memory that is not in the list, and to itself", () => {
+      const edges = buildEdges([mem("a", "2020-01-01", { relatedId: "ghost" }), mem("b", "2024-03-12", { relatedId: "b" })])
+      expect(edges).toEqual([])
+    })
+
+    it("leaves similarity edges without the explicit flag", () => {
+      const [edge] = buildEdges([mem("a", "2024-03-12"), mem("b", "2024-03-12")])
+      expect(edge.explicit).toBeUndefined()
+    })
+  })
+
   it("is deterministic and ordered strongest first", () => {
     const items = [
       mem("a", "2024-03-12"),

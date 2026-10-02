@@ -36,6 +36,8 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   place: null,
   orbColor: "#8ab4ff",
   viewCount: 0,
+
+  relatedId: null,
   thumbUrl: `https://res.cloudinary.com/demo/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/f/${id}`,
   audio: null,
@@ -134,5 +136,94 @@ describe("MemoriesSpace counting views", () => {
     expect(recordMemoryView).toHaveBeenCalledTimes(1)
     expect(recordMemoryView).toHaveBeenCalledWith({ id: "a" })
     expect(within(screen.getByRole("dialog")).getByText("5 vistas")).toBeTruthy()
+  })
+})
+
+describe("MemoriesSpace contributing from a memory", () => {
+  let frames: Array<(now: number) => void> = []
+  let clock = 0
+  const openGlass = async (name: RegExp) => {
+    fireEvent.click(await screen.findByRole("button", { name }))
+    for (let i = 0; i < 60 && !screen.queryByRole("dialog"); i++) {
+      const batch = frames
+      frames = []
+      clock += 100
+      act(() => batch.forEach((cb) => cb(clock)))
+    }
+    await act(async () => {})
+  }
+
+  beforeEach(() => {
+    frames = []
+    clock = performance.now() + 100
+    vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
+    vi.stubGlobal("cancelAnimationFrame", () => {})
+    recordMemoryView.mockResolvedValue({ ok: true, counted: false })
+    shareMemory.mockResolvedValue({ ok: false, reason: "not_shareable" })
+  })
+
+  const parent = view("5b8f0c5e-6d7a-4b1c-9d2e-3f4a5b6c7d8e", "La casa nueva", {
+    happenedOn: "2023-07-04",
+    place: { lat: -34.59, lng: -58.43, name: "UOCRA", address: "Av. Rivadavia 1234, Junín" },
+  })
+
+  it("opens the form from the glass with that memory's date, a chip, and its place on offer", async () => {
+    listMemories.mockResolvedValue({ ok: true, memories: [parent] })
+    render(<MemoriesSpace />)
+    await openGlass(/La casa nueva/)
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Contribuir" }))
+    const form = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
+    expect((within(form).getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
+    expect(within(form).getByText("Relacionado con «La casa nueva»")).toBeTruthy()
+    expect(within(form).getByRole("checkbox", { name: /Mismo lugar/ })).toBeTruthy()
+  })
+
+  it("stores the new memory as related to it", async () => {
+    listMemories.mockResolvedValue({ ok: true, memories: [parent] })
+    createMemory.mockResolvedValue({
+      ok: true,
+      memory: view("new", "El día después", { status: "pending", relatedId: parent.id }),
+      locationSaved: true,
+    })
+    render(<MemoriesSpace />)
+    await openGlass(/La casa nueva/)
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Contribuir" }))
+    const form = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
+    fireEvent.click(within(form).getByRole("checkbox", { name: /Mismo lugar/ }))
+    fireEvent.change(within(form).getByLabelText("Foto"), { target: { files: [new File(["x"], "f.jpg", { type: "image/jpeg" })] } })
+    fireEvent.change(within(form).getByLabelText("¿Qué recuerdas?"), { target: { value: "El día después" } })
+    fireEvent.click(within(form).getByRole("button", { name: "Guardar recuerdo" }))
+    await waitFor(() =>
+      expect(createMemory).toHaveBeenCalledWith({
+        ticket: "t",
+        caption: "El día después",
+        happenedOn: "2023-07-04",
+        shareLocation: false,
+        relatedMemoryId: parent.id,
+        samePlace: true,
+      }),
+    )
+  })
+
+  it("starts a plain contribution from the space's own control, with nothing carried over from a memory", async () => {
+    listMemories.mockResolvedValue({ ok: true, memories: [parent] })
+    render(<MemoriesSpace />)
+    await openGlass(/La casa nueva/)
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Contribuir" }))
+    const form = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
+    fireEvent.click(within(form).getByRole("button", { name: "Cerrar" }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Contribuir con un recuerdo" })).toBeNull())
+    // Back at the overview the visitor opens the form from the pill: no chip, no date.
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
+    for (let i = 0; i < 60 && screen.queryByRole("dialog"); i++) {
+      const batch = frames
+      frames = []
+      clock += 100
+      act(() => batch.forEach((cb) => cb(clock)))
+    }
+    fireEvent.click(await screen.findByRole("button", { name: "Contribuir" }))
+    const plain = await screen.findByRole("dialog", { name: "Contribuir con un recuerdo" })
+    expect(within(plain).queryByText(/Relacionado con/)).toBeNull()
+    expect((within(plain).getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("")
   })
 })

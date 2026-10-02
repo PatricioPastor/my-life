@@ -92,6 +92,74 @@ export function layoutPoints(ids: readonly string[], area: LayoutArea): PlacedPo
   return placed
 }
 
+/** How far from its parent a new related orb starts, in world px (a little over the orbs' resting gap). */
+export const SPAWN_DISTANCE = 64
+
+/**
+ * Where a new orb starts next to its parent: `SPAWN_DISTANCE` away, in a direction drawn from its own id (so two new
+ * orbs of one parent do not stack), and pulled back inside the margins when the parent sits near an edge.
+ */
+export function spawnNear(
+  id: string,
+  parent: { x: number; y: number },
+  area: Pick<LayoutArea, "width" | "height" | "margin">,
+): { x: number; y: number } {
+  const angle = rng(hash(`${id}:spawn`))() * Math.PI * 2
+  const minX = area.margin
+  const maxX = Math.max(area.width - area.margin, minX)
+  const minY = area.margin
+  const maxY = Math.max(area.height - area.margin, minY)
+  return {
+    x: Math.min(Math.max(parent.x + Math.cos(angle) * SPAWN_DISTANCE, minX), maxX),
+    y: Math.min(Math.max(parent.y + Math.sin(angle) * SPAWN_DISTANCE, minY), maxY),
+  }
+}
+
+/**
+ * Where each orb starts the simulation: where it already was (`kept`), else next to its related parent (a new memory
+ * contributed from another lands beside it, at the position its parent was carried to when there is one), else where the
+ * seeded layout put it. The result is by index, like `ids`.
+ */
+export function startPositions(
+  ids: readonly string[],
+  relatedIds: ReadonlyArray<string | null>,
+  laid: readonly PlacedPoint[],
+  kept: ReadonlyMap<string, { x: number; y: number }> | null,
+  area: Pick<LayoutArea, "width" | "height" | "margin">,
+): { x: number[]; y: number[] } {
+  const indexOf = new Map(ids.map((id, index) => [id, index]))
+  const placed = new Map<number, { x: number; y: number }>()
+
+  // Resolved in dependency order: a parent spawned in this same pass is placed before its child, so a chain A <- B <- C
+  // lands C beside where B was just put. `visiting` guards a cycle (the one that closes it falls back to the layout).
+  const resolve = (i: number, visiting: ReadonlySet<number>): { x: number; y: number } => {
+    const done = placed.get(i)
+    if (done) return done
+    let at = kept?.get(ids[i])
+    if (!at) {
+      const related = relatedIds[i]
+      const parentIndex = related ? indexOf.get(related) : undefined
+      if (related && parentIndex !== undefined && parentIndex !== i && !visiting.has(parentIndex)) {
+        const parent = kept?.get(related) ?? resolve(parentIndex, new Set(visiting).add(i))
+        at = spawnNear(ids[i], parent, area)
+      } else {
+        at = { x: laid[i].x, y: laid[i].y }
+      }
+    }
+    placed.set(i, at)
+    return at
+  }
+
+  const x: number[] = []
+  const y: number[] = []
+  ids.forEach((_, i) => {
+    const at = resolve(i, new Set())
+    x.push(at.x)
+    y.push(at.y)
+  })
+  return { x, y }
+}
+
 /** A gentle, slow wobble for one point, seeded by its id. */
 export function driftFor(id: string): Drift {
   const next = rng(hash(`${id}:drift`))

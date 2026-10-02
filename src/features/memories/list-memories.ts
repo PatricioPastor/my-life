@@ -23,11 +23,18 @@ export interface DeliveryConfig {
   apiSecret: string
 }
 
-/** The coarse place the client gets: 2 decimals and the name. The exact position stays on the server. */
+/** The coarse place the client gets: 2 decimals, the name and the address. The exact position stays on the server. */
 function toPlace(memory: Memory): MemoryPlace | null {
   if (memory.latitude === null || memory.longitude === null) return null
-  return { lat: roundCoordinate(memory.latitude), lng: roundCoordinate(memory.longitude), name: memory.placeName }
+  return {
+    lat: roundCoordinate(memory.latitude),
+    lng: roundCoordinate(memory.longitude),
+    name: memory.placeName,
+    address: memory.placeAddress,
+  }
 }
+
+const NONE: ReadonlySet<string> = new Set()
 
 /** The photo's signed square crops, one per side the photo can fill (see `deliverySides`). */
 function toPhoto(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryPhoto | null {
@@ -45,6 +52,8 @@ export function toMemoryView(
   { cloudName, apiSecret }: DeliveryConfig,
   /** Where the audio plays from; the session route unless a guest route is given (see `sharedAudioPath`). */
   audioUrl: string = memoryAudioPath(memory.id),
+  /** The ids the reader may see: the relation is only sent when it points at one of them. */
+  visibleIds: ReadonlySet<string> = NONE,
 ): MemoryView | null {
   if (memory.status === "rejected") return null
   // A row with neither a photo nor an audio cannot exist (a CHECK refuses it); if one did, it would show nothing.
@@ -60,6 +69,7 @@ export function toMemoryView(
     takenAt: memory.takenAt ? memory.takenAt.toISOString() : null,
     dominantColor: memory.dominantColor,
     place: toPlace(memory),
+    relatedId: memory.relatedMemoryId !== null && visibleIds.has(memory.relatedMemoryId) ? memory.relatedMemoryId : null,
     // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks.
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
     viewCount: memory.viewCount,
@@ -87,7 +97,9 @@ export async function listMemoriesWith(deps: ListMemoriesDeps): Promise<ListMemo
       return { ok: false, reason: "unavailable" }
     }
     const rows = await deps.repository().listForVisitor(visitor.handle)
-    const memories = rows.flatMap((row) => toMemoryView(row, cloudinary) ?? [])
+    // What this visitor may see is exactly what came back (row-level security): a relation to anything else is not sent.
+    const visibleIds = new Set(rows.filter((row) => row.status !== "rejected").map((row) => row.id))
+    const memories = rows.flatMap((row) => toMemoryView(row, cloudinary, memoryAudioPath(row.id), visibleIds) ?? [])
     return { ok: true, memories }
   } catch (error) {
     // The name only: messages from the database layer can carry query parameters.

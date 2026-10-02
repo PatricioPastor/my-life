@@ -89,6 +89,12 @@ CREATE INDEX "myThings_idx" ON "myThings"("createdAt");
     expect(lintMigration(`ALTER TABLE "things" RENAME CONSTRAINT "things_a_range" TO "things_b_range";`)).toEqual([])
   })
 
+  it("flags DROP POLICY: replace a policy with ALTER POLICY, so the table is never left without it (default-deny breaks the live code)", () => {
+    expect(lintMigration(`DROP POLICY things_insert ON "things";`).join(" ")).toContain("ALTER POLICY")
+    expect(lintMigration(`DROP POLICY IF EXISTS things_insert ON "things";`)).not.toEqual([])
+    expect(lintMigration(`ALTER POLICY things_insert ON "things" WITH CHECK (true);`)).toEqual([])
+  })
+
   it("flags a migration that turns row-level security off", () => {
     expect(lintMigration(`ALTER TABLE "things" DISABLE ROW LEVEL SECURITY;`).join("\n")).toContain("DISABLE")
     expect(lintMigration(`ALTER TABLE "things" NO FORCE ROW LEVEL SECURITY;`).join("\n")).toContain("NO FORCE")
@@ -541,5 +547,69 @@ describe("the memory views migration", () => {
 
   it("is expand-only: nothing is dropped, renamed or emptied", () => {
     expect(code).not.toMatch(/DROP\s+(COLUMN|TABLE|CONSTRAINT|INDEX|TYPE|POLICY)|RENAME|DELETE\s+FROM|TRUNCATE|ALTER\s+COLUMN/i)
+  })
+})
+
+describe("the related memory and address migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_related_and_address"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+
+  it("exists and sorts after the views migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261005000000_memory_views").toBe(true)
+  })
+
+  it("passes the migration lint and touches no other table", () => {
+    expect(lintMigration(sql)).toEqual([])
+    expect([...code.matchAll(/ALTER\s+TABLE\s+"?(\w+)"?/gi)].every((m) => m[1] === "memories")).toBe(true)
+  })
+
+  it("is expand-only: two nullable columns, an index and a foreign key that sets null, and nothing renamed or dropped", () => {
+    expect(code).toMatch(/ADD\s+COLUMN\s+"place_address"\s+VARCHAR\(200\)\s*,/i)
+    expect(code).toMatch(/ADD\s+COLUMN\s+"related_memory_id"\s+UUID\s*;/i)
+    expect(code).not.toMatch(/"\s+(UUID|VARCHAR\(\d+\))\s+NOT\s+NULL/i)
+    expect(code).toMatch(/CREATE\s+INDEX\s+"memories_related_memory_id_idx"\s+ON\s+"memories"\s*\(\s*"related_memory_id"\s*\)/i)
+    expect(code).toMatch(/FOREIGN\s+KEY\s*\("related_memory_id"\)\s+REFERENCES\s+"memories"\("id"\)\s+ON\s+DELETE\s+SET\s+NULL/i)
+    expect(code).not.toMatch(/DROP\s+(COLUMN|TABLE|CONSTRAINT|INDEX|TYPE|POLICY)|RENAME|DELETE\s+FROM|TRUNCATE|SET\s+NOT\s+NULL|ALTER\s+TYPE/i)
+  })
+
+  it("grants app_user INSERT on exactly the two new columns, and nothing else", () => {
+    const grants = [...code.matchAll(/GRANT\s+([^;]*?)\s+ON\s+"memories"\s+TO\s+(\w+)/gi)]
+    expect(grants).toHaveLength(1)
+    expect(grants[0][2]).toBe("app_user")
+    const columns = /^INSERT\s*\(([^)]*)\)$/i
+      .exec(grants[0][1].trim())![1]
+      .split(",")
+      .map((c) => c.trim().replace(/"/g, ""))
+    expect(columns.sort()).toEqual(["place_address", "related_memory_id"])
+    expect(code).not.toMatch(/GRANT\s+(UPDATE|DELETE|ALL)|TO\s+PUBLIC/i)
+  })
+
+  it("only lets an address describe a stored location", () => {
+    expect(code).toMatch(/"place_address"\s+IS\s+NULL\s+OR\s+"latitude"\s+IS\s+NOT\s+NULL/i)
+  })
+
+  describe("the insert policy", () => {
+    const policy =
+      /ALTER\s+POLICY\s+memories_insert\s+ON\s+"memories"\s+WITH\s+CHECK\s*\(([\s\S]*?)\);\s*$/i.exec(code.trim())?.[1] ?? ""
+
+    it("is altered in place, not dropped, and still requires a pending row under the visitor's own handle", () => {
+      expect(policy).not.toBe("")
+      expect(policy).toMatch(/status\s*=\s*'pending'/)
+      expect(policy).toMatch(/handle\s*=\s*NULLIF\(current_setting\('app\.handle',\s*true\),\s*''\)/)
+    })
+
+    it("accepts a row without a relation (everything the code live today inserts)", () => {
+      expect(policy).toMatch(/"memories"\."related_memory_id"\s+IS\s+NULL\s+OR/)
+    })
+
+    it("accepts a relation only to an approved memory, naming the new row's column so it cannot bind to the subquery's table", () => {
+      expect(policy).toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+"memories"\s+AS\s+related/i)
+      expect(policy).toMatch(/related\.id\s*=\s*"memories"\."related_memory_id"/)
+      expect(policy).toMatch(/related\.status\s*=\s*'approved'/)
+      // Every mention of the new row's column carries the table name.
+      expect(policy.match(/related_memory_id/g)).toHaveLength(policy.match(/"memories"\."related_memory_id"/g)!.length)
+    })
   })
 })

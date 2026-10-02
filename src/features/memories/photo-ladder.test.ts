@@ -103,6 +103,7 @@ describe("a memory's ladder", () => {
     place: null,
     orbColor: "#8ab4ff",
     viewCount: 0,
+    relatedId: null,
     audio: null,
   } satisfies Omit<MemoryView, "thumbUrl" | "fullUrl">
 

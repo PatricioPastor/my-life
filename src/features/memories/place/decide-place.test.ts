@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { decidePlace, type DecidePlaceDeps } from "./decide-place"
 
-const NONE = { latitude: null, longitude: null, locationSource: null, placeName: null }
+const NONE = { latitude: null, longitude: null, locationSource: null, placeName: null, placeAddress: null }
 // Exact, as read from the photo's EXIF: Nominatim must only ever see it rounded to 2 decimals.
 const PHOTO = { latitude: -34.593712, longitude: -58.421589 }
 const LINK = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z"
@@ -37,6 +37,7 @@ describe("decidePlace: no link (the photo GPS path)", () => {
       longitude: -58.421589,
       locationSource: "photo",
       placeName: "Palermo, Buenos Aires",
+      placeAddress: null,
     })
     // Nominatim is a third party: it only ever receives 2 decimals.
     expect(reverse).toHaveBeenCalledTimes(1)
@@ -87,6 +88,7 @@ describe("decidePlace: a Google Maps link", () => {
       longitude: -58.4208,
       locationSource: "link",
       placeName: "Plaza Italia",
+      placeAddress: null,
     })
     expect(reverse).not.toHaveBeenCalled()
   })
@@ -98,6 +100,7 @@ describe("decidePlace: a Google Maps link", () => {
       longitude: -74.006009,
       locationSource: "link",
       placeName: "Palermo, Buenos Aires",
+      placeAddress: null,
     })
     expect(reverse).toHaveBeenCalledWith(40.71, -74.01)
   })
@@ -143,5 +146,62 @@ describe("decidePlace: a Google Maps link", () => {
   ])("stores no location at all for %s, and never falls back to the photo", async (_label, mapsUrl) => {
     const { deps } = make()
     expect(await decidePlace({ shareLocation: true, mapsUrl, photo: PHOTO }, deps)).toEqual(NONE)
+  })
+})
+
+describe("decidePlace: the place of the memory it is contributed from", () => {
+  const RELATED = {
+    latitude: -34.5871,
+    longitude: -58.4302,
+    locationSource: "link" as const,
+    placeName: "UOCRA",
+    placeAddress: "Av. Rivadavia 1234, Junín",
+  }
+
+  it("copies every place column of the related memory when the visitor chose the same place", async () => {
+    const { deps, reverse } = make()
+    expect(await decidePlace({ shareLocation: false, mapsUrl: undefined, photo: null, related: RELATED }, deps)).toEqual(RELATED)
+    expect(reverse).not.toHaveBeenCalled()
+  })
+
+  it("copies it with no geocoding and no link to follow", async () => {
+    const { deps, follow, reverse } = make()
+    await decidePlace({ shareLocation: false, mapsUrl: undefined, photo: null, related: RELATED }, deps)
+    expect(follow).not.toHaveBeenCalled()
+    expect(reverse).not.toHaveBeenCalled()
+  })
+
+  it("is overridden by a Maps link the visitor pasted", async () => {
+    const { deps } = make()
+    expect(await decidePlace({ shareLocation: true, mapsUrl: LINK, photo: null, related: RELATED }, deps)).toMatchObject({
+      latitude: -34.581,
+      locationSource: "link",
+      placeName: "Plaza Italia",
+    })
+  })
+
+  it("is overridden by the photo's own GPS when the visitor opted in to it", async () => {
+    const { deps } = make()
+    expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: PHOTO, related: RELATED }, deps)).toMatchObject({
+      latitude: -34.593712,
+      locationSource: "photo",
+    })
+  })
+
+  it("is used when the visitor opted in to a place but the photo has no GPS", async () => {
+    const { deps } = make()
+    expect(await decidePlace({ shareLocation: true, mapsUrl: undefined, photo: null, related: RELATED }, deps)).toEqual(RELATED)
+  })
+
+  it("never falls back to it when a pasted link could not be read (the visitor said the place was elsewhere)", async () => {
+    const { deps } = make()
+    expect(
+      await decidePlace({ shareLocation: true, mapsUrl: "https://evil.example/maps/@1.5,2.5,3z", photo: null, related: RELATED }, deps),
+    ).toEqual(NONE)
+  })
+
+  it("stores nothing when there is no related place to copy", async () => {
+    const { deps } = make()
+    expect(await decidePlace({ shareLocation: false, mapsUrl: undefined, photo: null, related: null }, deps)).toEqual(NONE)
   })
 })

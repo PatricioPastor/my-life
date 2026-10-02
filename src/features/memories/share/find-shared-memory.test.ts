@@ -34,9 +34,11 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   latitude: 40.712812,
   longitude: -74.006009,
   placeName: "Nueva York",
+  placeAddress: null,
   locationSource: "photo",
   orbColor: "#ff9a3c",
   viewCount: 5,
+  relatedMemoryId: null,
   audio: null,
   ...over,
 })

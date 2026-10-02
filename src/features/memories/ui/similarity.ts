@@ -7,13 +7,20 @@ export interface Relatable {
   takenAt: string | null
   /** A coarse position (2 decimals) and the place name, or null. */
   place: { lat: number; lng: number; name: string | null } | null
+  /** The memory this one was contributed from, when the visitor can see it: an explicit relation. */
+  relatedId?: string | null
 }
 
-/** A link between two memories, by index into the list they came from. `a < b`; `weight` is in the threshold..1 range. */
+/**
+ * A link between two memories, by index into the list they came from. `a < b`; `weight` is in the threshold..1 range.
+ * An `explicit` one is a relation the visitor made (a memory contributed from another): full strength, always kept, and
+ * drawn and pulled harder than a similarity edge.
+ */
 export interface Edge {
   a: number
   b: number
   weight: number
+  explicit?: boolean
 }
 
 /** Pairs scoring under this never become edges. */
@@ -99,23 +106,54 @@ interface EdgeOptions {
 }
 
 /**
- * The links of a list. Every pair is scored once (O(n^2), done once per list change, fine for hundreds of
- * memories); pairs under the threshold are dropped, and the rest are taken strongest first while both ends
- * still have room, so no memory keeps more than `maxPerNode` edges. Ties break by index, so it is deterministic.
+ * The explicit relations of a list, as edges of full strength: one per related pair, `a < b`, in index order. A relation
+ * to a memory that is not in the list, or to itself, is ignored.
+ */
+function explicitEdges(items: readonly Relatable[]): Edge[] {
+  const indexOf = new Map(items.map((item, index) => [item.id, index]))
+  const seen = new Set<number>()
+  const found: Edge[] = []
+  for (let from = 0; from < items.length; from++) {
+    const related = items[from].relatedId
+    const to = related ? indexOf.get(related) : undefined
+    if (to === undefined || to === from) continue
+    const a = Math.min(from, to)
+    const b = Math.max(from, to)
+    const key = a * items.length + b
+    if (seen.has(key)) continue
+    seen.add(key)
+    found.push({ a, b, weight: 1, explicit: true })
+  }
+  return found.sort((p, q) => p.a - q.a || p.b - q.b)
+}
+
+/**
+ * The links of a list. The explicit relations come first and are always kept, whatever the threshold or the cap. Then
+ * every other pair is scored once (O(n^2), done once per list change, fine for hundreds of memories); pairs under the
+ * threshold are dropped, and the rest are taken strongest first while both ends still have room, so no memory keeps more
+ * than `maxPerNode` edges (an explicit one counts toward that room, so it leaves less for similarity). A pair that is
+ * already related is not linked twice. Ties break by index, so it is deterministic.
  */
 export function buildEdges(items: readonly Relatable[], options: EdgeOptions = {}): Edge[] {
   const threshold = options.threshold ?? EDGE_THRESHOLD
   const cap = options.maxPerNode ?? MAX_EDGES_PER_NODE
+  const related = explicitEdges(items)
+  const taken = new Set(related.map((edge) => edge.a * items.length + edge.b))
   const candidates: Edge[] = []
   for (let a = 0; a < items.length; a++) {
     for (let b = a + 1; b < items.length; b++) {
+      if (taken.has(a * items.length + b)) continue
       const weight = similarity(items[a], items[b])
       if (weight >= threshold) candidates.push({ a, b, weight })
     }
   }
   candidates.sort((p, q) => q.weight - p.weight || p.a - q.a || p.b - q.b)
   const degree = new Array<number>(items.length).fill(0)
-  const kept: Edge[] = []
+  for (const edge of related) {
+    degree[edge.a]++
+    degree[edge.b]++
+  }
+  const kept: Edge[] = [...related]
   for (const edge of candidates) {
     if (degree[edge.a] >= cap || degree[edge.b] >= cap) continue
     degree[edge.a]++

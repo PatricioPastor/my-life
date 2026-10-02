@@ -60,6 +60,12 @@ interface GlassViewProps {
    * pending memory, never while the camera is still travelling, and never for a guest. Absent: nothing is recorded.
    */
   onView?: (id: string) => Promise<RecordViewResult>
+  /**
+   * Opens a contribution that starts from this memory (its date, its place, and a relation to it). Given only to a visitor
+   * with a session: the glass offers "+ Contribuir" in its top bar for an approved memory, never on a guest's page, and
+   * never for a pending one (a relation can only point at an approved memory).
+   */
+  onContribute?: (memory: MemoryView) => void
 }
 
 /** The caption changes once the camera is this far across a switch (or at once when there is no travel). */
@@ -316,6 +322,7 @@ export function GlassView({
   guestExit,
   share,
   onView,
+  onContribute,
 }: GlassViewProps) {
   const guest = guestExit !== undefined
   // The share links asked for so far, for the whole session: each memory's link is asked for once, when it opens.
@@ -442,8 +449,9 @@ export function GlassView({
         >
           {shown && (
             <>
-              {/* Cerrar comes first in the DOM, so it keeps the dialog's initial focus; the row is reversed to show Compartir before it. */}
-              <div className={`pointer-events-none absolute ${BAR_TOP} ${BAR_RIGHT} flex flex-row-reverse items-center`}>
+              {/* Cerrar comes first in the DOM, so it keeps the dialog's initial focus; the row is reversed to show Compartir
+                  before it, and + Contribuir before that. They share one row, so none can sit over another. */}
+              <div data-glass-topbar className={`pointer-events-none absolute ${BAR_TOP} ${BAR_RIGHT} flex flex-row-reverse items-center`}>
                 <Dialog.Close
                   data-magnetic="light"
                   data-cursor-label="Cerrar"
@@ -452,6 +460,20 @@ export function GlassView({
                   Cerrar
                 </Dialog.Close>
                 {share && <ShareButton memory={shown} share={share} cache={shareLinks} />}
+                {onContribute && !guest && shown.status === "approved" && (
+                  <button
+                    type="button"
+                    data-magnetic="light"
+                    data-cursor-label="Contribuir"
+                    className="press pointer-events-auto flex h-12 items-center gap-2 px-3 text-xs tracking-[0.08em] text-ink-muted"
+                    onClick={() => onContribute(shown)}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                    </svg>
+                    Contribuir
+                  </button>
+                )}
               </div>
               <GlassSphere
                 memory={shown}

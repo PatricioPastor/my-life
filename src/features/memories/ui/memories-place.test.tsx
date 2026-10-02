@@ -34,6 +34,8 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   place: null,
   orbColor: "#8ab4ff",
   viewCount: 0,
+
+  relatedId: null,
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
   audio: null,
@@ -312,7 +314,7 @@ describe("MemoriesPlace approach", () => {
   })
 
   it("shows the place name under the date, and not the coordinates", () => {
-    const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
+    const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires", address: null }
     render(<MemoriesPlace state={ready(view("a", "Uno", { place }))} />)
     openGlass(/Uno/)
     const dialog = within(screen.getByRole("dialog"))
@@ -1082,5 +1084,41 @@ describe("MemoriesPlace sharing", () => {
     fireEvent.click(orbAt(/Una tarde de lluvia/))
     advanceUntil(dialogOpen)
     expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Compartir" })).toBeNull()
+  })
+})
+
+describe("MemoriesPlace contributing from a memory", () => {
+  beforeEach(stubFrames)
+
+  it("offers + Contribuir in the glass and hands over the memory that is open", () => {
+    const onContribute = vi.fn()
+    render(<MemoriesPlace state={three} onContribute={onContribute} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Contribuir" }))
+    expect(onContribute).toHaveBeenCalledTimes(1)
+    expect(onContribute.mock.calls[0][0]).toMatchObject({ id: "b", caption: "Una tarde de lluvia" })
+  })
+
+  it("never offers it to a guest, who has no session", () => {
+    render(<MemoriesPlace state={ready(view("s", "Compartida"))} guest={{ memoryId: "s", onExit: vi.fn() }} onContribute={vi.fn()} />)
+    advanceUntil(dialogOpen)
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Contribuir" })).toBeNull()
+  })
+
+  it("offers nothing without a way to contribute", () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Contribuir" })).toBeNull()
+  })
+
+  it("leaves a single + Contribuir on screen while the glass is open: the space's own is inert", () => {
+    render(<MemoriesPlace state={three} onContribute={vi.fn()} action={<button type="button">Contribuir</button>} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    advanceUntil(dialogOpen)
+    const reachable = screen.getAllByRole("button", { name: "Contribuir" })
+    expect(reachable).toHaveLength(1)
+    expect(screen.getByRole("dialog").contains(reachable[0])).toBe(true)
   })
 })

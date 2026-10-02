@@ -19,6 +19,8 @@ import { OrbColorPicker } from "./orb-color-picker"
 import { fallbackPalette } from "./photo-palette"
 import { PLACE_COPY } from "./place-model"
 import { PlaceSection } from "./place-section"
+import { RELATED_COPY, chipText, type RelatedMemory } from "./related-memory"
+import { SamePlaceOption } from "./same-place-option"
 import { useMapsLink, type ResolveLink } from "./use-maps-link"
 import type { LevelEnv } from "./use-audio-level"
 import { useAudioRecorder, type RecorderEnv } from "./use-audio-recorder"
@@ -47,6 +49,14 @@ export interface AddMemoryProps {
   levelEnv?: LevelEnv
   /** Called with the new, still pending memory as soon as it is saved. */
   onCreated: (memory: MemoryView) => void
+  /**
+   * The memory the visitor is contributing from, or none. The date starts at its date, a chip says what the new memory is
+   * related to (the visitor can remove it) and, when it has a place, "Mismo lugar" can keep it. Read each time it opens.
+   */
+  related?: RelatedMemory | null
+  /** Controlled open state, for a parent that opens it from elsewhere (a memory's own Contribuir). Absent: it opens itself. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   /** The visitor's local `YYYY-MM-DD` (a seam for tests). */
   today?: string
   /** How long the typing of a link must pause before it is resolved. */
@@ -87,9 +97,14 @@ function MemoryForm({
   const [previewFailed, setPreviewFailed] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [caption, setCaption] = useState("")
-  const [date, setDate] = useState("")
+  // Contributed from a memory: the date starts at its date (the visitor can change it), and the chip can be removed.
+  const [relation, setRelation] = useState<RelatedMemory | null>(props.related ?? null)
+  const [date, setDate] = useState(props.related?.happenedOn ?? "")
   // Off by default: the visitor opts in to keeping the place of this photo.
   const [shareLocation, setShareLocation] = useState(false)
+  // Off by default too: "Mismo lugar" keeps the place of the memory this one is related to. It and the photo's own place
+  // (or a pasted link) are two ways to answer the same question, so choosing one lets go of the other.
+  const [samePlace, setSamePlace] = useState(false)
   const [placeNotSaved, setPlaceNotSaved] = useState(false)
   // The swatch the visitor pressed; until they press one, the dominant tone (the first swatch) is the choice.
   const [chosenColor, setChosenColor] = useState<string | null>(null)
@@ -104,7 +119,10 @@ function MemoryForm({
   const audioRun = useRef(0)
   const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)
   // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
-  const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => setShareLocation(true))
+  const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => {
+    setShareLocation(true)
+    setSamePlace(false)
+  })
   const linkPlace = link.state.status === "ok"
   const hasPlace = place.status === "found" || linkPlace
   const [errors, setErrors] = useState<FormErrors>({})
@@ -183,6 +201,19 @@ function MemoryForm({
     recorder.load(file, duration)
   }
 
+  const onConsentChange = (next: boolean) => {
+    setShareLocation(next)
+    if (next) setSamePlace(false)
+  }
+  const onSamePlaceChange = (next: boolean) => {
+    setSamePlace(next)
+    if (next) setShareLocation(false)
+  }
+  const removeRelation = () => {
+    setRelation(null)
+    setSamePlace(false)
+  }
+
   // Clearing the link of a photo with no GPS leaves nothing to keep, so the consent goes with it.
   const onLinkChange = (text: string) => {
     link.change(text)
@@ -228,6 +259,8 @@ function MemoryForm({
     setErrors({})
     // Consent only counts while there is a place to keep (the photo's, or the link's).
     const share = shareLocation && hasPlace
+    // "Mismo lugar" only counts while the memory it copies from is still the related one and has a place.
+    const same = samePlace && relation?.place != null
     const abort = new AbortController()
     controller.current = abort
     setPhase({ kind: "uploading", percent: 0 })
@@ -290,11 +323,13 @@ function MemoryForm({
         ...(linkPlace ? { mapsUrl: link.text.trim() } : {}),
         // The server only accepts a valid color that glows on the dark void, and otherwise uses the photo's own.
         ...(orbColor ? { orbColor } : {}),
+        // Only ids go up: the server checks the memory is approved and visible, and copies its place itself.
+        ...(relation ? { relatedMemoryId: relation.id, ...(same ? { samePlace: true } : {}) } : {}),
       })
       if (abort.signal.aborted) return
       if (!created.ok) return fail(messageForFailure(created))
 
-      setPlaceNotSaved(share && !created.locationSaved)
+      setPlaceNotSaved((share || same) && !created.locationSaved)
       track("memory_submitted")
       if (recorder.state.source === "recording") track("memory_audio_recorded")
       props.onCreated(created.memory)
@@ -315,7 +350,25 @@ function MemoryForm({
       {/* The ONE scroll region: phones scroll the fields here and nowhere else; desktop fits and never scrolls. */}
       <div data-testid="memory-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 md:px-8 md:pb-4">
         <div data-testid="memory-columns" className="grid grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] md:items-start md:gap-x-8">
-          <div className="flex flex-col gap-5 md:gap-4">
+          {relation && (
+            <div data-testid="related-chip" className="flex min-w-0 max-w-full w-fit items-center gap-1 md:col-start-2 md:row-start-1 rounded-full border border-[#a8c8ff]/30 bg-[#a8c8ff]/[0.07] pl-4 text-ink">
+              <span className="t-body min-w-0 truncate text-[length:var(--type-1)]">{chipText(relation.caption)}</span>
+              <button
+                type="button"
+                aria-label={RELATED_COPY.removeRelation}
+                onClick={removeRelation}
+                disabled={busy || phase.kind === "done"}
+                data-magnetic="light"
+                data-cursor-label={RELATED_COPY.removeRelation}
+                className="press grid h-11 w-11 shrink-0 place-items-center text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-[#a8c8ff] disabled:opacity-50"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                  <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
+          <div className={cn("flex flex-col gap-5 md:gap-4", relation && "md:row-span-2 md:row-start-1")}>
             <div className="flex flex-col gap-2">
               <label id="memory-photo-label" htmlFor="memory-photo" className={LABEL_CLASS}>
                 Foto
@@ -418,7 +471,7 @@ function MemoryForm({
             />
           </div>
 
-          <div className="flex flex-col gap-5 md:gap-4">
+          <div className={cn("flex flex-col gap-5 md:gap-4", relation && "md:col-start-2 md:row-start-2")}>
             <div className="flex flex-col gap-2">
               <label htmlFor="memory-caption" className={LABEL_CLASS}>
                 ¿Qué recuerdas?
@@ -475,12 +528,20 @@ function MemoryForm({
               )}
             </div>
 
+            {relation?.place && (
+              <SamePlaceOption
+                place={relation.place}
+                checked={samePlace}
+                onChange={onSamePlaceChange}
+                disabled={busy || phase.kind === "done"}
+              />
+            )}
             <PlaceSection
               place={place}
               link={{ text: link.text, state: link.state }}
               onLinkChange={onLinkChange}
               consent={shareLocation}
-              onConsentChange={setShareLocation}
+              onConsentChange={onConsentChange}
               disabled={busy || phase.kind === "done"}
             />
           </div>
@@ -537,7 +598,13 @@ function MemoryForm({
  * desktops it is a two-column card that fits without scrolling.
  */
 export function AddMemory(props: AddMemoryProps) {
-  const [open, setOpen] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(false)
+  const open = props.open ?? ownOpen
+  const setOpen = (next: boolean) => {
+    // Controlled by a parent, it only asks; on its own it opens and closes itself.
+    if (props.open === undefined) setOwnOpen(next)
+    props.onOpenChange?.(next)
+  }
   const [locked, setLocked] = useState(false)
   // On a phone the keyboard covers the bottom of the page: the sheet is lifted onto the part that stays visible.
   const keyboard = useKeyboardInset()
@@ -584,9 +651,9 @@ export function AddMemory(props: AddMemoryProps) {
             <div className="relative shrink-0 px-5 pt-2.5 pb-3 md:px-8 md:pt-5 md:pb-3 [@media(max-height:520px)]:pt-2 [@media(max-height:520px)]:pb-1.5">
               <div data-testid="sheet-handle" aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20 md:hidden" />
               <div className="flex flex-col gap-1 pr-16">
-                <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea] [@media(max-height:520px)]:text-[length:var(--type-3)]">Agregar recuerdo</Dialog.Title>
+                <Dialog.Title className="t-title m-0 text-[length:var(--type-4)] text-[#f3f0ea] [@media(max-height:520px)]:text-[length:var(--type-3)]">{RELATED_COPY.title}</Dialog.Title>
                 <Dialog.Description className="t-body m-0 text-[length:var(--type-1)] text-ink-muted [@media(max-height:520px)]:sr-only">
-                  Una foto, un audio o ambos. Tu recuerdo aparecerá en el espacio cuando sea aprobado.
+                  {RELATED_COPY.description}
                 </Dialog.Description>
               </div>
             </div>

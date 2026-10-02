@@ -6,7 +6,7 @@ import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, squareTransform } from 
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
-import { listMemoriesWith, type ListMemoriesDeps } from "./list-memories"
+import { listMemoriesWith, toMemoryView, type ListMemoriesDeps } from "./list-memories"
 
 const memory = (over: Partial<Memory> = {}): Memory => ({
   id: "11111111-1111-4111-8111-111111111111",
@@ -28,9 +28,11 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   latitude: 40.712812,
   longitude: -74.006009,
   placeName: "Nueva York",
+  placeAddress: "Broadway 100, Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
   viewCount: 12,
+  relatedMemoryId: null,
   audio: null,
   ...over,
 })
@@ -76,9 +78,10 @@ describe("listMemoriesWith", () => {
           kind: "image",
           takenAt: "2024-03-12T12:05:09.000Z",
           dominantColor: "#112233",
-          place: { lat: 40.71, lng: -74.01, name: "Nueva York" },
+          place: { lat: 40.71, lng: -74.01, name: "Nueva York", address: "Broadway 100, Nueva York" },
           orbColor: "#ff9a3c",
           viewCount: 12,
+          relatedId: null,
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
           // An 800 x 600 photo: every rung its 600 px side fills, plus 600 itself; nothing is upscaled.
@@ -112,6 +115,35 @@ describe("listMemoriesWith", () => {
     expect(JSON.stringify(result)).not.toMatch(/open_?count|viewers|memory_views/i)
   })
 
+  describe("the relation", () => {
+    const PARENT = "22222222-2222-4222-8222-222222222222"
+    const CHILD = "33333333-3333-4333-8333-333333333333"
+
+    it("sends the id of the related memory when the reader can see it too", async () => {
+      const { full } = deps({}, [memory({ id: PARENT }), memory({ id: CHILD, relatedMemoryId: PARENT })])
+      const result = await listMemoriesWith(full)
+      expect(result.ok && result.memories.map((m) => m.relatedId)).toEqual([null, PARENT])
+    })
+
+    it("sends null when the related memory is not in what the reader may see (never a hidden memory's id)", async () => {
+      const { full } = deps({}, [memory({ id: CHILD, relatedMemoryId: PARENT })])
+      const result = await listMemoriesWith(full)
+      expect(result.ok && result.memories[0].relatedId).toBeNull()
+      expect(JSON.stringify(result)).not.toContain(PARENT)
+    })
+
+    it("does not count a rejected memory as visible", async () => {
+      const { full } = deps({}, [memory({ id: PARENT, status: "rejected" }), memory({ id: CHILD, relatedMemoryId: PARENT })])
+      const result = await listMemoriesWith(full)
+      expect(result.ok && result.memories.map((m) => m.id)).toEqual([CHILD])
+      expect(result.ok && result.memories[0].relatedId).toBeNull()
+    })
+
+    it("sends null for a memory shown on its own (a guest's shared memory has no neighbours)", () => {
+      expect(toMemoryView(memory({ relatedMemoryId: PARENT }), { cloudName: "demo", apiSecret: "abcd" })?.relatedId).toBeNull()
+    })
+  })
+
   it("never leaks the handle or the public id", async () => {
     const { full } = deps()
     const result = await listMemoriesWith(full)
@@ -127,18 +159,18 @@ describe("listMemoriesWith", () => {
   })
 
   it("sends a coarse place (2 decimals) with its name, rounding half away from zero", async () => {
-    const { full } = deps({}, [memory({ latitude: -34.595, longitude: -58.425, placeName: "Palermo" })])
+    const { full } = deps({}, [memory({ latitude: -34.595, longitude: -58.425, placeName: "Palermo", placeAddress: "Honduras 4000, Palermo" })])
     const result = await listMemoriesWith(full)
-    expect(result.ok && result.memories[0].place).toEqual({ lat: -34.6, lng: -58.43, name: "Palermo" })
+    expect(result.ok && result.memories[0].place).toEqual({ lat: -34.6, lng: -58.43, name: "Palermo", address: "Honduras 4000, Palermo" })
   })
 
   it("has a place with no name when the location has none, and no place without a location", async () => {
     const { full } = deps({}, [
-      memory({ id: "a", placeName: null }),
-      memory({ id: "b", latitude: null, longitude: null, placeName: null, locationSource: null }),
+      memory({ id: "a", placeName: null, placeAddress: null }),
+      memory({ id: "b", latitude: null, longitude: null, placeName: null, placeAddress: null, locationSource: null }),
     ])
     const result = await listMemoriesWith(full)
-    expect(result.ok && result.memories.map((m) => m.place)).toEqual([{ lat: 40.71, lng: -74.01, name: null }, null])
+    expect(result.ok && result.memories.map((m) => m.place)).toEqual([{ lat: 40.71, lng: -74.01, name: null, address: null }, null])
   })
 
   describe("orb color", () => {

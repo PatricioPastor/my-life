@@ -42,12 +42,16 @@ export interface Memory {
   longitude: number | null
   /** Short label of the location. */
   placeName: string | null
+  /** The street address of the location ("Av. Rivadavia 1234, Junín"); only with a location. */
+  placeAddress: string | null
   /** Where the location came from; set if and only if the location is. */
   locationSource: LocationSource | null
   /** `#rrggbb` the orb glows in. Null only for rows stored before orb colors existed. */
   orbColor: string | null
   /** How many distinct visitors opened it (kept by the database; the visitors themselves never leave it). */
   viewCount: number
+  /** The memory this one was contributed from, or null. The database only lets it point at an approved memory. */
+  relatedMemoryId: string | null
   /** The voice of the memory; null for a photo-only one. */
   audio: StoredAudio | null
 }
@@ -71,7 +75,7 @@ export type NewMemoryInput = MemoryCore
  * What is stored for a new memory: the validated submission plus what the server learned from the photo, and the
  * orb color the server settled on (always a valid, glowing `#rrggbb`).
  */
-export type NewMemory = MemoryCore & PhotoDetails & { orbColor: string }
+export type NewMemory = MemoryCore & PhotoDetails & { orbColor: string; relatedMemoryId: string | null }
 
 export const CAPTION_MAX_LENGTH = 140
 export const EARLIEST_MEMORY_DATE = new Date("1900-01-01T00:00:00.000Z")

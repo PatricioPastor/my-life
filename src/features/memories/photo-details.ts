@@ -42,6 +42,8 @@ export interface PhotoDetails {
   longitude: number | null
   /** Short label of the stored location. Set by the place decision (geocoding), never by this module. */
   placeName: string | null
+  /** The street address of the stored location. Set by the place decision (geocoding), never by this module. */
+  placeAddress: string | null
   /** Set if and only if the location is. */
   locationSource: LocationSource | null
 }
@@ -268,6 +270,7 @@ export function extractPhotoDetails(photo: RawPhoto, options: { shareLocation: b
     latitude: location?.latitude ?? null,
     longitude: location?.longitude ?? null,
     placeName: null,
+    placeAddress: null,
     locationSource: location ? "photo" : null,
   }
 }
@@ -284,5 +287,6 @@ export const NO_PHOTO_DETAILS: PhotoDetails = {
   latitude: null,
   longitude: null,
   placeName: null,
+  placeAddress: null,
   locationSource: null,
 }

@@ -27,9 +27,11 @@ const row = {
   latitude: 40.712812,
   longitude: -74.006009,
   placeName: "Nueva York",
+  placeAddress: "Broadway 100, Nueva York" as string | null,
   locationSource: "photo" as const,
   orbColor: "#ff9a3c" as string | null,
   viewCount: 7,
+  relatedMemoryId: null as string | null,
   audioPublicId: null as string | null,
   audioFormat: null as string | null,
   audioBytes: null as number | null,
@@ -94,8 +96,10 @@ const input: NewMemory = {
   latitude: 40.712812,
   longitude: -74.006009,
   placeName: "Nueva York",
+  placeAddress: "Broadway 100, Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
+  relatedMemoryId: "22222222-2222-4222-8222-222222222222",
   audio: null,
 }
 
@@ -220,8 +224,10 @@ describe("PrismaMemoryRepository", () => {
           latitude: 40.712812,
           longitude: -74.006009,
           placeName: "Nueva York",
+          placeAddress: "Broadway 100, Nueva York",
           locationSource: "photo",
           orbColor: "#ff9a3c",
+          relatedMemoryId: "22222222-2222-4222-8222-222222222222",
           audioPublicId: null,
           audioFormat: null,
           audioBytes: null,
@@ -238,10 +244,20 @@ describe("PrismaMemoryRepository", () => {
         latitude: null,
         longitude: null,
         placeName: null,
+        placeAddress: null,
         locationSource: null,
+        relatedMemoryId: null,
       })
       expect(tx.memory.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ takenAt: null, latitude: null, longitude: null, placeName: null, locationSource: null }),
+        data: expect.objectContaining({
+          takenAt: null,
+          latitude: null,
+          longitude: null,
+          placeName: null,
+          placeAddress: null,
+          locationSource: null,
+          relatedMemoryId: null,
+        }),
       })
     })
 
@@ -262,6 +278,7 @@ describe("PrismaMemoryRepository", () => {
       expect(memory.palette).toEqual([{ color: "#112233", share: 40 }])
       expect(memory.metadata).toEqual({ Make: "Apple" })
       expect(memory.placeName).toBe("Nueva York")
+      expect(memory.placeAddress).toBe("Broadway 100, Nueva York")
       expect(memory.locationSource).toBe("photo")
       expect(memory.orbColor).toBe("#ff9a3c")
     })
@@ -339,6 +356,15 @@ describe("PrismaMemoryRepository: audio", () => {
       height: null,
       audio: { publicId: "my-life/memories/audio-1", format: "webm", bytes: 2000, durationMs: 4500 },
     })
+  })
+
+  it("reads the related memory and the address back, and null for a row that has neither", async () => {
+    const related = "22222222-2222-4222-8222-222222222222"
+    const { db } = fakeDb([{ ...row, relatedMemoryId: related }, { ...row, placeAddress: null }])
+    const [linked, plain] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+    expect(linked.relatedMemoryId).toBe(related)
+    expect(plain.relatedMemoryId).toBeNull()
+    expect(plain.placeAddress).toBeNull()
   })
 
   it("maps a photo-only row to a null audio", async () => {

@@ -337,6 +337,7 @@ describe("extractPhotoDetails", () => {
       latitude: null,
       longitude: null,
       placeName: null,
+      placeAddress: null,
       locationSource: null,
     })
   })
@@ -347,6 +348,7 @@ describe("extractPhotoDetails", () => {
       longitude: -74.006,
       locationSource: "photo",
       placeName: null,
+      placeAddress: null,
     })
     expect(extractPhotoDetails(asset, { shareLocation: false })).toMatchObject({
       latitude: null,
@@ -387,6 +389,7 @@ describe("extractPhotoDetails", () => {
       latitude: null,
       longitude: null,
       placeName: null,
+      placeAddress: null,
       locationSource: null,
     })
   })

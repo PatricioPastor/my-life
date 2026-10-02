@@ -71,6 +71,8 @@ model Memory {
   longitude      Decimal? @db.Decimal(9, 6)
   /// Short human label of the location (neighbourhood and city). Only with a location.
   placeName      String?         @map("place_name") @db.VarChar(120)
+  /// The street address of the location ("Av. Rivadavia 1234, Junín"), composed from the geocoder's answer. Only with a location.
+  placeAddress   String?         @map("place_address") @db.VarChar(200)
   /// Set if and only if the location is.
   locationSource LocationSource? @map("location_source")
   /// The color of the memory's orb, `#rrggbb`, chosen by the visitor from their photo (or derived by the server).
@@ -89,7 +91,14 @@ model Memory {
   viewCount Int                @default(dbgenerated("0")) @map("view_count")
   views     MemoryViewRecord[]
 
+  /// The memory this one was contributed from: an explicit relation the constellation draws as a strong link. Null for a
+  /// free-standing memory. The server only stores an approved memory's id; if that memory is ever deleted, this goes null.
+  relatedMemoryId String?  @map("related_memory_id") @db.Uuid
+  relatedMemory   Memory?  @relation("MemoryRelated", fields: [relatedMemoryId], references: [id], onDelete: SetNull)
+  relatedFrom     Memory[] @relation("MemoryRelated")
+
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
+  @@index([relatedMemoryId], map: "memories_related_memory_id_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")
   @@map("memories")
 }

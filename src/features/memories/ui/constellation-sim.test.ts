@@ -45,6 +45,32 @@ function meanDistances(sim: ConstellationSim) {
   return { within: mean(within), across: mean(across) }
 }
 
+describe("explicit edges", () => {
+  const far = (a: number, b: number) => ({ a, b, weight: 1 })
+
+  it("pull two orbs started far apart into a tight pair", () => {
+    const names = ids(2)
+    const sim = createSim({ ids: names, x: [200, 1000], y: [300, 600], edges: [{ ...far(0, 1), explicit: true }], area: AREA })
+    sim.settle()
+    expect(dist(sim, 0, 1)).toBeLessThan(90)
+  })
+
+  it("hold closer than a similarity edge of the same weight", () => {
+    const start = { x: [200, 1000], y: [300, 600] }
+    const explicit = createSim({ ids: ids(2), ...start, edges: [{ ...far(0, 1), explicit: true }], area: AREA })
+    const similar = createSim({ ids: ids(2), ...start, edges: [far(0, 1)], area: AREA })
+    explicit.settle()
+    similar.settle()
+    expect(dist(explicit, 0, 1)).toBeLessThan(dist(similar, 0, 1))
+  })
+
+  it("still keep the orbs from overlapping", () => {
+    const sim = createSim({ ids: ids(2), x: [600, 610], y: [400, 405], edges: [{ ...far(0, 1), explicit: true }], area: AREA })
+    sim.settle()
+    expect(dist(sim, 0, 1)).toBeGreaterThanOrEqual(56)
+  })
+})
+
 describe("createSim", () => {
   it("starts exactly where it is told, at rest, so nothing jumps on mount", () => {
     const placed = layoutPoints(ids(12), { ...AREA, spacing: 60 })

@@ -42,6 +42,8 @@ const MEMORY: MemoryView = {
   place: null,
   orbColor: "#8ab4ff",
   viewCount: 0,
+
+  relatedId: null,
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
   audio: null,
@@ -114,7 +116,7 @@ describe("AddMemory dialog", () => {
     setup()
     expect(screen.queryByRole("dialog")).toBeNull()
     open()
-    const dialog = screen.getByRole("dialog", { name: "Agregar recuerdo" })
+    const dialog = screen.getByRole("dialog", { name: "Contribuir con un recuerdo" })
     expect(dialog.getAttribute("aria-describedby")).toBeTruthy()
     expect(within(dialog).getByText(/pendiente|aprobad/i)).toBeTruthy()
   })
@@ -122,7 +124,7 @@ describe("AddMemory dialog", () => {
   it("sets the title in Gambarino through the title role", () => {
     setup()
     open()
-    expect(screen.getByRole("heading", { name: "Agregar recuerdo" }).className).toContain("t-title")
+    expect(screen.getByRole("heading", { name: "Contribuir con un recuerdo" }).className).toContain("t-title")
   })
 
   it("has the three labelled fields", () => {
@@ -1142,7 +1144,7 @@ describe("AddMemory with a virtual keyboard", () => {
     setup()
     open()
     const short = "[@media(max-height:520px)]"
-    const header = screen.getByRole("heading", { name: "Agregar recuerdo" })
+    const header = screen.getByRole("heading", { name: "Contribuir con un recuerdo" })
     expect(header.className).toContain(`${short}:text-`)
     expect(screen.getByText(/Una foto, un audio o ambos/).className).toContain(`${short}:sr-only`)
     expect(screen.getByTestId("memory-actions").className).toContain(`${short}:pt-2`)
@@ -1162,5 +1164,161 @@ describe("AddMemory with a virtual keyboard", () => {
   it("makes the control to open it at least 44 px tall on a phone", () => {
     setup()
     expect(screen.getByRole("button", { name: "Contribuir" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+  })
+})
+
+describe("AddMemory contributed from a memory", () => {
+  const RELATED = {
+    id: "5b8f0c5e-6d7a-4b1c-9d2e-3f4a5b6c7d8e",
+    caption: "La casa nueva",
+    happenedOn: "2023-07-04",
+    place: "UOCRA · Av. Rivadavia 1234, Junín",
+  }
+  const dialog = () => screen.getByRole("dialog")
+  const sameCheckbox = () => within(dialog()).getByRole("checkbox", { name: /Mismo lugar/ }) as HTMLInputElement
+  const createdWith = (create: ReturnType<typeof setup>["create"]) => create.mock.calls[0][0]
+
+  it("opens straight away when it is controlled open, and reports a close", async () => {
+    const onOpenChange = vi.fn()
+    setup({ open: true, onOpenChange, related: RELATED })
+    expect(screen.getByRole("dialog", { name: "Contribuir con un recuerdo" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("asks to open from its own control when it is controlled", () => {
+    const onOpenChange = vi.fn()
+    setup({ open: false, onOpenChange })
+    open()
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("starts the date at the date of that memory, and the visitor can change it", async () => {
+    const { create } = setup({ open: true, related: RELATED })
+    const date = screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement
+    expect(date.value).toBe("2023-07-04")
+    fireEvent.change(date, { target: { value: "2023-07-05" } })
+    pick(photo())
+    fireEvent.change(screen.getByLabelText("¿Qué recuerdas?"), { target: { value: "El día después" } })
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(createdWith(create)).toMatchObject({ happenedOn: "2023-07-05", relatedMemoryId: RELATED.id })
+  })
+
+  it("shows a chip that says what it is related to", () => {
+    setup({ open: true, related: RELATED })
+    expect(within(dialog()).getByText("Relacionado con «La casa nueva»")).toBeTruthy()
+  })
+
+  it("lets the visitor remove the relation, and then sends none (the date they have stays)", async () => {
+    const { create } = setup({ open: true, related: RELATED })
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Quitar relación" }))
+    expect(within(dialog()).queryByText(/Relacionado con/)).toBeNull()
+    expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("2023-07-04")
+    pick(photo())
+    fill("Algo", "2023-07-04")
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(createdWith(create)).not.toHaveProperty("relatedMemoryId")
+    expect(createdWith(create)).not.toHaveProperty("samePlace")
+  })
+
+  it("makes the chip's remove control a 44 px target", () => {
+    setup({ open: true, related: RELATED })
+    expect(within(dialog()).getByRole("button", { name: "Quitar relación" }).className).toMatch(/(^|\s)h-11(\s|$)/)
+  })
+
+  it("has no chip, no Mismo lugar and an empty date for a contribution that starts from nowhere", () => {
+    setup()
+    open()
+    expect(within(dialog()).queryByText(/Relacionado con/)).toBeNull()
+    expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    expect((screen.getByLabelText("¿Cuándo fue?") as HTMLInputElement).value).toBe("")
+    expect(within(dialog()).getByText(/Tu recuerdo aparecerá en el espacio/)).toBeTruthy()
+  })
+
+  describe("Mismo lugar", () => {
+    it("is offered, unticked, with the place of that memory", () => {
+      setup({ open: true, related: RELATED })
+      expect(sameCheckbox().checked).toBe(false)
+      expect(within(dialog()).getByText("UOCRA · Av. Rivadavia 1234, Junín")).toBeTruthy()
+    })
+
+    it("is not offered when that memory has no place", () => {
+      setup({ open: true, related: { ...RELATED, place: null } })
+      expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    })
+
+    it("asks the server to copy the place when it is ticked, and sends no coordinates", async () => {
+      const { create } = setup({ open: true, related: RELATED })
+      fireEvent.click(sameCheckbox())
+      pick(photo())
+      fill("Otra vez ahí", "2023-07-04")
+      submit()
+      await waitFor(() => expect(create).toHaveBeenCalled())
+      expect(createdWith(create)).toMatchObject({ relatedMemoryId: RELATED.id, samePlace: true, shareLocation: false })
+      expect(JSON.stringify(createdWith(create))).not.toMatch(/latitude|longitude|lat"|lng"/)
+    })
+
+    it("does not ask for it when it is left unticked", async () => {
+      const { create } = setup({ open: true, related: RELATED })
+      pick(photo())
+      fill("Otra vez ahí", "2023-07-04")
+      submit()
+      await waitFor(() => expect(create).toHaveBeenCalled())
+      expect(createdWith(create)).not.toHaveProperty("samePlace")
+    })
+
+    it("is dropped when the photo's own place is kept instead", async () => {
+      const { parseGps } = setup({ open: true, related: RELATED })
+      parseGps.mockResolvedValue({ latitude: -34.5937, longitude: -58.4215 })
+      fireEvent.click(sameCheckbox())
+      pick(photo())
+      const keep = await screen.findByRole("checkbox", { name: PLACE_COPY.consent })
+      fireEvent.click(keep)
+      expect(sameCheckbox().checked).toBe(false)
+      expect((keep as HTMLInputElement).checked).toBe(true)
+    })
+
+    it("drops the photo's consent when it is ticked", async () => {
+      const { parseGps } = setup({ open: true, related: RELATED })
+      parseGps.mockResolvedValue({ latitude: -34.5937, longitude: -58.4215 })
+      pick(photo())
+      const keep = (await screen.findByRole("checkbox", { name: PLACE_COPY.consent })) as HTMLInputElement
+      fireEvent.click(keep)
+      expect(keep.checked).toBe(true)
+      fireEvent.click(sameCheckbox())
+      expect(sameCheckbox().checked).toBe(true)
+      expect(keep.checked).toBe(false)
+    })
+
+    it("is dropped when a pasted Maps link resolves (the link is the visitor choosing another place)", async () => {
+      setup({ open: true, related: RELATED })
+      fireEvent.click(sameCheckbox())
+      pick(photo())
+      fireEvent.change(await screen.findByRole("textbox", { name: /link de Google Maps/ }), {
+        target: { value: "https://maps.app.goo.gl/AbCd" },
+      })
+      await waitFor(() => expect(sameCheckbox().checked).toBe(false))
+    })
+
+    it("goes with the relation when it is removed", () => {
+      setup({ open: true, related: RELATED })
+      fireEvent.click(sameCheckbox())
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Quitar relación" }))
+      expect(within(dialog()).queryByRole("checkbox", { name: /Mismo lugar/ })).toBeNull()
+    })
+
+    it("says so when the place could not be kept", async () => {
+      const { create } = setup({ open: true, related: RELATED })
+      create.mockResolvedValueOnce({ ok: true, memory: MEMORY, locationSaved: false })
+      fireEvent.click(sameCheckbox())
+      pick(photo())
+      fill("Otra vez ahí", "2023-07-04")
+      submit()
+      await waitFor(() => expect(within(dialog()).getByRole("status").textContent).toContain(PLACE_COPY.notSaved))
+    })
   })
 })

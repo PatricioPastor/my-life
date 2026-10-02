@@ -13,6 +13,9 @@ const MAX_DPR = 2
 
 // Edges: a hairline, low alpha, fading with length and tie strength.
 const EDGE_ALPHA = 0.34
+// A relation the visitor made (a memory contributed from another) is drawn a bit thicker and brighter than a similarity edge.
+const EXPLICIT_ALPHA = 1.5
+const EXPLICIT_WIDTH = 1.6
 const EDGE_FADE_LENGTH = 340
 const HIGHLIGHT_BOOST = 2.6
 const DIM_FACTOR = 0.35
@@ -225,7 +228,7 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
     ctx.clearRect(0, 0, width, height)
     ctx.lineWidth = 1
     for (let k = 0; k < edges.length; k++) {
-      const { a, b, weight } = edges[k]
+      const { a, b, weight, explicit } = edges[k]
       const ax = drawX[a]
       const ay = drawY[a]
       const bx = drawX[b]
@@ -235,13 +238,14 @@ export function startConstellation(options: LoopOptions): ConstellationLoop {
       // The fade follows the length in the world, so a tie looks the same however far the camera is.
       const length = Math.hypot(worldX[b] - worldX[a], worldY[b] - worldY[a])
       const fade = Math.max(0, 1 - length / EDGE_FADE_LENGTH)
-      let alpha = EDGE_ALPHA * weight * fade * fade
+      let alpha = EDGE_ALPHA * weight * fade * fade * (explicit ? EXPLICIT_ALPHA : 1)
       alpha *= hot[k] ? 1 + (HIGHLIGHT_BOOST - 1) * highlight : 1 - (1 - DIM_FACTOR) * highlight
       if (alpha < 0.004) continue
       const gradient = ctx.createLinearGradient(ax, ay, bx, by)
       gradient.addColorStop(0, `rgba(${rgb[a][0]},${rgb[a][1]},${rgb[a][2]},${alpha.toFixed(3)})`)
       gradient.addColorStop(1, `rgba(${rgb[b][0]},${rgb[b][1]},${rgb[b][2]},${alpha.toFixed(3)})`)
       ctx.strokeStyle = gradient
+      ctx.lineWidth = explicit ? EXPLICIT_WIDTH : 1
       ctx.beginPath()
       ctx.moveTo(ax, ay)
       ctx.lineTo(bx, by)

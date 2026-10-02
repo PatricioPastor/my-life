@@ -8,10 +8,10 @@ import {
 } from "./cloudinary-assets"
 import { toMemoryView, type DeliveryConfig } from "./list-memories"
 import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
-import type { StoredAudio } from "./memory"
+import type { Memory, StoredAudio } from "./memory"
 import { chooseOrbColor } from "./orb-color"
 import { extractPhotoDetails, NO_PHOTO_DETAILS } from "./photo-details"
-import { decidePlace } from "./place/decide-place"
+import { decidePlace, type PlaceColumns } from "./place/decide-place"
 import type { FollowResult } from "./place/follow-short-link"
 import type { ReverseGeocoder } from "./place/reverse-geocoder"
 import { validateNewMemory } from "./validate-new-memory"
@@ -41,6 +41,51 @@ export interface CreateMemoryDeps {
 
 const HOUR_MS = 60 * 60 * 1000
 const DATE = /^\d{4}-\d{2}-\d{2}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The memory a new one is contributed from, or null. The browser only names it by id: it must look like one, exist,
+ * be visible to this visitor and be approved (the database insists on that last part too). Anything else drops the
+ * relation without a word: a stale or forged id never costs the visitor their upload.
+ */
+async function relatedMemory(
+  repository: MemoryRepository,
+  handle: string,
+  id: unknown,
+  log: (message: string) => void,
+): Promise<Memory | null> {
+  if (typeof id !== "string" || !UUID.test(id)) return null
+  try {
+    const found = await repository.findForVisitor(handle, id.toLowerCase())
+    return found && found.status === "approved" ? found : null
+  } catch (error) {
+    log(`Reading the related memory failed (${error instanceof Error ? error.name : "unknown"}).`)
+    return null
+  }
+}
+
+/** The insert was refused over the related memory: a row-level security refusal or a foreign key violation. */
+function isRelationRefusal(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  const { code, meta, message } = error as { code?: unknown; meta?: { code?: unknown }; message?: unknown }
+  return (
+    code === "42501" ||
+    code === "23503" ||
+    code === "P2003" ||
+    meta?.code === "42501" ||
+    meta?.code === "23503" ||
+    (typeof message === "string" && /row-level security|foreign key/i.test(message))
+  )
+}
+
+/** The place of a memory to copy, as the columns a new one stores. */
+const placeOf = (memory: Memory): PlaceColumns => ({
+  latitude: memory.latitude,
+  longitude: memory.longitude,
+  locationSource: memory.locationSource,
+  placeName: memory.placeName,
+  placeAddress: memory.placeAddress,
+})
 
 /** UTC midnight of a `YYYY-MM-DD` date, or an invalid Date when it is not a real calendar day. */
 function parseDay(value: unknown): Date {
@@ -145,7 +190,11 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     const recent = await repository.countRecentBy(visitor.handle, new Date(nowMs - RATE_LIMIT.windowMs))
     if (recent >= RATE_LIMIT.max) return refuse("rate_limited")
 
-    // The server alone decides the place; naming it can fail without blocking the memory.
+    // Contributed from another memory: only an approved one this visitor can see counts, else it is quietly dropped.
+    const related = await relatedMemory(repository, visitor.handle, input.relatedMemoryId, deps.log)
+
+    // The server alone decides the place; naming it can fail without blocking the memory. "Mismo lugar" copies the
+    // related memory's place, read here on the server: the browser never sends (or sees) its exact position.
     const place = await decidePlace(
       {
         shareLocation,
@@ -154,6 +203,7 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
           details.latitude !== null && details.longitude !== null
             ? { latitude: details.latitude, longitude: details.longitude }
             : null,
+        related: related && input.samePlace === true ? placeOf(related) : null,
       },
       deps,
     )
@@ -163,8 +213,21 @@ export async function createMemoryWith(deps: CreateMemoryDeps, input: CreateMemo
     const orbColor = chooseOrbColor(input.orbColor, details.dominantColor)
 
     try {
-      const memory = await repository.createPending(visitor.handle, { ...validation.value, ...details, ...place, orbColor })
-      const view = toMemoryView(memory, deps.cloudinary)
+      const row = { ...validation.value, ...details, ...place, orbColor }
+      let memory: Memory
+      let kept = related
+      try {
+        memory = await repository.createPending(visitor.handle, { ...row, relatedMemoryId: related?.id ?? null })
+      } catch (error) {
+        // The parent can be rejected or removed between the read above and the insert; the database then refuses the
+        // relation. The relation is the only thing at stake: save the memory without it, once.
+        if (!related || !isRelationRefusal(error)) throw error
+        deps.log("The related memory is gone: saving the memory without the relation.")
+        kept = null
+        memory = await repository.createPending(visitor.handle, { ...row, relatedMemoryId: null })
+      }
+      // The related memory is approved, so the visitor sees it: the new memory's DTO may carry its id.
+      const view = toMemoryView(memory, deps.cloudinary, undefined, kept ? new Set([kept.id]) : undefined)
       if (!view) throw new Error("The new memory has no view.")
       return { ok: true, memory: view, locationSaved: place.locationSource !== null }
     } catch (error) {

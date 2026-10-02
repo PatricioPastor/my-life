@@ -9,6 +9,8 @@ export interface PlaceColumns {
   longitude: number | null
   locationSource: LocationSource | null
   placeName: string | null
+  /** The street address, when the geocoder gave one. Only ever with a location. */
+  placeAddress: string | null
 }
 
 export interface DecidePlaceInput {
@@ -18,6 +20,12 @@ export interface DecidePlaceInput {
   mapsUrl: unknown
   /** The photo's own exact location, as the server decoded it from the EXIF; null when it has none. */
   photo: { latitude: number; longitude: number } | null
+  /**
+   * The place of the memory this one is contributed from, to copy as it is, when the visitor chose "Mismo lugar". The
+   * caller loads it from a memory the visitor may see; the browser never sends coordinates. A link or the photo's GPS
+   * (with consent) wins over it.
+   */
+  related?: PlaceColumns | null
 }
 
 /** The same ports the link resolver uses: the short-link follower, the geocoder and the logger. */
@@ -28,6 +36,19 @@ export const NO_PLACE: PlaceColumns = {
   longitude: null,
   locationSource: null,
   placeName: null,
+  placeAddress: null,
+}
+
+/** The related memory's place, copied whole (a place that has no position is no place: nothing is copied). */
+function copyOf(related: PlaceColumns | null | undefined): PlaceColumns {
+  if (!related || related.latitude === null || related.longitude === null || related.locationSource === null) return NO_PLACE
+  return {
+    latitude: related.latitude,
+    longitude: related.longitude,
+    locationSource: related.locationSource,
+    placeName: related.placeName,
+    placeAddress: related.placeAddress,
+  }
 }
 
 /**
@@ -53,11 +74,13 @@ export async function nameOf(
  *  2. a link: its re-resolved, exact position with the source `link`. A link that cannot be resolved stores no
  *     location at all; it never falls back to the photo, because the visitor said the photo's GPS was wrong;
  *  3. no link and a photo with GPS: its exact position with the source `photo`;
- *  4. otherwise nothing.
+ *  4. otherwise the related memory's place, copied whole, when the visitor chose it (with or without the consent in 1,
+ *     which is about the photo's own place); otherwise nothing.
  * Failures to name a place never remove the location: they only leave the name empty.
  */
 export async function decidePlace(input: DecidePlaceInput, deps: DecidePlaceDeps): Promise<PlaceColumns> {
-  if (input.shareLocation !== true) return NO_PLACE
+  const inherited = copyOf(input.related)
+  if (input.shareLocation !== true) return inherited
 
   if (typeof input.mapsUrl === "string" && input.mapsUrl.trim() !== "") {
     const link = await resolveMapsLocation(input.mapsUrl, deps)
@@ -67,15 +90,17 @@ export async function decidePlace(input: DecidePlaceInput, deps: DecidePlaceDeps
       longitude: link.lng,
       locationSource: "link",
       placeName: cleanPlaceName(link.label),
+      placeAddress: null,
     }
   }
 
-  if (!input.photo) return NO_PLACE
+  if (!input.photo) return inherited
   const { latitude, longitude } = input.photo
   return {
     latitude,
     longitude,
     locationSource: "photo",
     placeName: await nameOf(deps, latitude, longitude),
+    placeAddress: null,
   }
 }

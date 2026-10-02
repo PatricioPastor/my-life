@@ -39,9 +39,11 @@ function toDomain(row: MemoryRow): Memory {
     latitude: row.latitude === null ? null : Number(row.latitude),
     longitude: row.longitude === null ? null : Number(row.longitude),
     placeName: row.placeName,
+    placeAddress: row.placeAddress,
     locationSource: row.locationSource,
     orbColor: row.orbColor,
     viewCount: row.viewCount,
+    relatedMemoryId: row.relatedMemoryId,
     audio:
       row.audioPublicId !== null && row.audioFormat !== null && row.audioBytes !== null && row.audioDurationMs !== null
         ? { publicId: row.audioPublicId, format: row.audioFormat, bytes: row.audioBytes, durationMs: row.audioDurationMs }
@@ -121,8 +123,10 @@ export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryR
             latitude: input.latitude,
             longitude: input.longitude,
             placeName: input.placeName,
+            placeAddress: input.placeAddress,
             locationSource: input.locationSource,
             orbColor: input.orbColor,
+            relatedMemoryId: input.relatedMemoryId,
             audioPublicId: input.audio?.publicId ?? null,
             audioFormat: input.audio?.format ?? null,
             audioBytes: input.audio?.bytes ?? null,

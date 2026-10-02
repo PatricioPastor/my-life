@@ -43,6 +43,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   place: null,
   orbColor: "#8ab4ff",
   viewCount: 0,
+  relatedId: null,
   thumbUrl: `https://res.cloudinary.com/demo/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/f/${id}`,
   audio: null,
@@ -68,6 +69,7 @@ interface Props {
   switching: boolean
   share?: (id: string) => Promise<ShareMemoryResult>
   onView?: (id: string) => Promise<RecordViewResult>
+  onContribute?: (memory: MemoryView) => void
 }
 
 const DESKTOP = { width: 1440, height: 900 }
@@ -144,7 +146,7 @@ describe("GlassView as a dialog", () => {
   })
 
   it("is a dialog named by the caption, with the date and place around the sphere", () => {
-    const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
+    const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires", address: null }
     mount({ memory: view("p", "Una tarde de lluvia", { place }) })
     expect(screen.getByRole("dialog", { name: "Una tarde de lluvia" })).toBeTruthy()
     expect(within(dialog()).getByText("12 de marzo de 2024")).toBeTruthy()
@@ -989,7 +991,7 @@ describe("GlassView top bar", () => {
   })
 
   it("keeps the quiet link and the place and views readable: nothing at the faint ink", () => {
-    mount({ memory: view("p", "Una tarde", { place: { lat: 0, lng: 0, name: "Palermo" }, viewCount: 4 }) })
+    mount({ memory: view("p", "Una tarde", { place: { lat: 0, lng: 0, name: "Palermo", address: null }, viewCount: 4 }) })
     expect(dialog().innerHTML).not.toContain("text-ink-faint")
   })
 })
@@ -1039,7 +1041,7 @@ describe("GlassView caption", () => {
     })
 
     it("keeps the date, place and views at 12 px or more", () => {
-      const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
+      const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires", address: null }
       mount({ memory: view("p", "Una tarde de lluvia", { place, viewCount: 5 }) })
       const small = Array.from(caption().querySelectorAll("p")).filter((p) => /text-\[(?:[0-9]|1[01])px\]/.test(p.className))
       expect(small).toEqual([])
@@ -1092,7 +1094,7 @@ describe("GlassView caption", () => {
       vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
         return this.hasAttribute("data-glass-panel") ? 90 : 40
       })
-      mount({ memory: view("s", "Una tarde de lluvia", { place: { lat: 1, lng: 2, name: "Palermo, Buenos Aires" } }) })
+      mount({ memory: view("s", "Una tarde de lluvia", { place: { lat: 1, lng: 2, name: "Palermo, Buenos Aires", address: null } }) })
       expect(toggle()!.textContent).toBe("Ver más")
       fireEvent.click(toggle()!)
       const panel = caption().querySelector<HTMLElement>("[data-glass-panel]")!
@@ -1706,5 +1708,79 @@ describe("GlassView views", () => {
       await settle()
       expect(views()?.textContent).toBe("12 vistas")
     })
+  })
+})
+
+describe("GlassView contribute control", () => {
+  const contribute = vi.fn<(memory: MemoryView) => void>()
+  beforeEach(() => contribute.mockClear())
+  const button = () => within(dialog()).getByRole("button", { name: "Contribuir" })
+
+  it("offers + Contribuir in the top bar of an approved memory, for a visitor with a session", () => {
+    mount({ onContribute: contribute })
+    expect(button().textContent).toContain("Contribuir")
+    expect(button().querySelector("svg")?.getAttribute("aria-hidden")).toBe("true")
+  })
+
+  it("shares one row with Cerrar and Compartir, so none of them can ever sit over another", () => {
+    mount({ onContribute: contribute, share: vi.fn().mockResolvedValue({ ok: false, reason: "unavailable" }) })
+    const bar = within(dialog()).getByRole("button", { name: "Cerrar" }).closest("[data-glass-topbar]")!
+    expect(bar.className).toMatch(/(^|\s)flex(\s|$)/)
+    expect(bar.contains(button())).toBe(true)
+    expect(bar.contains(within(dialog()).getByRole("button", { name: "Compartir" }))).toBe(true)
+    // None of them is taken out of the row's flow.
+    for (const control of [button(), within(dialog()).getByRole("button", { name: "Cerrar" })]) {
+      expect(control.className).not.toMatch(/(^|\s)(absolute|fixed)(\s|$)/)
+    }
+  })
+
+  it("opens the contribution from that memory", () => {
+    mount({ onContribute: contribute })
+    fireEvent.click(button())
+    expect(contribute).toHaveBeenCalledTimes(1)
+    expect(contribute).toHaveBeenCalledWith(photo)
+  })
+
+  it("is a 44 px target and has the same label for the magnetic cursor", () => {
+    mount({ onContribute: contribute })
+    expect(button().className).toMatch(/(^|\s)h-12(\s|$)/)
+    expect(button().getAttribute("data-cursor-label")).toBe("Contribuir")
+  })
+
+  it("is never offered on the guest page (no session)", () => {
+    render(
+      <GlassView
+        memory={photo}
+        prev={null}
+        next={null}
+        reduced={false}
+        onStep={vi.fn()}
+        onClose={vi.fn()}
+        onRestoreFocus={vi.fn()}
+        lens={null}
+        guestExit={vi.fn()}
+        onContribute={contribute}
+        container={document.body}
+        viewport={DESKTOP}
+      />,
+    )
+    expect(within(dialog()).queryByRole("button", { name: "Contribuir" })).toBeNull()
+  })
+
+  it("is not offered when nothing can take the contribution", () => {
+    mount()
+    expect(within(dialog()).queryByRole("button", { name: "Contribuir" })).toBeNull()
+  })
+
+  it("is not offered for a pending memory (a relation can only point at an approved one)", () => {
+    mount({ memory: { ...photo, status: "pending" }, onContribute: contribute })
+    expect(within(dialog()).queryByRole("button", { name: "Contribuir" })).toBeNull()
+  })
+
+  it("keeps the initial focus on Cerrar, with Contribuir after Compartir in the Tab order", () => {
+    mount({ onContribute: contribute, share: vi.fn().mockResolvedValue({ ok: false, reason: "unavailable" }) })
+    expect(document.activeElement).toBe(within(dialog()).getByRole("button", { name: "Cerrar" }))
+    const buttons = within(dialog()).getAllByRole("button")
+    expect(buttons.indexOf(button())).toBe(buttons.indexOf(within(dialog()).getByRole("button", { name: "Compartir" })) + 1)
   })
 })

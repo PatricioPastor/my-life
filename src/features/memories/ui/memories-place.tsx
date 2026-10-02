@@ -48,6 +48,11 @@ interface MemoriesPlaceProps {
    * guest: they have no session, so nothing is recorded for them.
    */
   onView?: (id: string) => Promise<RecordViewResult>
+  /**
+   * Opens a contribution from the memory in the glass (see `GlassView`). Ignored for a guest: they have no session to
+   * contribute with.
+   */
+  onContribute?: (memory: MemoryView) => void
 }
 
 const PORCELAIN = "#f3f0ea"
@@ -76,7 +81,7 @@ const CUT_IN_MS = 140
  * given; loading it is the container's job, and the way back belongs to the journey. The title, the add control and
  * the dialogs are a HUD: they never move with the camera.
  */
-export function MemoriesPlace({ state, accent, action, guest, share, onView }: MemoriesPlaceProps) {
+export function MemoriesPlace({ state, accent, action, guest, share, onView, onContribute }: MemoriesPlaceProps) {
   const reduced = useReducedMotion()
   const viewport = useViewport()
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
@@ -319,6 +324,7 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView }: M
         guestExit={guest?.onExit}
         share={share}
         onView={onView}
+        onContribute={guest ? undefined : onContribute}
         onRestoreFocus={restoreFocus}
         onWarm={warm}
         lens={glass}

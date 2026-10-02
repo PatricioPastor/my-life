@@ -47,6 +47,16 @@ export interface CreateMemoryInput {
    * only when it is a valid color that glows on the dark void, and otherwise uses the photo's dominant color.
    */
   orbColor?: string
+  /**
+   * The memory this one is contributed from. Optional: the server accepts it only when it is the id of an approved
+   * memory the visitor can see, and otherwise drops it without failing the upload.
+   */
+  relatedMemoryId?: string
+  /**
+   * "Mismo lugar": copy the related memory's place (position, name and address), which the server reads itself.
+   * Only an explicit `true` counts, and a pasted Maps link or the photo's own GPS wins over it.
+   */
+  samePlace?: boolean
 }
 
 export type CreateMemoryFailure =

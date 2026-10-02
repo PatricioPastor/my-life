@@ -23,6 +23,11 @@ export interface MemoryView {
    * to cluster memories. The exact position never leaves the server.
    */
   place: MemoryPlace | null
+  /**
+   * The memory this one was contributed from, only when the reader may see that memory too (a visible one from the same
+   * list): an id the reader cannot open is never sent. The constellation draws it as a strong link.
+   */
+  relatedId: string | null
   /** `#rrggbb`: the color the memory's orb glows in. Always valid, and always light enough for the dark void. */
   orbColor: string
   /** How many distinct visitors have opened it. Only the number: who they are never leaves the server. */
@@ -58,11 +63,13 @@ export interface MemoryAudio {
   durationMs: number
 }
 
-/** A coarse position (2 decimals) and the place name, when it has one. */
+/** A coarse position (2 decimals), the place name and the street address, when it has them. */
 export interface MemoryPlace {
   lat: number
   lng: number
   name: string | null
+  /** "Av. Rivadavia 1234, Junín": the visible form of the exact position, which never leaves the server. */
+  address: string | null
 }
 
 export type MemoriesFailure = "no_session" | "unavailable"

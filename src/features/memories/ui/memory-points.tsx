@@ -14,7 +14,7 @@ import { FocusDisc } from "./focus-disc"
 import { lensGeometry } from "./glass-layout"
 import { orbDepth, orbMetrics } from "./orb-depth"
 import { createPhotoCache, type PhotoCache } from "./photo-cache"
-import { driftFor, layoutPoints } from "./point-layout"
+import { driftFor, layoutPoints, startPositions } from "./point-layout"
 import { buildEdges } from "./similarity"
 import { nearestOrb } from "./tap-target"
 import { useViewport } from "./use-viewport"
@@ -194,10 +194,18 @@ export function MemoryPoints({
     const items = Array.from(list.children) as HTMLElement[]
     const ids = memories.map((m) => m.id)
     const kept = carry.current
+    // A memory with no place of its own yet starts where it was, else beside the memory it was contributed from.
+    const start = startPositions(
+      ids,
+      memories.map((m) => m.relatedId),
+      points,
+      kept,
+      { width: bounds.right, height: bounds.bottom, margin: WORLD_MARGIN },
+    )
     const input = {
       ids,
-      x: points.map((p, i) => kept?.get(ids[i])?.x ?? p.x),
-      y: points.map((p, i) => kept?.get(ids[i])?.y ?? p.y),
+      x: start.x,
+      y: start.y,
       edges,
       area: { width: bounds.right, height: bounds.bottom, margin: WORLD_MARGIN, keepOut: [] },
     }

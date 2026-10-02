@@ -67,9 +67,11 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   latitude: null,
   longitude: null,
   placeName: null,
+  placeAddress: null,
   locationSource: null,
   orbColor: null,
   viewCount: 0,
+  relatedMemoryId: null,
   audio: null,
   ...over,
 })
@@ -115,6 +117,8 @@ const input = (
     shareLocation: unknown
     mapsUrl: unknown
     orbColor: unknown
+    relatedMemoryId: unknown
+    samePlace: unknown
   }> = {},
 ) => ({
   ticket: ticketFor(),
@@ -265,8 +269,10 @@ describe("createMemoryWith: rate limit and insert", () => {
       latitude: null,
       longitude: null,
       placeName: null,
+      placeAddress: null,
       locationSource: null,
       orbColor: DEFAULT_ORB_COLOR,
+      relatedMemoryId: null,
       audio: null,
     })
     expect(assets.destroy).not.toHaveBeenCalled()
@@ -290,6 +296,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         takenAt: null,
         dominantColor: null,
         place: null,
+        relatedId: null,
         orbColor: DEFAULT_ORB_COLOR,
         // A memory nobody has opened yet.
         viewCount: 0,
@@ -464,7 +471,7 @@ describe("createMemoryWith: the place", () => {
     )
     const result = await createMemoryWith(full, input({ shareLocation: true }))
     if (!result.ok) throw new Error("expected ok")
-    expect(result.memory.place).toEqual({ lat: 40.71, lng: -74.01, name: "Palermo, Buenos Aires" })
+    expect(result.memory.place).toEqual({ lat: 40.71, lng: -74.01, name: "Palermo, Buenos Aires", address: null })
     // The source never leaves as a value (`"photo"`); the DTO's own `photo` key (its sizes) is not a leak.
     expect(JSON.stringify(result.memory)).not.toMatch(/locationSource|:"photo"|40\.7128|74\.006/)
   })
@@ -571,6 +578,219 @@ describe("createMemoryWith: a Google Maps link", () => {
   })
 })
 
+const PARENT_ID = "22222222-2222-4222-8222-222222222222"
+const parent = (over: Partial<Memory> = {}) =>
+  stored({
+    id: PARENT_ID,
+    handle: "bea",
+    status: "approved",
+    latitude: -34.5871,
+    longitude: -58.4302,
+    placeName: "UOCRA",
+    placeAddress: "Av. Rivadavia 1234, Junín",
+    locationSource: "link",
+    ...over,
+  })
+
+describe("createMemoryWith: a memory contributed from another", () => {
+  it("stores the relation to an approved memory the visitor can see, and answers with its id", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+    vi.mocked(repository.createPending).mockImplementationOnce(async (_h, saved) => stored({ relatedMemoryId: saved.relatedMemoryId }))
+    const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))
+    expect(repository.findForVisitor).toHaveBeenCalledWith("ana", PARENT_ID)
+    const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+    expect(saved).toMatchObject({ relatedMemoryId: PARENT_ID })
+    expect(result).toMatchObject({ ok: true, memory: { relatedId: PARENT_ID } })
+  })
+
+  it("stores no relation when none is given, and does not look anything up", async () => {
+    const { full, repository } = setup()
+    const result = await createMemoryWith(full, input())
+    expect(repository.findForVisitor).not.toHaveBeenCalled()
+    expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ relatedMemoryId: null })
+    expect(result).toMatchObject({ ok: true, memory: { relatedId: null } })
+  })
+
+  it.each([
+    ["not a uuid", "not-a-uuid"],
+    ["a number", 42],
+    ["an object", { id: PARENT_ID }],
+    ["an empty string", ""],
+  ])("drops a relation that is %s, silently, without a lookup", async (_label, relatedMemoryId) => {
+    const { full, repository } = setup()
+    const result = await createMemoryWith(full, input({ relatedMemoryId }))
+    expect(repository.findForVisitor).not.toHaveBeenCalled()
+    expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ relatedMemoryId: null })
+    expect(result).toMatchObject({ ok: true })
+  })
+
+  it("drops a relation to a memory that does not exist or that the visitor may not see, and still saves the memory", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.findForVisitor).mockResolvedValueOnce(null)
+    const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))
+    expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ relatedMemoryId: null })
+    expect(result).toMatchObject({ ok: true })
+  })
+
+  it("drops a relation to a memory that is not approved yet (the database would refuse it)", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent({ status: "pending", handle: "ana" }))
+    await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))
+    expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ relatedMemoryId: null })
+  })
+
+  it("never fails the upload because the lookup failed", async () => {
+    const { full, repository } = setup()
+    vi.mocked(repository.findForVisitor).mockRejectedValueOnce(new Error("down"))
+    const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))
+    expect(result).toMatchObject({ ok: true })
+    expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ relatedMemoryId: null })
+  })
+
+  describe("when the relation is refused at insert (the parent changed after it was read)", () => {
+    const refusals: [string, unknown][] = [
+      ["a row-level security refusal (code)", Object.assign(new Error("denied"), { code: "42501" })],
+      ["a row-level security refusal (driver meta)", Object.assign(new Error("denied"), { meta: { code: "42501" } })],
+      ["a row-level security refusal (message)", new Error('new row violates row-level security policy for table "memories"')],
+      ["a foreign key violation (Prisma)", Object.assign(new Error("fk"), { code: "P2003" })],
+      ["a foreign key violation (PostgreSQL)", Object.assign(new Error("fk"), { code: "23503" })],
+    ]
+
+    it.each(refusals)("retries once without the relation after %s, keeping the rest, so the upload is not lost", async (_label, refusal) => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      vi.mocked(repository.createPending)
+        .mockRejectedValueOnce(refusal)
+        .mockImplementationOnce(async (_h, saved) => stored({ relatedMemoryId: saved.relatedMemoryId, caption: saved.caption }))
+      const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, caption: "kept" }))
+      expect(repository.createPending).toHaveBeenCalledTimes(2)
+      const [first, second] = vi.mocked(repository.createPending).mock.calls.map((call) => call[1])
+      expect(first).toMatchObject({ relatedMemoryId: PARENT_ID, caption: "kept" })
+      expect(second).toEqual({ ...first, relatedMemoryId: null })
+      expect(result).toMatchObject({ ok: true, memory: { relatedId: null, caption: "kept" } })
+    })
+
+    it("does not retry without a relation, and fails as before", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.createPending).mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "42501" }))
+      const result = await createMemoryWith(full, input())
+      expect(repository.createPending).toHaveBeenCalledTimes(1)
+      expect(result).toEqual({ ok: false, reason: "unavailable" })
+    })
+
+    it("does not retry an unrelated failure, nor a duplicate", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      vi.mocked(repository.createPending).mockRejectedValueOnce(new Error("connection reset"))
+      expect(await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))).toEqual({ ok: false, reason: "unavailable" })
+      expect(repository.createPending).toHaveBeenCalledTimes(1)
+
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      vi.mocked(repository.createPending).mockRejectedValueOnce(new DuplicatePublicIdError())
+      expect(await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))).toEqual({ ok: false, reason: "duplicate" })
+      expect(repository.createPending).toHaveBeenCalledTimes(2)
+    })
+
+    it("retries only once: a second refusal is a failure", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      vi.mocked(repository.createPending).mockRejectedValue(Object.assign(new Error("denied"), { code: "42501" }))
+      expect(await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID }))).toEqual({ ok: false, reason: "unavailable" })
+      expect(repository.createPending).toHaveBeenCalledTimes(2)
+    })
+
+    it("keeps the copied place when the relation is dropped", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent({ placeName: "Casa", latitude: -34.5, longitude: -58.4, locationSource: "link" }))
+      vi.mocked(repository.createPending)
+        .mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "42501" }))
+        .mockImplementationOnce(async (_h, saved) => stored({ relatedMemoryId: saved.relatedMemoryId, placeName: saved.placeName }))
+      await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true }))
+      const second = vi.mocked(repository.createPending).mock.calls[1][1]
+      expect(second).toMatchObject({ relatedMemoryId: null, placeName: "Casa" })
+    })
+  })
+
+  describe("Mismo lugar", () => {
+    const PLACE_LINK = "https://www.google.com/maps/place/Plaza+Italia/@-34.5810,-58.4208,17z"
+
+    it("copies every place column of the related memory, with no consent to the photo's GPS and no geocoding", async () => {
+      const { full, repository, reverse } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true }))
+      const [, saved] = vi.mocked(repository.createPending).mock.calls[0]
+      expect(saved).toMatchObject({
+        latitude: -34.5871,
+        longitude: -58.4302,
+        placeName: "UOCRA",
+        placeAddress: "Av. Rivadavia 1234, Junín",
+        locationSource: "link",
+      })
+      expect(reverse).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ ok: true, locationSaved: true })
+    })
+
+    it("only an explicit true chooses it", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: "true" }))
+      expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ latitude: null, placeName: null, placeAddress: null })
+    })
+
+    it("copies nothing when the relation was dropped (an unknown memory has no place to give)", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(null)
+      const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true }))
+      expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ latitude: null, longitude: null, placeName: null })
+      expect(result).toMatchObject({ ok: true, locationSaved: false })
+    })
+
+    it("copies nothing when the related memory has no place", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(
+        parent({ latitude: null, longitude: null, placeName: null, placeAddress: null, locationSource: null }),
+      )
+      const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true }))
+      expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ latitude: null, locationSource: null })
+      expect(result).toMatchObject({ ok: true, locationSaved: false })
+    })
+
+    it("is overridden by a Maps link the visitor pasted", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true, shareLocation: true, mapsUrl: PLACE_LINK }))
+      expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ locationSource: "link", latitude: -34.581, placeName: "Plaza Italia" })
+    })
+
+    it("is overridden by the photo's own GPS when the visitor opted in to it", async () => {
+      const { full, repository } = setup({}, { info: photo() })
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true, shareLocation: true }))
+      expect(vi.mocked(repository.createPending).mock.calls[0][1]).toMatchObject({ locationSource: "photo", latitude: 40.7128 })
+    })
+
+    it("never sends the copied coordinates to the client: the answer is the coarse place", async () => {
+      const { full, repository } = setup()
+      vi.mocked(repository.findForVisitor).mockResolvedValueOnce(parent())
+      vi.mocked(repository.createPending).mockImplementationOnce(async (_h, saved) =>
+        stored({
+          latitude: saved.latitude,
+          longitude: saved.longitude,
+          placeName: saved.placeName,
+          placeAddress: saved.placeAddress,
+          locationSource: saved.locationSource,
+          relatedMemoryId: saved.relatedMemoryId,
+        }),
+      )
+      const result = await createMemoryWith(full, input({ relatedMemoryId: PARENT_ID, samePlace: true }))
+      if (!result.ok) throw new Error("expected ok")
+      expect(result.memory.place).toEqual({ lat: -34.59, lng: -58.43, name: "UOCRA", address: "Av. Rivadavia 1234, Junín" })
+      expect(JSON.stringify(result)).not.toMatch(/34\.5871|58\.4302/)
+    })
+  })
+})
+
 describe("createMemoryWith: the orb color", () => {
   const saved = async (over: Parameters<typeof input>[0], info: AssetInfo | null = photo()) => {
     const { full, repository } = setup({}, { info })
@@ -661,8 +881,10 @@ describe("createMemoryWith: audio", () => {
       latitude: null,
       longitude: null,
       placeName: null,
+      placeAddress: null,
       locationSource: null,
       orbColor: DEFAULT_ORB_COLOR,
+      relatedMemoryId: null,
       audio: { publicId: AID, format: "m4a", bytes: 321_000, durationMs: 61_235 },
     })
     expect(assets.destroy).not.toHaveBeenCalled()

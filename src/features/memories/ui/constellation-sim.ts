@@ -26,6 +26,9 @@ const PERSONAL_ACCEL = 14
 
 // Springs: related memories settle `REST_FAR` apart at the threshold and `REST_NEAR` apart when they are nearly the same.
 const SPRING_ACCEL_PER_PX = 3.2
+// An explicit relation (a memory contributed from another) pulls harder and settles closer, so the pair clusters.
+const EXPLICIT_SPRING_FACTOR = 2.2
+const REST_EXPLICIT = 64
 const REST_NEAR = 72
 const REST_FAR = 170
 const WEIGHT_LOW = 0.35
@@ -112,7 +115,8 @@ export function createSim({ ids, x: x0, y: y0, edges, area }: SimInput): Constel
 
   const edgeA = Int32Array.from(edges, (e) => e.a)
   const edgeB = Int32Array.from(edges, (e) => e.b)
-  const edgeRest = Float64Array.from(edges, (e) => springRest(e.weight))
+  const edgeRest = Float64Array.from(edges, (e) => (e.explicit ? REST_EXPLICIT : springRest(e.weight)))
+  const edgeSpring = Float64Array.from(edges, (e) => (e.explicit ? SPRING_ACCEL_PER_PX * EXPLICIT_SPRING_FACTOR : SPRING_ACCEL_PER_PX))
 
   const minX = area.margin
   const maxX = Math.max(area.width - area.margin, minX)
@@ -212,7 +216,7 @@ export function createSim({ ids, x: x0, y: y0, edges, area }: SimInput): Constel
       const d = Math.hypot(dx, dy)
       if (d < 1e-6) continue
       const stretch = Math.min(Math.max(d - edgeRest[e], -MAX_STRETCH), MAX_STRETCH)
-      const pull = SPRING_ACCEL_PER_PX * stretch
+      const pull = edgeSpring[e] * stretch
       ax[a] += (dx / d) * pull
       ay[a] += (dy / d) * pull
       ax[b] -= (dx / d) * pull

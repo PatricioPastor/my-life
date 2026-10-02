@@ -23,6 +23,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   place: null,
   orbColor: "#8ab4ff",
   viewCount: 0,
+  relatedId: null,
   thumbUrl: `https://res.cloudinary.com/demo/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/f/${id}`,
   audio: null,
@@ -444,6 +445,34 @@ describe("MemoryPoints on the canvas", () => {
     for (let i = 0; i < 40; i++) controller.step(1 / 30)
     const cam = controller.camera()
     expect(Math.abs(cam.x - far.x)).toBeLessThan(2)
+  })
+})
+
+describe("MemoryPoints related memories", () => {
+  const apart = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y)
+
+  it("spawns a newly added memory next to the one it was contributed from, not at a random spot", () => {
+    const { again } = mount(trip)
+    play(30)
+    const parent = handle.current!.worldOf("z")!
+    again([...trip, view("n", "Nuevo", { happenedOn: "2026-10-01", status: "pending", relatedId: "z" })])
+    const spawned = handle.current!.worldOf("n")!
+    expect(apart(spawned, parent)).toBeLessThan(110)
+  })
+
+  it("does not move the memories that were already there when one is added", () => {
+    const { again } = mount(trip)
+    play(30)
+    const before = handle.current!.worldOf("a")!
+    again([...trip, view("n", "Nuevo", { happenedOn: "2026-10-01", relatedId: "z" })])
+    const after = handle.current!.worldOf("a")!
+    // Not reseeded: it carries on from where it was (a hair of drift is the simulation's own first step).
+    expect(apart(after, before)).toBeLessThan(0.05)
+  })
+
+  it("gathers two related memories from years apart into one cluster", () => {
+    mount([view("old", "Antes", { happenedOn: "2019-11-02" }), view("new", "Después", { happenedOn: "2026-10-01", relatedId: "old" })], true)
+    expect(apart(handle.current!.worldOf("old")!, handle.current!.worldOf("new")!)).toBeLessThan(100)
   })
 })
 

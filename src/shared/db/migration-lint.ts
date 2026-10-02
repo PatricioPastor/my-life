@@ -3,7 +3,8 @@
  *  - every created table has ENABLE and FORCE ROW LEVEL SECURITY and at least one policy;
  *  - every created identifier (table, column, type, index) is snake_case, including columns added or renamed later
  *    and renamed constraints;
- *  - row-level security is never turned off or un-forced;
+ *  - row-level security is never turned off or un-forced, and a policy is never dropped (replace it in one step with
+ *    ALTER POLICY: a table left without its policy is default-deny, which breaks the code that is live);
  *  - nothing is granted to PUBLIC, app_user never gets DELETE or ALL, UPDATE only per column (never on an identity
  *    column, never on memories), and no INSERT grant covers a column the database fills itself (id, status, created_at);
  *  - a SECURITY DEFINER function pins its search_path and has EXECUTE revoked from PUBLIC.
@@ -117,6 +118,10 @@ export function lintMigration(rawSql: string): string[] {
 
   for (const m of sql.matchAll(/ALTER\s+TABLE\s+[^;]*?\b(DISABLE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY/gi)) {
     problems.push(`${m[1].toUpperCase().replace(/\s+/g, " ")} ROW LEVEL SECURITY is not allowed`)
+  }
+
+  if (/\bDROP\s+POLICY\b/i.test(sql)) {
+    problems.push("DROP POLICY is not allowed: replace the policy with ALTER POLICY so the table is never left without it")
   }
 
   for (const statement of sql.split(";")) {
