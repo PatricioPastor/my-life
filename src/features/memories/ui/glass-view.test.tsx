@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import type { ShareMemoryResult } from "../share/share-view"
+import type { RecordViewResult } from "../views/view-result"
 import { lensGeometry } from "./glass-layout"
 import { GlassView } from "./glass-view"
 import type { Lens } from "./lens"
@@ -54,6 +55,7 @@ interface Props {
   travel: () => number | null
   switching: boolean
   share?: (id: string) => Promise<ShareMemoryResult>
+  onView?: (id: string) => Promise<RecordViewResult>
 }
 
 const DESKTOP = { width: 1440, height: 900 }
@@ -788,5 +790,214 @@ describe("GlassView share control", () => {
     mount({ memory: { ...photo, status: "pending" }, share })
     await act(async () => {})
     expect(share).not.toHaveBeenCalled()
+  })
+})
+
+describe("GlassView views", () => {
+  const onView = vi.fn<(id: string) => Promise<RecordViewResult>>()
+  const settle = () => act(async () => {})
+  const views = () => dialog().querySelector<HTMLElement>("[data-glass-views]")
+  const seen = (viewCount: number, id = "p", over: Partial<MemoryView> = {}) =>
+    view(id, "Una tarde de lluvia", { viewCount, ...over })
+  const other = view("o", "Otra tarde")
+  const guestProps = () => ({
+    memory: seen(7),
+    prev: null,
+    next: null,
+    reduced: false,
+    onStep: vi.fn(),
+    onClose: vi.fn(),
+    onRestoreFocus: vi.fn(),
+    lens: null,
+    guestExit: vi.fn(),
+  })
+
+  beforeEach(() => {
+    onView.mockReset()
+    onView.mockResolvedValue({ ok: true, counted: false })
+  })
+
+  describe("recording", () => {
+    it("records the memory it opens on, once", async () => {
+      mount({ onView })
+      await settle()
+      expect(onView).toHaveBeenCalledTimes(1)
+      expect(onView).toHaveBeenCalledWith("p")
+    })
+
+    it("records nothing while it is closed", async () => {
+      mount({ memory: null, onView })
+      await settle()
+      expect(onView).not.toHaveBeenCalled()
+    })
+
+    it("never records a pending memory", async () => {
+      mount({ memory: view("p", "Mío", { status: "pending" }), onView })
+      await settle()
+      expect(onView).not.toHaveBeenCalled()
+    })
+
+    it("does not record the neighbours it warms for the next step: a prefetch is not an open", async () => {
+      const { props } = mount({ prev: both, next: audioOnly, onView })
+      await settle()
+      expect(props.onWarm).toHaveBeenCalled()
+      expect(onView.mock.calls.map((c) => c[0])).toEqual(["p"])
+    })
+
+    it("does not record a memory the camera is still carrying the world to, only once it has landed", async () => {
+      const { again } = mount({ onView })
+      await settle()
+      onView.mockClear()
+      again({ memory: other, switching: true, onView })
+      await settle()
+      expect(onView).not.toHaveBeenCalled()
+      again({ memory: other, switching: false, onView })
+      await settle()
+      expect(onView).toHaveBeenCalledTimes(1)
+      expect(onView).toHaveBeenCalledWith("o")
+    })
+
+    it("does not record the memories it only passes through on rapid steps", async () => {
+      const { again } = mount({ onView })
+      const second = view("s", "Segunda")
+      const third = view("t", "Tercera")
+      again({ memory: other, switching: true, onView })
+      again({ memory: second, switching: true, onView })
+      again({ memory: third, switching: true, onView })
+      again({ memory: third, switching: false, onView })
+      await settle()
+      expect(onView.mock.calls.map((c) => c[0])).toEqual(["p", "t"])
+    })
+
+    it("records each memory once for the whole session, however often it is opened again", async () => {
+      const { again } = mount({ onView })
+      again({ memory: other, onView })
+      again({ memory: photo, onView })
+      again({ memory: null, onView })
+      again({ memory: photo, onView })
+      again({ memory: other, onView })
+      await settle()
+      expect(onView.mock.calls.map((c) => c[0])).toEqual(["p", "o"])
+    })
+
+    it("does not record again when it only re-renders", async () => {
+      const { again } = mount({ onView })
+      again({ reduced: true, onView })
+      again({ travel: () => 0.2, onView })
+      await settle()
+      expect(onView).toHaveBeenCalledTimes(1)
+    })
+
+    it("never records for a guest holding a share link, even when it could", async () => {
+      render(<GlassView {...guestProps()} container={document.body} viewport={DESKTOP} onView={onView} />)
+      await settle()
+      expect(onView).not.toHaveBeenCalled()
+    })
+
+    it("records nothing when there is no way to (no onView), and does not break", async () => {
+      mount()
+      await settle()
+      expect(dialog()).toBeTruthy()
+    })
+
+    it("survives a call that fails", async () => {
+      onView.mockRejectedValue(new Error("offline"))
+      mount({ memory: seen(3), onView })
+      await settle()
+      expect(views()?.textContent).toBe("3 vistas")
+    })
+  })
+
+  describe("showing", () => {
+    it("says nothing at zero", () => {
+      mount({ memory: seen(0) })
+      expect(views()).toBeNull()
+    })
+
+    it("says 1 vista for one and N vistas for more", () => {
+      mount({ memory: seen(1) })
+      expect(views()?.textContent).toBe("1 vista")
+      cleanup()
+      mount({ memory: seen(12) })
+      expect(views()?.textContent).toBe("12 vistas")
+    })
+
+    it("groups thousands the Spanish way", () => {
+      mount({ memory: seen(12345) })
+      expect(views()?.textContent).toBe("12.345 vistas")
+    })
+
+    it("is quiet plain text after the date: not a control, and not announced when it changes", () => {
+      mount({ memory: seen(12) })
+      const el = views()!
+      expect(el.tagName).toBe("P")
+      expect(el.getAttribute("aria-live")).toBe("off")
+      expect(el.querySelector("button, a")).toBeNull()
+      const date = within(dialog()).getByText("12 de marzo de 2024")
+      expect(date.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it("shows the count to a guest too", () => {
+      render(<GlassView {...guestProps()} container={document.body} viewport={DESKTOP} />)
+      expect(views()?.textContent).toBe("7 vistas")
+    })
+
+    it("shows the count of the memory it switches to once the caption swaps", () => {
+      const { again } = mount({ memory: seen(2) })
+      again({ memory: view("o", "Otra tarde", { viewCount: 40 }) })
+      expect(views()?.textContent).toBe("40 vistas")
+    })
+  })
+
+  describe("the optimistic count", () => {
+    it("adds one when this visitor was counted for the first time", async () => {
+      onView.mockResolvedValue({ ok: true, counted: true })
+      mount({ memory: seen(12), onView })
+      expect(views()?.textContent).toBe("12 vistas")
+      await settle()
+      expect(views()?.textContent).toBe("13 vistas")
+    })
+
+    it("shows 1 vista for the first view of a memory nobody had opened", async () => {
+      onView.mockResolvedValue({ ok: true, counted: true })
+      mount({ memory: seen(0), onView })
+      expect(views()).toBeNull()
+      await settle()
+      expect(views()?.textContent).toBe("1 vista")
+    })
+
+    it("adds nothing for a visitor who was already counted", async () => {
+      onView.mockResolvedValue({ ok: true, counted: false })
+      mount({ memory: seen(12), onView })
+      await settle()
+      expect(views()?.textContent).toBe("12 vistas")
+    })
+
+    it("adds nothing when the view was refused (the author, a pending memory) or failed", async () => {
+      for (const reason of ["not_countable", "no_session", "unavailable"] as const) {
+        onView.mockResolvedValue({ ok: false, reason })
+        mount({ memory: seen(12), onView })
+        await settle()
+        expect(views()?.textContent, reason).toBe("12 vistas")
+        cleanup()
+      }
+    })
+
+    it("adds one once per memory: opening it again later does not add another", async () => {
+      onView.mockResolvedValue({ ok: true, counted: true })
+      const { again } = mount({ memory: seen(12), onView })
+      await settle()
+      again({ memory: other, onView })
+      await settle()
+      again({ memory: seen(12), onView })
+      await settle()
+      expect(views()?.textContent).toBe("13 vistas")
+    })
+
+    it("adds nothing without a way to record (a guest, or no onView)", async () => {
+      mount({ memory: seen(12) })
+      await settle()
+      expect(views()?.textContent).toBe("12 vistas")
+    })
   })
 })

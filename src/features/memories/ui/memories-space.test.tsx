@@ -9,6 +9,7 @@ const createMemory = vi.fn()
 const suggestPlace = vi.fn()
 const resolveMapsLink = vi.fn()
 const shareMemory = vi.fn()
+const recordMemoryView = vi.fn()
 const uploadToCloudinary = vi.fn()
 vi.mock("../actions", () => ({
   listMemories: () => listMemories(),
@@ -17,6 +18,7 @@ vi.mock("../actions", () => ({
   suggestPlace: (input: unknown) => suggestPlace(input),
   resolveMapsLink: (input: unknown) => resolveMapsLink(input),
   shareMemory: (input: unknown) => shareMemory(input),
+  recordMemoryView: (input: unknown) => recordMemoryView(input),
 }))
 vi.mock("./cloudinary-upload", () => ({ uploadToCloudinary: (o: unknown) => uploadToCloudinary(o) }))
 vi.mock("@/shared/analytics", () => ({ track: vi.fn() }))
@@ -108,5 +110,29 @@ describe("MemoriesSpace sharing", () => {
       fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Compartir" }))
     })
     expect(shareMemory).toHaveBeenCalledWith({ id: "a" })
+  })
+})
+
+describe("MemoriesSpace counting views", () => {
+  it("tells the recordMemoryView action about the memory the glass opened, and shows the count it brought", async () => {
+    listMemories.mockResolvedValue({ ok: true, memories: [view("a", "Una tarde", { viewCount: 4 })] })
+    recordMemoryView.mockResolvedValue({ ok: true, counted: true })
+    shareMemory.mockResolvedValue({ ok: false, reason: "not_shareable" })
+    let frames: Array<(now: number) => void> = []
+    let clock = performance.now() + 100
+    vi.stubGlobal("requestAnimationFrame", (cb: (now: number) => void) => frames.push(cb))
+    vi.stubGlobal("cancelAnimationFrame", () => {})
+    render(<MemoriesSpace />)
+    fireEvent.click(await screen.findByRole("button", { name: /Una tarde/ }))
+    for (let i = 0; i < 60 && !screen.queryByRole("dialog"); i++) {
+      const batch = frames
+      frames = []
+      clock += 100
+      act(() => batch.forEach((cb) => cb(clock)))
+    }
+    await act(async () => {})
+    expect(recordMemoryView).toHaveBeenCalledTimes(1)
+    expect(recordMemoryView).toHaveBeenCalledWith({ id: "a" })
+    expect(within(screen.getByRole("dialog")).getByText("5 vistas")).toBeTruthy()
   })
 })

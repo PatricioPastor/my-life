@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import type { ShareMemoryResult } from "../share/share-view"
+import type { RecordViewResult } from "../views/view-result"
 import { rimColor } from "../orb-color"
 import { lensGeometry } from "./glass-layout"
 import { GLASS_RELEASE_MS } from "./lens"
@@ -971,6 +972,39 @@ describe("MemoriesPlace as a guest (a shared memory)", () => {
     render(<MemoriesPlace state={ready(shared)} guest={{ memoryId: "other", onExit: vi.fn() }} />)
     advance(30)
     expect(phase()).toBe("idle")
+  })
+})
+
+describe("MemoriesPlace counting views", () => {
+  beforeEach(stubFrames)
+
+  const record = () => vi.fn<(id: string) => Promise<RecordViewResult>>(async () => ({ ok: true, counted: false }))
+
+  it("tells the server about the memory the glass opened, once the camera has landed, and about no other", async () => {
+    const onView = record()
+    render(<MemoriesPlace state={three} onView={onView} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    expect(onView).not.toHaveBeenCalled()
+    advanceUntil(dialogOpen)
+    await act(async () => {})
+    expect(onView.mock.calls.map((c) => c[0])).toEqual(["b"])
+  })
+
+  it("records nothing for a pending memory", async () => {
+    const onView = record()
+    render(<MemoriesPlace state={ready(view("a", "Mío", { status: "pending" }))} onView={onView} />)
+    fireEvent.click(orbAt(/Mío/))
+    advanceUntil(dialogOpen)
+    await act(async () => {})
+    expect(onView).not.toHaveBeenCalled()
+  })
+
+  it("records nothing for a guest, even when it is given a way to", async () => {
+    const onView = record()
+    render(<MemoriesPlace state={ready(view("s", "Una tarde compartida"))} guest={{ memoryId: "s", onExit: vi.fn() }} onView={onView} />)
+    advanceUntil(dialogOpen)
+    await act(async () => {})
+    expect(onView).not.toHaveBeenCalled()
   })
 })
 

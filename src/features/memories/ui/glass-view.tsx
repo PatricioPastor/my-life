@@ -7,6 +7,7 @@ import { formatMemoryDate } from "../format"
 import type { MemoryView } from "../memory-view"
 import { ladderOf, pickSize } from "../photo-ladder"
 import type { ShareMemoryResult } from "../share/share-view"
+import type { RecordViewResult } from "../views/view-result"
 import type { Viewport } from "./camera"
 import { smoothedReader } from "./audio-level"
 import { AUDIO_READINESS_COPY, useAudioReadiness } from "./audio-readiness"
@@ -18,6 +19,8 @@ import { createShareCache } from "./share-cache"
 import { ShareButton } from "./share-button"
 import { swipeStep } from "./swipe"
 import { useAudioLevel } from "./use-audio-level"
+import { formatViewCount } from "./view-count"
+import { createViewRecorder } from "./view-recorder"
 
 interface GlassViewProps {
   /** The memory the glass is open on, or null when closed. */
@@ -50,6 +53,12 @@ interface GlassViewProps {
   guestExit?: () => void
   /** Asks for the link to share a memory (a server action, or the link a guest already holds). Absent: no share control. */
   share?: (id: string) => Promise<ShareMemoryResult>
+  /**
+   * Tells the server the visitor opened a memory (a server action), for the distinct-viewers count. Called once per
+   * approved memory per page session, when the glass has landed on it: never for a neighbour it only warms, never for a
+   * pending memory, never while the camera is still travelling, and never for a guest. Absent: nothing is recorded.
+   */
+  onView?: (id: string) => Promise<RecordViewResult>
 }
 
 /** The caption changes once the camera is this far across a switch (or at once when there is no travel). */
@@ -198,8 +207,11 @@ function GlassCaption({
   entering,
   onStep,
   stepless,
+  newViewers,
 }: Pick<GlassViewProps, "prev" | "next" | "onStep"> & {
   memory: MemoryView
+  /** Memories this visitor just became a viewer of: the count the server sent does not include them yet. */
+  newViewers: ReadonlySet<string>
   hasVoice: boolean
   geometry: LensGeometry
   leaving: boolean
@@ -236,6 +248,7 @@ function GlassCaption({
     </button>
   )
   const pending = memory.status === "pending"
+  const views = formatViewCount(memory.viewCount + (newViewers.has(memory.id) ? 1 : 0))
 
   return (
     <>
@@ -267,6 +280,12 @@ function GlassCaption({
             {formatMemoryDate(memory.happenedOn)}
           </p>
           {memory.place?.name && <p className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint">{memory.place.name}</p>}
+          {/* Plain, quiet text: not a control, and `aria-live="off"` so the count catching up after an open is not announced. */}
+          {views && (
+            <p data-glass-views aria-live="off" className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint tabular-nums">
+              {views}
+            </p>
+          )}
           {pending && <p className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">Pendiente de aprobación</p>}
         </div>
         {!side && !stepless && nextButton}
@@ -332,6 +351,7 @@ export function GlassView({
   switching = false,
   guestExit,
   share,
+  onView,
 }: GlassViewProps) {
   const guest = guestExit !== undefined
   // The share links asked for so far, for the whole session: each memory's link is asked for once, when it opens.
@@ -339,6 +359,24 @@ export function GlassView({
   const [shareLinks] = useState(() =>
     createShareCache((id) => (share ? share(id) : Promise.resolve({ ok: false, reason: "unavailable" }))),
   )
+
+  // Opens are told to the server once per memory for the whole session. The function is taken once, like `share`: it is a
+  // server action and does not change. A guest has no session to count, so nothing is recorded for them.
+  const [viewRecorder] = useState(() =>
+    createViewRecorder((id) => (onView ? onView(id) : Promise.resolve<RecordViewResult>({ ok: false, reason: "unavailable" }))),
+  )
+  // Memories this visitor has just become a viewer of: the count on screen goes up by one for each, ahead of the next load.
+  const [newViewers, setNewViewers] = useState<ReadonlySet<string>>(() => new Set())
+  // An open is the glass landed on an approved memory: not a neighbour it only warms, not a memory the camera is still
+  // carrying the world to (rapid stepping passes through several), and not a pending one.
+  const openedId = memory && !switching && memory.status === "approved" ? memory.id : null
+  const recording = onView !== undefined && !guest
+  useEffect(() => {
+    if (!openedId || !recording) return
+    void viewRecorder.record(openedId).then((counted) => {
+      if (counted) setNewViewers((ids) => new Set(ids).add(openedId))
+    })
+  }, [openedId, recording, viewRecorder])
 
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
@@ -463,6 +501,7 @@ export function GlassView({
               {guestExit && <GuestExits onExit={guestExit} />}
               <GlassCaption
                 memory={caption ?? shown}
+                newViewers={newViewers}
                 stepless={guest}
                 hasVoice={shown.audio !== null}
                 leaving={leaving}
