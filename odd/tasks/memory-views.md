@@ -100,7 +100,12 @@ Strict. Runner `pnpm test`.
   - **TDD, RED then GREEN:** the first run of the new T1 tests failed 28 tests plus the unloadable `record-view.test.ts` (migration and schema lints, repository `recordView` and `viewCount`, the DTO, the guest DTO); the T2 run failed 18 glass-view tests plus the missing `view-count` and `view-recorder` modules, then 2 more for place and space wiring. All GREEN afterwards.
   - **Checks:** `pnpm lint` clean, `pnpm typecheck` clean, `pnpm test` 171 files and 2767 tests pass, `pnpm build` passes with `/` still `○`.
   - **Commits:** `788389e` (schema, server, lints), `193bb77` (glass).
+- 2026-10-02: T3 RDD. Assessed `e47be36..b1a2304`: medium, 1,231 lines, `slice_budget_reached`. Consent granted by the user. One reliability lens, approved and acknowledged (lineage `review-f9241f806dc5b4aa`, authority burned). Four non-blocking advisories, left as later work:
+  - The optimistic +1 persists for the page session (`glass-view.tsx`).
+  - The repository treats every 42501 as an RLS refusal, so a missing grant would also look like a quiet no-op (`prisma-memory-repository.ts`). The live check's step 2 is what catches a bad grant.
+  - The trigger's silent no-op, if the owner ever lost `BYPASSRLS`, is not proved by a test (`migration.sql`). Live-check steps 2 and 8 cover it.
+  - The view recorder never re-asks after a failed call within a page session (`view-recorder.ts`).
 
 ## Next step
 
-T3: RDD, then, with the user's authorization, apply `20261005000000_memory_views` and run the live check above.
+T3: with the user's authorization, apply `20261005000000_memory_views`, push to main, and run the live check above.
