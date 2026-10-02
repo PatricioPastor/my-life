@@ -6,6 +6,7 @@ import { MAX_UPLOAD_BYTES } from "../upload-limits"
 import type { CreateMemoryResult, PrepareUploadResult } from "../upload-view"
 import type { ResolveMapsLinkResult } from "../place/resolve-maps-link"
 import type { SuggestPlaceResult } from "../place/suggest-place"
+import { ORB_HUES } from "../orb-hues"
 import { AddMemory, type AddMemoryProps } from "./add-memory"
 import type { UploadResult } from "./cloudinary-upload"
 import { ORB_COLOR_COPY } from "./orb-color-picker"
@@ -49,8 +50,10 @@ const MEMORY: MemoryView = {
   audio: null,
 }
 
-/** What the browser would take from the photo: glowing tones, the dominant one first. */
-const SWATCHES = ["#ff9a3c", "#a58cff", "#4fd1b9", "#e88ad6"]
+/** What the browser would take from the photo: glowing tones, the dominant one first, none of them like a curated hue. */
+const SWATCHES = ["#ce8b9f", "#b69f62", "#60b3a3", "#b692c6"]
+/** What the picker offers for that photo: its own tones, then the twelve curated hues. */
+const OFFERED = [...SWATCHES, ...ORB_HUES]
 
 function setup(over: Partial<AddMemoryProps> = {}) {
   const prepare = vi.fn(async (): Promise<PrepareUploadResult> => GRANT)
@@ -1053,16 +1056,30 @@ describe("AddMemory orb color", () => {
     expect(screen.getByTestId("orb-preview")).toBeTruthy()
   })
 
-  it("takes the swatches from the picked photo, the dominant tone first and selected", async () => {
+  it("offers the picked photo's tones, the dominant one first and selected, then the twelve curated hues", async () => {
     const { readPalette } = setup()
     open()
     const file = photo()
     pick(file)
     await ready()
     expect(readPalette).toHaveBeenCalledWith(file)
-    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(SWATCHES)
-    expect(swatches().map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false"])
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(OFFERED)
+    expect(swatches().map((r) => r.getAttribute("aria-checked"))).toEqual(OFFERED.map((_, i) => String(i === 0)))
     expect(screen.getByText(ORB_COLOR_COPY.fromPhoto)).toBeTruthy()
+  })
+
+  it("selects the curated hue a dominant tone was folded into, when a curated hue already offered it", async () => {
+    const { create, readPalette } = setup()
+    readPalette.mockResolvedValue({ colors: ["#f99a6e", SWATCHES[0]], fromPhoto: true })
+    open()
+    pick(photo())
+    fill()
+    await ready()
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual([SWATCHES[0], ...ORB_HUES])
+    expect(swatches().find((r) => r.getAttribute("aria-checked") === "true")?.getAttribute("data-color")).toBe(ORB_HUES[1])
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[1] }))
   })
 
   it("shows a live preview in the chosen color", async () => {
@@ -1087,7 +1104,7 @@ describe("AddMemory orb color", () => {
     expect(document.activeElement).toBe(swatches()[1])
     fireEvent.keyDown(swatches()[1], { key: "ArrowLeft" })
     fireEvent.keyDown(swatches()[0], { key: "ArrowLeft" })
-    expect(swatches()[3].getAttribute("aria-checked")).toBe("true")
+    expect(swatches()[OFFERED.length - 1].getAttribute("aria-checked")).toBe("true")
   })
 
   it("sends the chosen color with the memory", async () => {
@@ -1113,18 +1130,19 @@ describe("AddMemory orb color", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: SWATCHES[0] }))
   })
 
-  it("says so, and offers the site's cool swatches, when the browser cannot draw the photo (HEIC)", async () => {
-    const { create, readPalette } = setup()
-    readPalette.mockResolvedValue({ colors: ["#7ee0f2", "#8ab4ff", "#b49cff"], fromPhoto: false })
+  it("says so, offers the curated hues, and proposes one drawn at random, when the browser cannot draw the photo (HEIC)", async () => {
+    const { create, readPalette } = setup({ random: () => 0.5 })
+    readPalette.mockResolvedValue({ colors: [], fromPhoto: false })
     open()
     pick(photo({ name: "IMG_1.HEIC", type: "image/heic" }))
     fill()
     await ready()
     expect(screen.getByText(ORB_COLOR_COPY.fallback)).toBeTruthy()
-    expect(swatches()).toHaveLength(3)
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(ORB_HUES)
+    expect(swatches()[6].getAttribute("aria-checked")).toBe("true")
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: "#7ee0f2" }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[6] }))
   })
 
   it("starts over with the new photo's colors, and ignores a slow answer for the old one", async () => {
@@ -1135,11 +1153,11 @@ describe("AddMemory orb color", () => {
     pick(photo({ name: "uno.jpg" }))
     expect(screen.getByText(ORB_COLOR_COPY.reading)).toBeTruthy()
 
-    readPalette.mockResolvedValueOnce({ colors: ["#ffe14d", "#8fe08a"], fromPhoto: true })
+    readPalette.mockResolvedValueOnce({ colors: ["#cf9175", "#8bae78"], fromPhoto: true })
     pick(photo({ name: "dos.jpg" }))
-    await waitFor(() => expect(swatches()).toHaveLength(2))
+    await waitFor(() => expect(swatches()).toHaveLength(2 + ORB_HUES.length))
     await act(async () => finishFirst({ colors: SWATCHES, fromPhoto: true }))
-    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(["#ffe14d", "#8fe08a"])
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(["#cf9175", "#8bae78", ...ORB_HUES])
     expect(swatches()[0].getAttribute("aria-checked")).toBe("true")
   })
 

@@ -6,6 +6,7 @@ import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, squareTransform } from 
 import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
+import { ORB_HUES, orbHueFor } from "./orb-hues"
 import { listMemoriesWith, toMemoryView, type ListMemoriesDeps } from "./list-memories"
 
 const memory = (over: Partial<Memory> = {}): Memory => ({
@@ -187,8 +188,25 @@ describe("listMemoriesWith", () => {
       expect(await colorOf(memory({ orbColor: null, dominantColor: "#112233" }))).toBe(glowColor("#112233"))
     })
 
-    it("falls back to the default cool tone for an older row with no color at all", async () => {
-      expect(await colorOf(memory({ orbColor: null, dominantColor: null }))).toBe(DEFAULT_ORB_COLOR)
+    it("gives an older row with no color at all its own curated hue, stable for its id", async () => {
+      const row = memory({ id: "22222222-2222-4222-8222-222222222222", orbColor: null, dominantColor: null })
+      expect(await colorOf(row)).toBe(orbHueFor(row.id))
+      expect(await colorOf(row)).toBe(await colorOf({ ...row }))
+      expect(ORB_HUES).toContain(await colorOf(row))
+    })
+
+    it("spreads colorless rows across the palette instead of one blue for all", async () => {
+      const ids = Array.from({ length: 24 }, (_, i) => `${i.toString(16).padStart(8, "0")}-2222-4222-8222-222222222222`)
+      const colors = new Set<string | undefined>()
+      for (const id of ids) colors.add(await colorOf(memory({ id, orbColor: null, dominantColor: null })))
+      expect(colors.size).toBeGreaterThan(4)
+      expect(colors.has(DEFAULT_ORB_COLOR)).toBe(false)
+    })
+
+    it("never lets the id's hue override a stored pick or the dominant color", async () => {
+      expect(await colorOf(memory({ orbColor: "#a58cff", dominantColor: null }))).toBe("#a58cff")
+      expect(await colorOf(memory({ orbColor: DEFAULT_ORB_COLOR, dominantColor: null }))).toBe(DEFAULT_ORB_COLOR)
+      expect(await colorOf(memory({ orbColor: null, dominantColor: "#112233" }))).toBe(glowColor("#112233"))
     })
 
     it("never sends a stored color that would not glow, or is not a color", async () => {
@@ -322,7 +340,8 @@ describe("listMemoriesWith: photo, audio or both", () => {
 
   it("gives an audio-only memory a glowing orb color even when none was stored", async () => {
     const view = await list(memory({ publicId: null, width: null, height: null, dominantColor: null, orbColor: null, audio }))
-    expect(view.orbColor).toBe(DEFAULT_ORB_COLOR)
+    expect(view.orbColor).toBe(orbHueFor("11111111-1111-4111-8111-111111111111"))
+    expect(isGlowColor(view.orbColor)).toBe(true)
   })
 
   it("never leaks the audio public id, format or size", async () => {

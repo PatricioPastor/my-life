@@ -7,6 +7,7 @@ import { useKeyboardInset } from "@/shared/lib/use-keyboard-inset"
 import { cn } from "@/shared/lib/utils"
 import { CAPTION_MAX_LENGTH, EARLIEST_MEMORY_DATE } from "../memory"
 import { DEFAULT_ORB_COLOR } from "../orb-color"
+import { ORB_HUES, randomOrbHue } from "../orb-hues"
 import type { MemoryView } from "../memory-view"
 import { MAX_AUDIO_MS, checkAudio, checkPhoto } from "../upload-limits"
 import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadInput, PrepareUploadResult } from "../upload-view"
@@ -16,7 +17,7 @@ import type { UploadToCloudinary } from "./cloudinary-upload"
 import { COPY, localToday, messageForFailure, validateForm, type FormErrors } from "./memory-form-model"
 import type { GpsParser } from "./photo-gps"
 import { OrbColorPicker } from "./orb-color-picker"
-import { fallbackPalette } from "./photo-palette"
+import { orbSwatches, swatchFor } from "./photo-palette"
 import { PLACE_COPY } from "./place-model"
 import { PlaceSection } from "./place-section"
 import { RELATED_COPY, chipText, type RelatedMemory } from "./related-memory"
@@ -41,6 +42,8 @@ export interface AddMemoryProps {
   parseGps?: GpsParser
   /** Reads the colors of the picked photo for the orb swatches. Defaults to a small canvas in the browser (a seam for tests). */
   readPalette?: ReadPalette
+  /** The random source the orb hue of a memory with no photo tones is drawn from (a seam for tests). Defaults to `Math.random`. */
+  random?: () => number
   /** The microphone and `MediaRecorder` the audio section records with (a seam for tests). Defaults to the browser's. */
   recorderEnv?: RecorderEnv
   /** Reads how long a picked audio is (a seam for tests). Defaults to a throwaway `Audio` element. */
@@ -111,16 +114,19 @@ function MemoryForm({
   // (or a pasted link) are two ways to answer the same question, so choosing one lets go of the other.
   const [samePlace, setSamePlace] = useState(false)
   const [placeNotSaved, setPlaceNotSaved] = useState(false)
-  // The swatch the visitor pressed; until they press one, the dominant tone (the first swatch) is the choice.
+  // The swatch the visitor pressed; until they press one, the photo's dominant tone is the choice, or, with no tones to
+  // go by (only a voice, or a photo it cannot read), a curated hue drawn once per open, so contributions vary.
   const [chosenColor, setChosenColor] = useState<string | null>(null)
+  const [drawnHue] = useState(() => randomOrbHue(props.random))
   const { phase: palette, begin: readColors, reset: resetColors } = usePhotoPalette(props.readPalette)
   const recorder = useAudioRecorder(props.recorderEnv)
   const clip = recorder.clip
   const hasAudio = clip !== null && (recorder.state.phase === "recorded" || recorder.state.phase === "playing")
-  // With a photo the swatches come from it; with only a voice they are the site's own, lifted to glow.
-  const [voiceSwatches] = useState(fallbackPalette)
-  const swatches = picked ? (palette.status === "ready" ? palette.colors : []) : hasAudio ? voiceSwatches : []
-  const orbColor = chosenColor && swatches.includes(chosenColor) ? chosenColor : (swatches[0] ?? null)
+  // With a photo its own tones come first, then the curated hues; with only a voice, the curated hues alone.
+  const tones = picked && palette.status === "ready" ? palette.colors : []
+  const swatches = picked ? (palette.status === "ready" ? orbSwatches(tones) : []) : hasAudio ? ORB_HUES : []
+  const proposed = tones.length > 0 ? swatchFor(swatches, tones[0]) : drawnHue
+  const orbColor = swatches.length === 0 ? null : chosenColor && swatches.includes(chosenColor) ? chosenColor : proposed
   const audioRun = useRef(0)
   // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
   const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => {

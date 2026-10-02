@@ -6,6 +6,7 @@ vi.mock("server-only", () => ({}))
 import { sharedAudioPath } from "../audio-path"
 import type { Memory } from "../memory"
 import type { ApprovedMemoryReader } from "../memory-repository"
+import { orbHueFor } from "../orb-hues"
 import { findSharedMemoryWith, type FindSharedMemoryDeps } from "./find-shared-memory"
 import { OG_TRANSFORM, cloudinaryUrl } from "../cloudinary-url"
 import { signShareToken } from "./share-token"
@@ -95,6 +96,12 @@ describe("findSharedMemoryWith", () => {
     expect(m.photo?.sizes.length).toBeGreaterThan(0)
     expect(JSON.stringify(m)).not.toContain("ana")
     expect(JSON.stringify(m)).not.toContain("abcd")
+  })
+
+  it("gives a memory with no color of its own the same curated hue the memories space shows for it", async () => {
+    const { full } = setup({}, memory({ orbColor: null, dominantColor: null }))
+    const result = await findSharedMemoryWith(full, TOKEN)
+    expect(result.ok && result.memory.orbColor).toBe(orbHueFor(ID))
   })
 
   it("shows a guest the view count too (their own open is never recorded)", async () => {

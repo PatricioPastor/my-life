@@ -10,6 +10,7 @@
 
 import { oklchToSrgb, toHex } from "@/features/orb/oklch"
 import { hexToRgb } from "@/shared/lib/color"
+import { ORB_HUE_NAMES } from "./orb-hues"
 
 /** Below this lightness an orb sinks into the void. */
 export const GLOW_MIN_LIGHTNESS = 0.7
@@ -101,14 +102,15 @@ export function glowColor(hex: string): string {
 }
 
 /**
- * The orb color the server stores. The visitor's choice wins when it is a valid glowing `#rrggbb`; otherwise the
- * photo's dominant color (from Cloudinary), made to glow; otherwise the default cool tone. Never throws and never
+ * The orb color the server stores, or sends. The visitor's choice wins when it is a valid glowing `#rrggbb`;
+ * otherwise the photo's dominant color (from Cloudinary), made to glow; otherwise `fallback` (on read, the memory's
+ * own curated hue, see `orbHueFor`), or the default cool tone when that would not glow. Never throws and never
  * answers a color that would sink into the void.
  */
-export function chooseOrbColor(requested: unknown, dominant: unknown): string {
+export function chooseOrbColor(requested: unknown, dominant: unknown, fallback: string = DEFAULT_ORB_COLOR): string {
   if (isGlowColor(requested)) return requested.toLowerCase()
   if (isHexColor(dominant)) return glowColor(dominant)
-  return DEFAULT_ORB_COLOR
+  return isGlowColor(fallback) ? fallback.toLowerCase() : DEFAULT_ORB_COLOR
 }
 
 /** The neighbouring hue of an orb's color, used for its chromatic rim. It glows too. */
@@ -144,11 +146,14 @@ export function colorName(hex: string): string {
   return l >= LIGHT_AT && !ALREADY_LIGHT.has(name) ? `${name} claro` : name
 }
 
-/** Names for a row of swatches, made unique ("naranja", "naranja 2") so each one can be told apart by ear. */
+/**
+ * Names for a row of swatches: a curated hue by its own name ("coral", "menta"), any other tone by `colorName`. Made
+ * unique ("naranja", "naranja 2") so each one can be told apart by ear.
+ */
 export function swatchNames(hexes: readonly string[]): string[] {
   const seen = new Map<string, number>()
   return hexes.map((hex) => {
-    const name = colorName(hex)
+    const name = ORB_HUE_NAMES[hex.toLowerCase()] ?? colorName(hex)
     const count = (seen.get(name) ?? 0) + 1
     seen.set(name, count)
     return count === 1 ? name : `${name} ${count}`

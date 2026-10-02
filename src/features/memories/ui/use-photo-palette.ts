@@ -14,7 +14,7 @@ export type ReadPalette = (file: Blob) => Promise<PhotoPalette>
 /**
  * Container logic for the orb color swatches: reads the colors of the picked photo in the browser. Each `begin`
  * supersedes the one before, so a slow answer for a photo that is no longer picked is ignored. Reading never fails:
- * a photo that cannot be drawn gives the site's cool palette instead.
+ * a photo that cannot be drawn gives no tones, and the curated hues alone are offered instead.
  */
 export function usePhotoPalette(read: ReadPalette = readPhotoPalette) {
   const [phase, setPhase] = useState<PalettePhase>({ status: "idle" })

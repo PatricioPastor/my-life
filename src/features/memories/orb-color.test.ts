@@ -14,6 +14,7 @@ import {
   rimColor,
   swatchNames,
 } from "./orb-color"
+import { ORB_HUES, ORB_HUE_NAMES } from "./orb-hues"
 
 const hueGap = (a: number, b: number) => {
   const d = Math.abs(a - b) % 360
@@ -196,6 +197,21 @@ describe("chooseOrbColor (the server's fallback chain)", () => {
     expect(chooseOrbColor(null, "")).toBe(DEFAULT_ORB_COLOR)
   })
 
+  it("falls back to the hue it is given, instead of the default, when there is neither a pick nor a dominant color", () => {
+    expect(chooseOrbColor(null, null, ORB_HUES[3])).toBe(ORB_HUES[3])
+    expect(chooseOrbColor("nope", "", ORB_HUES[0])).toBe(ORB_HUES[0])
+  })
+
+  it("never lets that fallback override a valid pick or the photo's dominant color", () => {
+    expect(chooseOrbColor("#a58cff", null, ORB_HUES[3])).toBe("#a58cff")
+    expect(chooseOrbColor(null, "#0a0f2a", ORB_HUES[3])).toBe(glowColor("#0a0f2a"))
+  })
+
+  it("ignores a fallback that would not glow, and answers the default instead", () => {
+    expect(chooseOrbColor(null, null, "#000000")).toBe(DEFAULT_ORB_COLOR)
+    expect(chooseOrbColor(null, null, "nope")).toBe(DEFAULT_ORB_COLOR)
+  })
+
   it("always answers a color that passes the floor", () => {
     for (const requested of ["#000000", "#ffffff", "#8ab4ff", "x", undefined]) {
       for (const dominant of ["#000000", "#ffffff", "#f0a", null]) {
@@ -246,6 +262,14 @@ describe("swatchNames", () => {
 
   it("leaves distinct names alone", () => {
     expect(swatchNames(["#ff9a3c", "#a58cff"])).toEqual(["naranja", "violeta"])
+  })
+
+  it("calls each curated hue by its own name", () => {
+    expect(swatchNames(ORB_HUES)).toEqual(ORB_HUES.map((hex) => ORB_HUE_NAMES[hex]))
+  })
+
+  it("keeps the names distinct when a photo tone and a curated hue share one", () => {
+    expect(swatchNames(["#a58cff", "#daa0f4"])).toEqual(["violeta", "violeta 2"])
   })
 })
 

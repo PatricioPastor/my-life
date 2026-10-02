@@ -6,13 +6,14 @@ import { MAX_AUDIO_BYTES, MAX_AUDIO_MS } from "../upload-limits"
 import type { CreateMemoryResult, PrepareUploadResult } from "../upload-view"
 import type { ResolveMapsLinkResult } from "../place/resolve-maps-link"
 import type { SuggestPlaceResult } from "../place/suggest-place"
+import { ORB_HUES } from "../orb-hues"
 import { AddMemory, type AddMemoryProps } from "./add-memory"
 import { RECORDER_COPY } from "./audio-recorder-model"
 import { AUDIO_COPY } from "./audio-section"
 import type { UploadResult } from "./cloudinary-upload"
 import { COPY } from "./memory-form-model"
 import { ORB_COLOR_COPY } from "./orb-color-picker"
-import { fallbackPalette, type PhotoPalette } from "./photo-palette"
+import type { PhotoPalette } from "./photo-palette"
 import type { RecorderEnv } from "./use-audio-recorder"
 
 const track = vi.fn()
@@ -49,7 +50,8 @@ const MEMORY: MemoryView = {
   fullUrl: null,
   audio: { url: "https://res.cloudinary.com/demo/video/authenticated/s--x--/f_mp3/a", durationMs: 4000 },
 }
-const SWATCHES = ["#ff9a3c", "#a58cff", "#4fd1b9", "#e88ad6"]
+/** The photo's own tones, none of them like a curated hue. */
+const SWATCHES = ["#ce8b9f", "#b69f62", "#60b3a3", "#b692c6"]
 
 type Handler = ((event?: unknown) => void) | null
 class FakeMediaRecorder {
@@ -479,18 +481,54 @@ describe("AddMemory: saving with audio", () => {
 })
 
 describe("AddMemory: the orb color with and without a photo", () => {
-  it("offers the portal swatches, lifted to glow, for an audio-only memory, with the first chosen", async () => {
-    setup()
+  const checked = () => swatches().find((r) => r.getAttribute("aria-checked") === "true")?.getAttribute("data-color")
+
+  it("offers the twelve curated hues for an audio-only memory, with one drawn at random chosen", async () => {
+    setup({ random: () => 0.25 })
     open()
     pickAudio(audioFile())
     await heard()
-    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(fallbackPalette())
-    expect(swatches()[0].getAttribute("aria-checked")).toBe("true")
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(ORB_HUES)
+    expect(checked()).toBe(ORB_HUES[3])
     expect(screen.getByText(ORB_COLOR_COPY.voice)).toBeTruthy()
   })
 
-  it("sends the swatch the visitor chose for an audio-only memory", async () => {
-    const { create } = setup()
+  it("draws the hue once per open, so it holds while the visitor works on the memory", async () => {
+    const random = vi.fn(() => 0.9)
+    setup({ random })
+    open()
+    pickAudio(audioFile())
+    await heard()
+    fireEvent.click(screen.getByRole("button", { name: "Quitar audio" }))
+    pickAudio(audioFile({ name: "otra.mp3" }))
+    await heard()
+    expect(checked()).toBe(ORB_HUES[10])
+    expect(random).toHaveBeenCalledTimes(1)
+  })
+
+  it("lets contributions vary: another draw proposes another hue", async () => {
+    const { create } = setup({ random: () => 0 })
+    open()
+    pickAudio(audioFile())
+    fill()
+    await heard()
+    expect(checked()).toBe(ORB_HUES[0])
+    submit()
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[0] })))
+    cleanup()
+
+    const again = setup({ random: () => 0.99 })
+    open()
+    pickAudio(audioFile())
+    fill()
+    await heard()
+    expect(checked()).toBe(ORB_HUES[11])
+    submit()
+    await waitFor(() => expect(again.create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[11] })))
+  })
+
+  it("sends the swatch the visitor chose for an audio-only memory, over the drawn one", async () => {
+    const { create } = setup({ random: () => 0.5 })
     open()
     pickAudio(audioFile())
     fill()
@@ -498,28 +536,30 @@ describe("AddMemory: the orb color with and without a photo", () => {
     fireEvent.click(swatches()[2])
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: fallbackPalette()[2] }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orbColor: ORB_HUES[2] }))
   })
 
-  it("takes the swatches from the photo when there is one, with or without an audio", async () => {
+  it("takes the first swatches from the photo when there is one, with or without an audio", async () => {
     setup()
     open()
     pickAudio(audioFile())
     pickPhoto(photo())
     await heard()
-    await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(SWATCHES))
+    await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual([...SWATCHES, ...ORB_HUES]))
+    expect(checked()).toBe(SWATCHES[0])
     expect(screen.getByText(ORB_COLOR_COPY.fromPhoto)).toBeTruthy()
   })
 
-  it("falls back to the portal swatches when the photo is removed but the audio stays", async () => {
-    setup()
+  it("falls back to the curated hues when the photo is removed but the audio stays", async () => {
+    setup({ random: () => 0.5 })
     open()
     pickPhoto(photo())
     pickAudio(audioFile())
     await heard()
-    await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(SWATCHES))
+    await waitFor(() => expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual([...SWATCHES, ...ORB_HUES]))
     fireEvent.click(screen.getByRole("button", { name: "Quitar foto" }))
-    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(fallbackPalette())
+    expect(swatches().map((r) => r.getAttribute("data-color"))).toEqual(ORB_HUES)
+    expect(checked()).toBe(ORB_HUES[6])
   })
 
   it("drops the swatches when the audio goes and there is no photo", async () => {
@@ -533,14 +573,14 @@ describe("AddMemory: the orb color with and without a photo", () => {
   })
 
   it("previews the memory with a talking orb in the chosen color, which follows the swatches", async () => {
-    setup()
+    setup({ random: () => 0 })
     open()
     pickAudio(audioFile())
     await heard()
     const orb = () => screen.getByTestId("talking-orb")
-    expect(orb().style.getPropertyValue("--pc")).toBe(fallbackPalette()[0])
+    expect(orb().style.getPropertyValue("--pc")).toBe(ORB_HUES[0])
     fireEvent.click(swatches()[1])
-    expect(orb().style.getPropertyValue("--pc")).toBe(fallbackPalette()[1])
+    expect(orb().style.getPropertyValue("--pc")).toBe(ORB_HUES[1])
   })
 })
 

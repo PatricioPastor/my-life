@@ -9,7 +9,7 @@ export const ORB_COLOR_COPY = {
   label: "Color de tu orbe",
   idle: "Elige una foto o un audio para ver los colores de tu orbe.",
   reading: "Buscando los colores de tu foto…",
-  fromPhoto: "Colores sacados de tu foto.",
+  fromPhoto: "Los primeros colores salen de tu foto.",
   voice: "Sin foto, tu orbe toma uno de estos colores.",
   fallback: "No pudimos leer los colores de esta foto. Elige uno de estos.",
 } as const
@@ -17,13 +17,13 @@ export const ORB_COLOR_COPY = {
 export interface OrbColorPickerProps {
   /** Where the swatches are: not asked for yet, being extracted, or ready. */
   status: "idle" | "reading" | "ready"
-  /** Glowing `#rrggbb` swatches, the dominant tone first. */
+  /** Glowing `#rrggbb` swatches: the photo's own tones (dominant first), then the curated hues (see `orbSwatches`). */
   colors: readonly string[]
   /** The chosen swatch, or null before there is one. */
   value: string | null
-  /** False when the photo could not be read and the site's cool palette stands in. */
+  /** False when the photo could not be read and the curated hues alone stand in. */
   fromPhoto: boolean
-  /** True for a memory with no photo (only an audio): the site's cool palette is the offer, and says so. */
+  /** True for a memory with no photo (only an audio): the curated hues are the offer, and it says so. */
   voice?: boolean
   disabled: boolean
   onChange: (hex: string) => void
@@ -34,6 +34,8 @@ type OrbStyle = CSSProperties & Record<`--${string}`, string>
 const NOTE_ID = "memory-orb-note"
 const LABEL_ID = "memory-orb-label"
 const SLOTS = 6
+/** Six 44 px cells to a row: the photo's tones fill the first, the twelve curated hues the next two. */
+const ROW = "grid grid-cols-[repeat(6,2.75rem)] gap-0.5"
 
 function noteFor({ status, fromPhoto, voice }: Pick<OrbColorPickerProps, "status" | "fromPhoto" | "voice">): string {
   if (status === "idle") return ORB_COLOR_COPY.idle
@@ -57,10 +59,10 @@ function OrbPreview({ color }: { color: string }) {
 }
 
 /**
- * "Color de tu orbe": swatches taken from the photo (or the site's own for a memory with only a voice), as a radiogroup of round buttons, and a live preview of the
- * orb in the chosen color. Arrow keys move the selection (and the focus) the way native radios do; only the
- * selected swatch is a tab stop. The swatch row and the preview keep their space before there is a photo, so the
- * dialog does not jump when the colors arrive.
+ * "Color de tu orbe": the photo's own tones, then the twelve curated hues (only those for a memory with just a voice),
+ * as a radiogroup of round buttons in rows of six, and a live preview of the orb in the chosen color. Arrow keys move
+ * the selection (and the focus) the way native radios do; only the selected swatch is a tab stop. The swatch row and
+ * the preview keep their space before there is a photo, so the dialog does not jump when the colors arrive.
  */
 export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabled, onChange }: OrbColorPickerProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
@@ -99,13 +101,14 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
       <span id={LABEL_ID} className="t-label text-ink-muted">
         {ORB_COLOR_COPY.label}
       </span>
-      <div className="flex items-center gap-3">
+      {/* The preview wraps under the swatches on a phone too narrow for both, never squeezing a 44 px cell. */}
+      <div className="flex flex-wrap items-center gap-3">
         <div
           data-testid="orb-swatches"
           role={colors.length > 0 ? "radiogroup" : undefined}
           aria-labelledby={colors.length > 0 ? LABEL_ID : undefined}
           aria-describedby={colors.length > 0 ? NOTE_ID : undefined}
-          className="flex min-h-16 min-w-0 flex-1 flex-wrap content-center items-center gap-0.5"
+          className={cn(ROW, "min-h-16 grow content-center items-center")}
         >
           {colors.length > 0 ? (
             <>
@@ -141,7 +144,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
             </>
           ) : (
             // Keeps the row's height (and shows where the colors will be) until there is a photo to take them from.
-            <div aria-hidden="true" className="flex gap-0.5">
+            <div aria-hidden="true" className={cn(ROW, "col-span-full")}>
               {Array.from({ length: SLOTS }, (_, index) => (
                 <span key={index} className="grid size-11 place-items-center">
                   <span className="size-6 rounded-full border border-dashed border-[#a8c8ff]/20" />

@@ -11,6 +11,7 @@ import { MAX_AUDIO_BYTES, MAX_AUDIO_MS, MAX_UPLOAD_BYTES } from "./upload-limits
 import type { CreateMemoryInput } from "./upload-view"
 import { signUploadTicket } from "./upload-ticket"
 import { DEFAULT_ORB_COLOR, glowColor, isGlowColor } from "./orb-color"
+import { orbHueFor } from "./orb-hues"
 import type { ReverseGeocoder } from "./place/reverse-geocoder"
 
 const SECRET = Buffer.alloc(32, 7).toString("base64url")
@@ -300,7 +301,7 @@ describe("createMemoryWith: rate limit and insert", () => {
         dominantColor: null,
         place: null,
         relatedId: null,
-        orbColor: DEFAULT_ORB_COLOR,
+        orbColor: orbHueFor("11111111-1111-4111-8111-111111111111"),
         // A memory nobody has opened yet.
         viewCount: 0,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),

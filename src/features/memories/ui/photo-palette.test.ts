@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { colorDistance, hexToOklch, isGlowColor } from "../orb-color"
-import { SWATCH_COUNT, extractPalette, fallbackPalette, readPhotoPalette, type PixelReader } from "./photo-palette"
+import { ORB_HUES } from "../orb-hues"
+import { SWATCH_COUNT, extractPalette, orbSwatches, readPhotoPalette, swatchFor, type PixelReader } from "./photo-palette"
 
 type Rgb = readonly [number, number, number]
 
@@ -110,17 +111,53 @@ describe("extractPalette", () => {
   })
 })
 
-describe("fallbackPalette (the site's cool orb palette)", () => {
-  it("is a handful of distinct cool tones that glow", () => {
-    const colors = fallbackPalette()
-    expect(colors.length).toBeGreaterThanOrEqual(3)
-    expect(new Set(colors).size).toBe(colors.length)
-    for (const color of colors) {
-      expect(isGlowColor(color)).toBe(true)
-      const h = hue(color)
-      expect(h).toBeGreaterThan(180)
-      expect(h).toBeLessThan(350)
+describe("orbSwatches (what the picker offers)", () => {
+  /** Glowing photo tones that no curated hue looks like (each at least 0.07 away in OKLab from all twelve). */
+  const OWN = ["#ce8b9f", "#cf9175", "#b69f62", "#8bae78", "#60b3a3", "#63adca", "#b692c6"]
+
+  it("offers the twelve curated hues alone when there are no photo tones (a voice, or a photo it cannot read)", () => {
+    expect(orbSwatches([])).toEqual(ORB_HUES)
+  })
+
+  it("puts the photo's own tones first, the dominant one first, then the twelve curated hues", () => {
+    expect(orbSwatches(OWN.slice(0, 3))).toEqual([...OWN.slice(0, 3), ...ORB_HUES])
+  })
+
+  it("drops a photo tone a curated hue already offers, by the same near-duplicate rule as the photo's own tones", () => {
+    const coralish = "#f99a6e"
+    expect(colorDistance(coralish, ORB_HUES[1])).toBeLessThan(0.06)
+    expect(orbSwatches([OWN[0], coralish, OWN[1]])).toEqual([OWN[0], OWN[1], ...ORB_HUES])
+  })
+
+  it("keeps at most six photo tones", () => {
+    const out = orbSwatches(OWN)
+    expect(out.slice(0, SWATCH_COUNT)).toEqual(OWN.slice(0, SWATCH_COUNT))
+    expect(out).toHaveLength(SWATCH_COUNT + ORB_HUES.length)
+  })
+
+  it("never offers two swatches that look alike, and every one glows", () => {
+    const out = orbSwatches([...OWN, "#f99a6e", "#8fe08a"])
+    for (const [i, a] of out.entries()) {
+      expect(isGlowColor(a)).toBe(true)
+      for (const b of out.slice(i + 1)) expect(colorDistance(a, b), `${a} ${b}`).toBeGreaterThanOrEqual(0.06)
     }
+  })
+})
+
+describe("swatchFor (the swatch that stands for the photo's dominant tone)", () => {
+  it("is the tone itself when it is offered", () => {
+    const swatches = orbSwatches(["#ce8b9f"])
+    expect(swatchFor(swatches, "#ce8b9f")).toBe("#ce8b9f")
+  })
+
+  it("is the curated hue it was folded into when a curated hue already offered it", () => {
+    const swatches = orbSwatches(["#f99a6e"])
+    expect(swatches).not.toContain("#f99a6e")
+    expect(swatchFor(swatches, "#f99a6e")).toBe(ORB_HUES[1])
+  })
+
+  it("is null when there is nothing to offer", () => {
+    expect(swatchFor([], "#ce8b9f")).toBeNull()
   })
 })
 
@@ -143,15 +180,13 @@ describe("readPhotoPalette", () => {
     }],
     ["has nothing opaque in it", async () => image([[ORANGE, 100, 0]])],
     ["is empty", async () => new Uint8ClampedArray(0)],
-  ] as Array<[string, PixelReader]>)("falls back to the site's cool palette when the photo %s", async (_name, read) => {
+  ] as Array<[string, PixelReader]>)("gives no tones, and says so, when the photo %s (the curated hues stand in)", async (_name, read) => {
     const out = await readPhotoPalette(file, read)
-    expect(out.fromPhoto).toBe(false)
-    expect(out.colors).toEqual(fallbackPalette())
+    expect(out).toEqual({ colors: [], fromPhoto: false })
   })
 
-  it("falls back in an environment with no canvas (the default reader)", async () => {
+  it("gives no tones in an environment with no canvas (the default reader)", async () => {
     const out = await readPhotoPalette(file)
-    expect(out.fromPhoto).toBe(false)
-    expect(out.colors.length).toBeGreaterThanOrEqual(3)
+    expect(out).toEqual({ colors: [], fromPhoto: false })
   })
 })

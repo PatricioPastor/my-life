@@ -4,6 +4,7 @@ import type { Memory } from "./memory"
 import type { MemoryRepository } from "./memory-repository"
 import type { ListMemoriesResult, MemoryPhoto, MemoryPlace, MemoryView } from "./memory-view"
 import { chooseOrbColor } from "./orb-color"
+import { orbHueFor } from "./orb-hues"
 import { deliverySides } from "./photo-ladder"
 import { roundCoordinate } from "./place/coordinates"
 
@@ -70,8 +71,9 @@ export function toMemoryView(
     dominantColor: memory.dominantColor,
     place: toPlace(memory),
     relatedId: memory.relatedMemoryId !== null && visibleIds.has(memory.relatedMemoryId) ? memory.relatedMemoryId : null,
-    // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks.
-    orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
+    // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks. A row
+    // with no color and no dominant color gets the curated hue of its id, so such memories are not all the same blue.
+    orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor, orbHueFor(memory.id)),
     viewCount: memory.viewCount,
     thumbUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),

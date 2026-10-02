@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_ORB_COLOR, rimColor, swatchNames } from "../orb-color"
+import { ORB_HUES, ORB_HUE_NAMES } from "../orb-hues"
 import { OrbColorPicker, ORB_COLOR_COPY, type OrbColorPickerProps } from "./orb-color-picker"
 
 afterEach(cleanup)
@@ -204,5 +205,30 @@ describe("OrbColorPicker on a phone", () => {
   it("gives every swatch a 44 px touch target", () => {
     setup({ fromPhoto: true })
     for (const radio of radios()) expect(radio.className).toMatch(/(^|\s)size-11(\s|$)/)
+  })
+
+  it("lays the swatches out in rows of six 44 px cells: the photo's tones, then the curated hues two rows below", () => {
+    setup({ colors: [...COLORS, ...ORB_HUES] })
+    expect(screen.getByTestId("orb-swatches").className).toMatch(/(^|\s)grid(\s|$)/)
+    expect(screen.getByTestId("orb-swatches").className).toContain("grid-cols-[repeat(6,2.75rem)]")
+    expect(radios()).toHaveLength(COLORS.length + 12)
+  })
+
+  it("keeps the same six-cell row for the empty slots before there is a photo", () => {
+    setup({ status: "idle", colors: [], value: null })
+    const slots = screen.getByTestId("orb-swatches").firstElementChild as HTMLElement
+    expect(slots.className).toContain("grid-cols-[repeat(6,2.75rem)]")
+  })
+})
+
+describe("OrbColorPicker with the curated hues", () => {
+  it("calls each curated hue by its own Spanish name, and a photo tone by its hue", () => {
+    setup({ colors: [COLORS[0], ...ORB_HUES] })
+    expect(radios().map((r) => r.getAttribute("aria-label"))).toEqual(["naranja", ...ORB_HUES.map((hex) => ORB_HUE_NAMES[hex])])
+  })
+
+  it("says the first colors are the photo's, since the curated ones follow", () => {
+    setup()
+    expect(ORB_COLOR_COPY.fromPhoto).toMatch(/primeros colores/i)
   })
 })
