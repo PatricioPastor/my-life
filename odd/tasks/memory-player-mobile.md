@@ -84,14 +84,14 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
 
   Route: delegated writer. Trigger: 2+ non-trivial files (`glass-view.tsx`, `use-audio-level.ts`, new player modules, CSS).
 - [x] **T2 — Volume particles** (`13891a1`). The orb throws off particles whose rate and speed follow the live level. They use the orb color, stop when paused, and turn off under reduced motion. Route: the same writer as T1.
-- [ ] **T3 — Readable text.**
+- [x] **T3 — Readable text** (`fe198a4`).
   - The caption block is bounded to the viewport, with the title stepping down for long text.
   - Clamp with an expand into a scrollable panel.
   - Previous/next are placed so they never squeeze the text.
   - `glassLayout` reserves the real space the text needs.
 
   Route: delegated writer.
-- [ ] **T4 — Mobile and accessibility.**
+- [x] **T4 — Mobile and accessibility** (`25f6922`).
   - Find and fix the off-center sphere, verified at 360, 390 and 412 px wide.
   - Make "+ Contribuir" the top-bar control at every size.
   - Declutter the HUD.
@@ -185,6 +185,20 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
     - `pnpm build`: `/` stays `○`.
   - **Visual.** At 1440x900 (orange) and 390x844 (green) the particles are visible but quiet, and tinted with the orb color.
 
+- 2026-10-02 — **T3 done** (`fe198a4`, route: delegated writer, trigger: 2+ non-trivial files).
+  - **What changed.** `glassLayout` reserves the player, a caption block and a bottom margin under the sphere, so the sphere shrinks first (and `lensGeometry` reports `player`). `caption-text.ts` steps the title down by length (lg/md/sm); the title is clamped to 3 lines with an accessible Ver más / Ver menos (`aria-expanded`, `aria-controls`) that opens a scrolling panel. The caption block is bounded (top under the player, bottom above the safe area; a guest's bottom leaves room for "Entrar al universo", which fixes the overlap). Previous and next sit in their own row. On phones the scrubber has a full-width row and the volume a row of its own (slider 96 px+; the 380 px shrink is gone). Meta text is 12 px in the muted ink.
+  - **TDD.** RED: caption-text (module missing), glass-layout (3 failed), glass-view caption (14 of 150), player rows (4 of 155). GREEN: 5, 21, 150, 155.
+  - **Checks.** pnpm lint: clean. pnpm typecheck: clean. pnpm test: 177 files, 2912 passed. pnpm build: `/` stays static.
+  - **Visual.** Playwright harness (deleted) at 360x740, 390x844, 412x915 (mobile, touch) and 1440x900; a 140-character caption on a photo+audio memory fits in three lines at 360 with no clamp needed; the guest caption ends 8 px above the exit link.
+- 2026-10-02 — **T4 done** (`25f6922`, route: delegated writer; the centering fix shares the commit with the top-bar work, because both touch `memories-place.tsx`).
+  - **Off-center sphere: root cause.** The journey `main` and the memories stage were `overflow-hidden`, which still scrolls programmatically, and they hold wider layers (sky zoomed 1.7x, the 220% halo, the lens canvas, the particle canvas; the stage reports `scrollWidth` about 1500 px at 400 px). Evidence in the real composition (Playwright, isMobile, hasTouch, dpr 2.6, 400x800): setting `scrollLeft = 17` on the stage or the main moved the sphere centre from 200 to 183, the same 17 px offset as the screenshot (left margin 25, right 60). I could not trigger the scroll with taps, Tab or Escape in emulation, so the real trigger (a focus or scrollIntoView on the user's browser) is unproven; the fix removes the whole class: both boxes, and the guest page, are now `overflow-clip` (not scrollable at all). After the fix, `scrollLeft = 17` stays 0 and the centre stays 200.
+  - **Centering numbers** (after tapping an orb in the real MemoriesPlace composition): 360 wide 180 vs 180 (0), 390 wide 195 vs 195 (0), 412 wide 206.14 vs 206 (0.14); resizing 360 to 412 and 412 to 360 with the glass open: 0 and -0.02. A landscape rotation moves to the short-landscape layout (anchor x 0.32, by design).
+  - **What changed.** "+ Contribuir" replaces the bottom-right control as a top-bar control (`data-hud`, in line with "Universo"; it steps aside while a memory is open); the dialog keeps the title "Agregar recuerdo". `src/shared/lib/top-bar.ts` holds one top, left and right offset shared by the journey back button, Cerrar/Compartir and the guest "Universo". `keep-out.ts` reserves the top bar, not the bottom-right corner. Faint ink on small text moved to the muted ink (form hints, counter, glass link, share note). The form's phone column was wider than the sheet (the swatch row forced the track): `grid-cols-[minmax(0,1fr)]`. The player's gain slider already goes through Web Audio (T1), so volume works on iOS.
+  - **TDD.** RED: 137 of 1117 failed once the tests expected Contribuir and the top bar (mostly the renamed trigger), plus one RED each for the stage clip, the covered slot and the sheet column; GREEN afterwards.
+  - **Checks.** pnpm lint: clean. pnpm typecheck: clean. pnpm test: 177 files, 2926 passed. pnpm build: `/` stays static.
+  - **Visual.** Overview and glass at 360, 390, 412, 1440; the form sheet at 360 and 1440; the guest page at 360 and 1440. The top bar is on one line.
+  - **Open concerns.** The real trigger of the scroll is unproven; "Universo" from the journey is still drawn dimly under the glass scrim; there is no automated contrast check.
+
 ## Next step
 
-T3 (readable text) with a delegated writer. T3 and T4 also own the pre-existing overlap of "Entrar al universo" with the caption on short desktops.
+T5 (contribute from a memory): "+ Contribuir" in the glass top bar (the bar leaves room on the right), prefilled date and place, `related_memory_id`.
