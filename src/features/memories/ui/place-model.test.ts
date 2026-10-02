@@ -25,8 +25,12 @@ describe("coordinatesLabel", () => {
 
 describe("PLACE_COPY", () => {
   it("is honest about the exact location: it no longer promises an approximate one", () => {
-    expect(PLACE_COPY.help).toBe("Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo.")
     expect(JSON.stringify(PLACE_COPY)).not.toMatch(/aproximada|nunca la exacta|1 km/i)
+  })
+
+  it("says what the place is for, true for the photo's place and a pasted link's alike, and leaves saving to the consent", () => {
+    expect(PLACE_COPY.help).toBe("El lugar sirve para ubicar tu recuerdo en el universo.")
+    expect(PLACE_COPY.consent).toMatch(/^Guardar el lugar exacto/)
   })
 
   it("never suggests the visitor's own location", () => {

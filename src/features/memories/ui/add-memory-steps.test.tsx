@@ -224,6 +224,14 @@ describe("AddMemory steps: Siguiente checks only the step it is on", () => {
 })
 
 describe("AddMemory steps: moving between them", () => {
+  it("opens on the first step's heading, the way every step arrives, not on Cerrar", () => {
+    setup()
+    open()
+    expect(heading().textContent).toBe("¿Qué quieres dejar?")
+    expect(document.activeElement).toBe(heading())
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: STEPPER_COPY.close }))
+  })
+
   it("moves focus to the new step's heading and announces it", () => {
     setup()
     open()

@@ -553,6 +553,7 @@ function MemoryForm({
               headings.current[n - 1] = node
             }}
             tabIndex={-1}
+            data-step-heading
             className="t-title m-0 text-[length:var(--type-4)] text-balance text-[#f3f0ea] outline-none"
           >
             {copy.title}
@@ -920,10 +921,12 @@ function MemoryForm({
  * The "Contribuir" control (a plus and the word, in the space's top bar) and the sheet it opens: three short steps
  * ("¿Qué quieres dejar?", "Cuéntalo", "Elige su color") under a "Paso N de 3" kicker, with Atrás and Siguiente (Guardar
  * recuerdo on the last) pinned at the foot. Part of the dark dimension, mounted inside the stage like the viewer. On
- * phones it is a bottom sheet (its own height, up to 92% of the screen); from md a centred dialog of a stable height.
- * Its corners are concentric all the way in: sheet 32, what sits in its 20 px padding 12, what sits in a 4 px panel 8.
+ * phones it is a bottom sheet, from md a centred dialog; both keep one stable height for every step (up to 92% of a
+ * phone's screen). Its corners are concentric all the way in: sheet 32, what sits in its 20 px padding 12, what sits in
+ * a 4 px panel 8.
  */
 export function AddMemory(props: AddMemoryProps) {
+  const card = useRef<HTMLDivElement | null>(null)
   const [ownOpen, setOwnOpen] = useState(false)
   const open = props.open ?? ownOpen
   const setOpen = (next: boolean) => {
@@ -950,6 +953,11 @@ export function AddMemory(props: AddMemoryProps) {
         <Dialog.Content
           // The steps' headings and the live region say what each step is about; there is no separate description.
           aria-describedby={undefined}
+          // Radix would focus Cerrar, the first control. The sheet opens the way every step arrives: on its heading.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            card.current?.querySelector<HTMLElement>('[data-step-panel="1"] [data-step-heading]')?.focus()
+          }}
           className="mem-viewer mem-sheet absolute inset-0 z-10 flex items-end justify-center overscroll-contain p-0 outline-none md:items-center md:p-6"
           // The card is the only part that takes pointers: a press on the empty stage falls through to the scrim and closes.
           style={{
@@ -959,12 +967,16 @@ export function AddMemory(props: AddMemoryProps) {
           }}
         >
           <div
+            ref={card}
             data-testid="memory-card"
             className={cn(
               // A 1 px cool rim drawn as a shadow, outside the box: a border would push the padding 1 px off the radii.
               "pointer-events-auto relative flex w-full min-w-0 flex-col overflow-hidden rounded-t-sheet bg-[#080714] shadow-[0_0_0_1px_rgba(168,200,255,0.14),0_28px_90px_rgba(0,0,0,0.65)]",
-              "max-h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))))]",
-              "md:h-[min(100%,680px)] md:max-h-none md:w-[min(30rem,calc(100vw-2rem))] md:rounded-sheet",
+              // One height for every step, so the sheet's top edge never moves: 680 px holds the tallest step (Cuéntalo,
+              // about 650 px at 390 px wide), capped on a phone at 92dvh and below the top safe area, from md by the
+              // screen. A shorter step stays at the top, a longer one scrolls in the body, and the footer stays pinned.
+              "h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),680px)]",
+              "md:h-[min(100%,680px)] md:w-[min(30rem,calc(100vw-2rem))] md:rounded-sheet",
             )}
           >
             <div

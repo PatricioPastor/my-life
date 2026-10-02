@@ -36,8 +36,11 @@ type OrbStyle = CSSProperties & Record<`--${string}`, string>
 const NOTE_ID = "memory-orb-note"
 const LABEL_ID = "memory-orb-label"
 const SLOTS = 12
-/** Six 44 px cells to a row (274 px, so it fits a 320 px phone): the photo's tones first, then the twelve curated hues. */
-const ROW = "grid grid-cols-[repeat(6,2.75rem)] gap-0.5"
+/**
+ * At most six 44 px cells to a row: 6 × 2.75rem + 5 × 0.125rem gaps = 17.125rem (274 px, so it fits a 320 px phone). The
+ * rows wrap and are centered, so a short last row (14 swatches: 6, 6, then 2) sits in the middle, not on the left.
+ */
+const ROW = "flex w-full max-w-[17.125rem] flex-wrap justify-center gap-0.5"
 
 /**
  * What the note under the swatches says. "The first colors come from your photo" only when one of them really does: a
@@ -111,7 +114,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
         role={colors.length > 0 ? "radiogroup" : undefined}
         aria-labelledby={colors.length > 0 ? LABEL_ID : undefined}
         aria-describedby={colors.length > 0 ? NOTE_ID : undefined}
-        className={cn(ROW, "min-h-11 content-start justify-center")}
+        className={cn(ROW, "min-h-11 content-start")}
       >
         {colors.length > 0 ? (
           <>
@@ -148,7 +151,7 @@ export function OrbColorPicker({ status, colors, value, fromPhoto, voice, disabl
           </>
         ) : (
           // Two rows of empty cells while the photo is read: the twelve curated hues always come, so nothing jumps.
-          <div aria-hidden="true" className={cn(ROW, "col-span-full")}>
+          <div aria-hidden="true" className={ROW}>
             {Array.from({ length: SLOTS }, (_, index) => (
               <span key={index} className="grid size-11 place-items-center">
                 <span className="size-6 rounded-full bg-white/[0.06]" />

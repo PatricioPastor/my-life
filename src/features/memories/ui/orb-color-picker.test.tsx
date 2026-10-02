@@ -207,17 +207,28 @@ describe("OrbColorPicker on a phone", () => {
     for (const radio of radios()) expect(radio.className).toMatch(/(^|\s)size-11(\s|$)/)
   })
 
-  it("lays the swatches out in rows of six 44 px cells: the photo's tones, then the curated hues two rows below", () => {
+  // Six 44 px cells and the five 2 px gaps between them: a row never holds more than six.
+  const SIX_CELLS = `max-w-[${6 * 2.75 + 5 * 0.125}rem]`
+  const rowClasses = (el: Element) => el.className.split(/\s+/)
+
+  it("lays the swatches out in centered rows of at most six 44 px cells, so a short last row sits in the middle", () => {
     setup({ colors: [...COLORS, ...ORB_HUES] })
-    expect(screen.getByTestId("orb-swatches").className).toMatch(/(^|\s)grid(\s|$)/)
-    expect(screen.getByTestId("orb-swatches").className).toContain("grid-cols-[repeat(6,2.75rem)]")
+    const row = rowClasses(screen.getByTestId("orb-swatches"))
+    expect(row).toEqual(expect.arrayContaining(["flex", "flex-wrap", "justify-center", "gap-0.5", "w-full", SIX_CELLS]))
+    expect(row).not.toContain("grid")
     expect(radios()).toHaveLength(COLORS.length + 12)
   })
 
-  it("keeps the same six-cell row for the empty slots before there is a photo", () => {
+  it("keeps the swatches in their order: the photo's tones first, then the curated hues", () => {
+    const colors = [...COLORS, ...ORB_HUES]
+    setup({ colors })
+    expect(radios().map((radio) => radio.getAttribute("data-color"))).toEqual(colors)
+  })
+
+  it("keeps the same six-cell rows for the empty slots before there is a photo", () => {
     setup({ status: "idle", colors: [], value: null })
     const slots = screen.getByTestId("orb-swatches").firstElementChild as HTMLElement
-    expect(slots.className).toContain("grid-cols-[repeat(6,2.75rem)]")
+    expect(rowClasses(slots)).toEqual(expect.arrayContaining(["flex", "flex-wrap", "justify-center", "w-full", SIX_CELLS]))
   })
 })
 

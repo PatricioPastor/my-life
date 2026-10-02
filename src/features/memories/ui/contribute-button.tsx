@@ -42,7 +42,12 @@ export function ContributeButton({ className, ...props }: ComponentProps<"button
       {...props}
     >
       <ContributeMark />
-      <span>Contribuir</span>
+      {/*
+        1 px of optical padding, measured in Chromium: Silkscreen's trailing side bearing leaves the word's last ink about
+        1 px nearer the edge than the chevron's square-cap overhang leaves its first ink (21.98 vs 22.94 px). It sits on
+        the word, so the box keeps the way back's exact classes.
+      */}
+      <span className="pr-px">Contribuir</span>
     </button>
   )
 }

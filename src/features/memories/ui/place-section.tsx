@@ -73,7 +73,9 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
   const asksForLink = place.status === "found" || place.status === "none" || link.text.trim() !== ""
   const linkErrorId = link.state.status === "error" ? "memory-link-error" : undefined
   const blockedId = error ? "memory-place-error" : undefined
-  const describedBy = ["memory-place-help", linkErrorId, blockedId].filter(Boolean).join(" ")
+  // What the place is for is only said while there is a place to keep: with none, it would contradict the status.
+  const helpId = shown ? "memory-place-help" : undefined
+  const describedBy = [helpId, linkErrorId, blockedId].filter(Boolean).join(" ") || undefined
 
   return (
     <div role="group" aria-labelledby="memory-place-label" className="flex flex-col gap-2">
@@ -81,9 +83,12 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
         {PLACE_COPY.heading}
       </span>
       {children}
-      {/* What the place is, and where to check it, share a line when there is room. */}
+      {/*
+        What the place is, and where to check it, share a line when there is room. A place reads in the fields' ink; with
+        none yet (no photo, reading it, no location) the line is a hint like the others, never a second heading.
+      */}
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <p id="memory-place-status" aria-live="polite" className={cn(HINT, "text-[length:var(--type-1)] text-ink")}>
+        <p id="memory-place-status" aria-live="polite" className={cn(HINT, shown && "text-[length:var(--type-1)] text-ink")}>
           {statusText(place, link.state)}
         </p>
         {shown && shown.lat !== null && shown.lng !== null && (
@@ -159,9 +164,11 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
           )}
         </div>
       )}
-      <p id="memory-place-help" className={HINT}>
-        {PLACE_COPY.help}
-      </p>
+      {helpId && (
+        <p id={helpId} className={HINT}>
+          {PLACE_COPY.help}
+        </p>
+      )}
     </div>
   )
 }

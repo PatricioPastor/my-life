@@ -33,6 +33,13 @@ describe("ContributeButton", () => {
     for (const c of BAR_CONTROL.split(" ")) expect(classesOf(contribute()).has(c)).toBe(true)
   })
 
+  it("pads its word 1 px on the right, so the word's ink ends as far from the edge as the chevron's starts", () => {
+    render(<ContributeButton />)
+    const word = contribute().lastElementChild!
+    expect(word.textContent).toBe("Contribuir")
+    expect(classesOf(word)).toEqual(new Set(["pr-px"]))
+  })
+
   it("is no longer a pill: no border, no rounded box, no backdrop, no label face of its own", () => {
     render(<ContributeButton />)
     expect(contribute().className).not.toMatch(/(^|\s)(border|rounded|backdrop|bg-|shadow|t-label)/)

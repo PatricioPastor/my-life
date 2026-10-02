@@ -645,7 +645,7 @@ describe("AddMemory place section", () => {
     goTo(2)
     return screen.getByRole("checkbox", { name: PLACE_COPY.consent }) as HTMLInputElement
   }
-  const HELP = "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo."
+  const HELP = "El lugar sirve para ubicar tu recuerdo en el universo."
   // What exifr reports for the photo: exact values, more than 2 decimals.
   const EXACT = { latitude: -34.593701, longitude: -58.425123 }
 
@@ -661,13 +661,13 @@ describe("AddMemory place section", () => {
   }
   const PLACE = "Parece que fue en Palermo, Buenos Aires"
 
-  it("asks where it was, with nothing to suggest before a photo, and always shows the helper text", () => {
+  it("asks where it was, with nothing to suggest before a photo, and no helper text until there is a place", () => {
     setup()
     open()
     expect(PLACE_COPY.heading).toBe("¿Dónde fue?")
     expect(screen.getByText(PLACE_COPY.heading)).toBeTruthy()
     expect(screen.getByText(PLACE_COPY.idle)).toBeTruthy()
-    expect(screen.getByText(HELP)).toBeTruthy()
+    expect(screen.queryByText(HELP)).toBeNull()
     expect(document.getElementById("memory-location")).toBeNull()
   })
 
@@ -826,7 +826,8 @@ describe("AddMemory place section", () => {
     expect(await screen.findByText(PLACE_COPY.noGps)).toBeTruthy()
     expect(screen.queryByRole("checkbox")).toBeNull()
     expect(screen.queryByRole("link", { name: "Ver en el mapa" })).toBeNull()
-    expect(screen.getByText(HELP)).toBeTruthy()
+    // No place, nothing to keep: the line about what the place is for would contradict the status.
+    expect(screen.queryByText(HELP)).toBeNull()
   })
 
   it("treats a photo the parser cannot read like one with no location", async () => {
@@ -994,9 +995,7 @@ describe("AddMemory Google Maps link", () => {
   it("links the input to the helper text through aria-describedby", async () => {
     await openWithGps()
     const ids = input().getAttribute("aria-describedby")!.split(" ")
-    expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(
-      "Guardamos dónde se sacó la foto para ubicar tu recuerdo en el universo.",
-    )
+    expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(PLACE_COPY.help)
   })
 
   it("resolves a pasted link, shows its label instead of the suggestion, and ticks the consent", async () => {
@@ -1419,15 +1418,15 @@ describe("AddMemory layout", () => {
     expect(card.className).toContain("overflow-hidden")
   })
 
-  it("lets a phone's sheet take its own height up to 92% of the screen, and keeps a stable height from md", () => {
+  it("gives the sheet one height for every step, so its top edge never moves: the same cap on a phone and from md", () => {
     setup()
     open()
-    const card = screen.getByTestId("memory-card")
-    // Phones: as tall as the step, never past 92dvh nor into the top safe area. Desktop: one height for every step,
-    // capped so it fits 1280x720, so the footer never moves between steps.
-    expect(card.className).toContain("max-h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))))]")
-    expect(card.className).toMatch(/md:h-\[min\(100%,\d+px\)\]/)
-    expect(card.className).toContain("md:w-[min(30rem,calc(100vw-2rem))]")
+    const classes = screen.getByTestId("memory-card").className.split(/\s+/)
+    // Phones: never past 92dvh nor into the top safe area. Desktop: fits 1280x720. Both hold the tallest step.
+    expect(classes).toContain("h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),680px)]")
+    expect(classes).toContain("md:h-[min(100%,680px)]")
+    expect(classes.filter((c) => /(^|:)max-h-/.test(c))).toEqual([])
+    expect(classes).toContain("md:w-[min(30rem,calc(100vw-2rem))]")
   })
 
   it("keeps the caption counter inside the field, so the caption block does not take an extra row", () => {
