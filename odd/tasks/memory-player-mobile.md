@@ -99,13 +99,13 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
 
   Route: the same writer as T3.
 - [x] **T1b — Review follow-ups** (`e3a6daf`). Scrubber, volume hydration, bars under reduced motion, caption overflow, `overflow` fallback and the inert covered pill. Route: delegated writer.
-- [x] **T5 — Contribute from a memory** (`f70a965`; its migration also holds T6's column).
+- [x] **T5 — Contribute from a memory** (`bc99b1a`, corrected after review: see the T5 correction; its migration also holds T6's column).
   - "+ Contribuir" in the glass view opens the form with the date (and place) prefilled.
   - Store `related_memory_id` (expand-only migration with RLS, a column grant and a policy that the related memory is approved and visible).
   - A strong edge for related memories, and the new orb spawns near its parent.
 
   Route: delegated writer.
-- [x] **T6 — Exact place and address** (`4426014`).
+- [x] **T6 — Exact place and address** (`0987595`).
   - Geocode the exact position at street level.
   - Compose and store `place_address` (expand-only migration).
   - Show it.
@@ -211,7 +211,7 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
     - `STACKED_PLAYER_MIN` names the stacked-player threshold.
   - **TDD.** RED observed: scrubber (5 of the new tests), volume and bars files, `clip-overflow` CSS test, panel overflow, inert pill and instant hide (4 failures when the two source files were stashed); GREEN afterwards.
   - **Checks.** lint clean, typecheck clean, test 180 files and 2941 passed, build `/` stays `○`.
-- 2026-10-02 — **T5 done** (`f70a965`, route: delegated writer, trigger: 2+ non-trivial files and a migration).
+- 2026-10-02 — **T5 done** (`bc99b1a`, route: delegated writer, trigger: 2+ non-trivial files and a migration).
   - **Migration `20261006000000_memory_related_and_address`** (one migration for T5 and T6, hand-edited after `prisma migrate diff` schema to schema; nothing applied).
     - Adds `memories.related_memory_id uuid` (self FK, `ON DELETE SET NULL`, index `memories_related_memory_id_idx`) and `memories.place_address varchar(200)`. Both nullable: expand-only.
     - Check `memories_place_address_needs_location`: an address only with a position.
@@ -225,7 +225,7 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **TDD.** RED observed: repository mapping (8), list DTO (5), create-memory relation (14), decide-place related (4), edges (5), spawn (6), form (18), glass control (5), migration lint. For the constellation sim, the points test, the place and space wiring and `related-memory` the tests and code landed together (GREEN only).
   - **Checks.** lint clean, typecheck clean, test 181 files and 3042 passed, build `/` stays `○`.
   - **Visual** (Playwright, temporary harness, deleted): 390x844 touch @2x and 1440x900 @2x. The bar fits at 390 (Contribuir 53-187, Compartir 187-296, Cerrar 296-378). Sampling every 70 ms across 14 frames of the open and the close: no overlap between the space pill and any glass control, at both sizes (the pill is gone at once and returns after the glass). The form shows the date, the chip and "Mismo lugar" (desktop still fits without scrolling: the chip sits at the top of the right column). After saving, the pending orb sits beside its parent with a linked edge.
-- 2026-10-02 — **T6 done** (`4426014`, route: delegated writer).
+- 2026-10-02 — **T6 done** (`0987595`, route: delegated writer).
   - **Geocoding.** The port is now `reverse(lat, lng) -> { label, address } | null`. The Nominatim adapter sends the exact position (6 decimals), `zoom=18`, `accept-language=es`, `addressdetails=1`; the 1 req/s limiter, timeout, User-Agent and `redirect: error` are unchanged; the cache key is the exact position. The 2-decimal rounding and `isApproximatePosition` guard are gone.
   - **Address.** `composeAddress` (road, pedestrian, footway, path, cycleway plus house number, then city/town/village/municipality/hamlet, else the neighbourhood; a leading "Avenida" becomes "Av."; null without a road; at most 200 characters) and `describePlace`, next to `composePlaceLabel`.
   - **Maps links.** Order is now pin (`!3d!4d`), then `q`, `query`, `ll`, then the `@` viewport. Real-shaped place and mobile URLs are tested. The pin is reverse-geocoded for the address; the URL's name stays the name ("UOCRA").
@@ -240,6 +240,7 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
     - The `memories_insert` policy has not been run against a real database (offline work). See the live checks.
   - **To apply (parent).** `prisma migrate deploy` for `20261006000000_memory_related_and_address` (it needs the owner role). The code live before this keeps working against it.
   - **Live checks (as `app_user`, in the `withVisitor` shape, in a transaction rolled back or cleaned up).**
+    0. Already proven offline against a real PostgreSQL (PGlite, `src/shared/db/migrations.pglite.test.ts`, see the T5 correction): steps 1 to 5 below and the `memory_views` regression. The live check confirms the same on Neon, and that the policy text is the one in the migration (`pg_get_expr` of `memories_insert` contains the `EXISTS` on `memories ... status = 'approved'`).
     1. Insert a pending memory with `related_memory_id` set to an approved memory's id: succeeds.
     2. Same with a pending memory's id, with an unknown uuid, and with another visitor's pending memory: refused with 42501 (row-level security), and the error is the same for the three.
     3. Insert with `related_memory_id` NULL and with the column omitted (what the old code does): succeeds.
@@ -253,6 +254,23 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **UI.** New state `awaitingConsent`: the place section says "Esta foto trae ubicación. Marca la casilla para sugerirte el lugar." with the consent checkbox, and no coordinates, name or map link. After consent the old behaviour applies ("Buscando el lugar…", name, address). "Mismo lugar" and Maps links are unchanged.
   - **TDD.** RED observed: 27 failing (5 in the new `use-photo-place.test.tsx`, 22 in `add-memory.test.tsx`: no call before consent, call after, one call across toggles, awaiting copy, link consent sends nothing). GREEN: both files, 128 passing.
   - **Checks.** lint clean, typecheck clean, test 182 files and 3088 passed, build `/` stays `○`.
+- 2026-10-02 — **T5 correction** (route: delegated writer, one bounded correction; one `fixup!` of the T5 commit, autosquashed; docs commit at the tip).
+  - **Review.** Native review of the T5 commit (lineage `review-136456e48de29861`): `correction_required`, then unverifiable because the parent removed its worktree. It was not approved. Three findings:
+    1. **Blocker, "RLS self-reference recursion"**: `memories_insert` subqueries `memories`, claimed to raise `infinite recursion detected in policy for relation "memories"` for every insert by `app_user`.
+    2. **Warning, TOCTOU**: the related memory is checked before the place decision, so one rejected or deleted before `createPending` would make the insert refuse the row and lose the upload.
+    3. **Suggestion, chain spawn**: in A <- B <- C, `startPositions` used the parent's layout spot, not the position just computed for it.
+  - **Finding 1 did not reproduce (premise false), so the policy was NOT moved into a function.**
+    - New `src/shared/db/migrations.pglite.test.ts` (devDependency `@electric-sql/pglite` 0.5.8, `node` environment, one in-memory PGlite, about 3 s) applies every migration in order, unmodified, and runs as `app_user` with `SET LOCAL ROLE` and `set_config('app.handle', ..., true)`, each check in a rolled-back transaction.
+    - **RED, as asked, was not observed**: against the unfixed migration the whole file passed, except one test of mine that needed the `location_source` column the CHECK pairs with a position (a test bug, fixed). No `infinite recursion` error.
+    - **Why.** PostgreSQL only raises it when the policy expanded for the INNER reference itself contains a subquery. The inner `related` reference is a SELECT, which expands `memories_select`, and that has none.
+    - **The harness can see it**: a positive-control test creates a table whose own SELECT policy subqueries itself, and asserts `infinite recursion detected in policy for relation "t"` (observed).
+    - **Asserted on the real Postgres, all green with the migration as it was**: the old insert shape (new columns omitted), `related_memory_id` NULL, a relation to an approved memory; a relation to a pending memory (even the visitor's own), another visitor's pending memory and an unknown uuid all refused with SQLSTATE 42501 and one identical message (`new row violates row-level security policy for table "memories"`); `place_address` with a position succeeds, without one fails `memories_place_address_needs_location`; `app_user` cannot UPDATE `related_memory_id`; deleting the parent as the owner nulls the child's column; `app_user` cannot see another visitor's pending memory; the `memory_views` upsert works for an approved memory (counter 1, repeat bumps `open_count`) and is refused for the author and for a pending memory.
+    - The migration only gained a comment recording this and the coupling: if `memories_select` ever gains a subquery, the PGlite test fails and the check must move into a `SECURITY DEFINER` function (owned by the migration role, `search_path` pinned, `REVOKE ... FROM PUBLIC`, `GRANT EXECUTE ... TO app_user`). That is about ten lines, held back because no evidence asks for the extra privileged surface.
+    - **PGlite gaps.** Its only login role is a superuser, not Neon's non-superuser owner with BYPASSRLS; a superuser also bypasses RLS, so a `SECURITY DEFINER` function would behave the same, but owner privileges are not exercised. `_prisma_migrations` is a stub (Prisma creates it). One connection, so each check is its own transaction.
+  - **Finding 2 fixed.** `createMemoryWith` retries `createPending` once without the relation, keeping everything else (including a copied "Mismo lugar"), when the insert is refused by row-level security (42501, in the code, in `meta.code` or in the message) or a foreign key (23503 or P2003), only when a relation was sent; the DTO then carries no `relatedId`. Another failure, a duplicate, or a second refusal is not retried. RED observed: 7 of 113 failed; GREEN 113.
+  - **Finding 3 fixed.** `startPositions` resolves each orb in dependency order (memoized, with a cycle guard that makes the closing orb fall back to its layout spot), so C lands beside the spot B was just given, whatever the list order. RED observed: 3 of 23 failed; GREEN 23.
+  - **Checks.** lint clean, typecheck clean, test 183 files and 3113 passed, build `/` stays `○`, `prisma validate` valid; also typecheck and test at the rewritten T5 commit in a temporary worktree (see the report).
+  - **History (old to new).** `f70a965` to `bc99b1a` (T5), `4426014` to `0987595` (T6), `ee759fd` to `77aa2d8` (docs), `0dfc870` to `9a436aa` (privacy fix). The fixup and autosquash hit no conflict.
 
 ## Next step
 
