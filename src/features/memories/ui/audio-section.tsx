@@ -3,7 +3,7 @@
 import { useId, useState, type ChangeEvent } from "react"
 import { cn } from "@/shared/lib/utils"
 import { MAX_AUDIO_MS } from "../upload-limits"
-import { RECORDER_COPY, formatClock } from "./audio-recorder-model"
+import { RECORDER_COPY, formatBytes, formatClock, recordingNotice } from "./audio-recorder-model"
 import { TalkingOrb } from "./talking-orb"
 import { useAudioLevel, type LevelEnv } from "./use-audio-level"
 import type { useAudioRecorder } from "./use-audio-recorder"
@@ -11,7 +11,7 @@ import type { useAudioRecorder } from "./use-audio-recorder"
 /** The audio section's Spanish copy (neutral, `tú`). */
 export const AUDIO_COPY = {
   label: "Audio",
-  hint: "Hasta 2 minutos y 15 MB.",
+  hint: "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
   requesting: "Esperando el micrófono…",
   recording: "Grabando…",
 } as const
@@ -69,13 +69,13 @@ const StopIcon = () => (
 
 /**
  * "Audio": record the voice of a memory or upload a file, and listen to it before saving. Idle it offers Grabar (where
- * the browser can record) and Subir audio; recording it shows the time against the 2 minute cap and a talking orb that
+ * the browser can record) and Subir audio; recording it shows the time against the 60 minute cap, the size so far and, from 55 minutes, a quiet warning and a talking orb that
  * listens to the microphone; holding an audio it plays it back with the same orb, in the memory's color, pulsing with the
  * voice. The box keeps its height through every state, so nothing below it jumps. Presentational: the form owns the
  * recorder (`useAudioRecorder`) and the checks.
  */
 export function AudioSection({ recorder, color, disabled, error, onPickFile, levelEnv }: AudioSectionProps) {
-  const { state, supported, clip, stream, start, stop, discard, playback } = recorder
+  const { state, supported, clip, stream, sizeBytes, start, stop, discard, playback } = recorder
   const fileId = useId()
   const errorId = `${fileId}-error`
   const hintId = `${fileId}-hint`
@@ -106,6 +106,8 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
   }
 
   const status = asking ? AUDIO_COPY.requesting : recording ? AUDIO_COPY.recording : ""
+  // Close to the cap: how long is left. Quiet (a status, not an alert): the recording carries on.
+  const notice = recording ? recordingNotice(state.elapsedMs) : null
 
   return (
     <div
@@ -130,6 +132,7 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
           <>
             <span role="timer" aria-label="Tiempo grabado" className="t-body min-w-0 flex-1 text-[length:var(--type-1)] whitespace-nowrap tabular-nums text-ink">
               {formatClock(state.elapsedMs)} / {formatClock(MAX_AUDIO_MS)}
+              <span className="text-ink-muted"> · ~{formatBytes(sizeBytes ?? 0)}</span>
             </span>
             <button type="button" onClick={stop} className={BUTTON_CLASS} data-magnetic="light" data-cursor-label="Detener">
               <StopIcon />
@@ -244,6 +247,11 @@ export function AudioSection({ recorder, color, disabled, error, onPickFile, lev
       {status && (
         <p role="status" className="m-0 text-xs tracking-[0.04em] text-ink-muted">
           {status}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="m-0 text-xs tracking-[0.04em] text-ink">
+          {notice}
         </p>
       )}
       <p id={hintId} className="m-0 text-xs tracking-[0.04em] text-ink-faint">

@@ -3,9 +3,12 @@ import { MAX_AUDIO_MS } from "../upload-limits"
 import {
   INITIAL_RECORDER,
   RECORDER_COPY,
+  RECORDER_WARN_AT_MS,
   errorFromName,
   fileNameFor,
+  formatBytes,
   formatClock,
+  recordingNotice,
   pickRecorderMime,
   recorderReducer,
   type RecorderEvent,
@@ -33,7 +36,7 @@ describe("recorderReducer", () => {
     expect(later.elapsedMs).toBe(3000)
   })
 
-  it("caps the time at 2 minutes", () => {
+  it("caps the time at 60 minutes", () => {
     expect(run([{ type: "tick", elapsedMs: MAX_AUDIO_MS + 5000 }], recording).elapsedMs).toBe(MAX_AUDIO_MS)
     expect(run([{ type: "tick", elapsedMs: MAX_AUDIO_MS }], recording).elapsedMs).toBe(MAX_AUDIO_MS)
   })
@@ -47,7 +50,7 @@ describe("recorderReducer", () => {
     expect(recorded).toEqual({ phase: "recorded", elapsedMs: 0, durationMs: 4200, source: "recording", error: null })
   })
 
-  it("never keeps more than 2 minutes of a recording", () => {
+  it("never keeps more than 60 minutes of a recording", () => {
     expect(run([{ type: "stopped", durationMs: MAX_AUDIO_MS + 700 }], recording).durationMs).toBe(MAX_AUDIO_MS)
   })
 
@@ -169,13 +172,57 @@ describe("formatClock", () => {
     expect(formatClock(0)).toBe("0:00")
     expect(formatClock(7_400)).toBe("0:07")
     expect(formatClock(65_000)).toBe("1:05")
-    expect(formatClock(MAX_AUDIO_MS)).toBe("2:00")
+    expect(formatClock(MAX_AUDIO_MS)).toBe("60:00")
   })
 
   it("rounds down and tolerates nonsense", () => {
     expect(formatClock(1_999)).toBe("0:01")
     expect(formatClock(-5)).toBe("0:00")
     expect(formatClock(Number.NaN)).toBe("0:00")
+  })
+})
+
+describe("recordingNotice", () => {
+  it("warns from 55 minutes, five minutes before the hour cap", () => {
+    expect(RECORDER_WARN_AT_MS).toBe(55 * 60 * 1000)
+    expect(RECORDER_WARN_AT_MS).toBe(MAX_AUDIO_MS - 5 * 60 * 1000)
+  })
+
+  it("says nothing before that", () => {
+    expect(recordingNotice(0)).toBeNull()
+    expect(recordingNotice(30 * 60 * 1000)).toBeNull()
+    expect(recordingNotice(RECORDER_WARN_AT_MS - 1)).toBeNull()
+  })
+
+  it("counts the minutes left, and says that it stops by itself", () => {
+    expect(recordingNotice(RECORDER_WARN_AT_MS)).toBe("Quedan 5 min. La grabación se detendrá sola a los 60 minutos.")
+    expect(recordingNotice(57 * 60 * 1000 + 30_000)).toBe("Quedan 3 min. La grabación se detendrá sola a los 60 minutos.")
+    expect(recordingNotice(58 * 60 * 1000)).toBe("Quedan 2 min. La grabación se detendrá sola a los 60 minutos.")
+  })
+
+  it("says less than a minute for the last minute", () => {
+    expect(recordingNotice(59 * 60 * 1000)).toBe("Queda menos de 1 min. La grabación se detendrá sola a los 60 minutos.")
+    expect(recordingNotice(MAX_AUDIO_MS)).toBe("Queda menos de 1 min. La grabación se detendrá sola a los 60 minutos.")
+  })
+
+  it("tolerates nonsense", () => {
+    expect(recordingNotice(Number.NaN)).toBeNull()
+    expect(recordingNotice(-1)).toBeNull()
+  })
+})
+
+describe("formatBytes", () => {
+  it("shows an approximate size in decimal KB or MB, as Cloudinary counts", () => {
+    expect(formatBytes(0)).toBe("0 KB")
+    expect(formatBytes(850_000)).toBe("850 KB")
+    expect(formatBytes(1_000_000)).toBe("1 MB")
+    expect(formatBytes(34_567_890)).toBe("35 MB")
+    expect(formatBytes(100_000_000)).toBe("100 MB")
+  })
+
+  it("tolerates nonsense", () => {
+    expect(formatBytes(-5)).toBe("0 KB")
+    expect(formatBytes(Number.NaN)).toBe("0 KB")
   })
 })
 

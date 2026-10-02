@@ -50,7 +50,7 @@ export interface PhotoSize {
   url: string
 }
 
-/** A playable audio: a signed URL of a transcode every browser plays (mp3), and how long it lasts. */
+/** A playable audio: our own route, which streams an mp3 with byte ranges, and how long it lasts. */
 export interface MemoryAudio {
   url: string
   durationMs: number

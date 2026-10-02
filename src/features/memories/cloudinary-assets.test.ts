@@ -56,6 +56,10 @@ describe("verifyAudio", () => {
     expect(verifyAudio(voice(), AID)).toEqual({ ok: true, durationMs: 42_500, bytes: 200_000, format: "webm" })
   })
 
+  it("accepts mka, the name Cloudinary gives a MediaRecorder webm that holds only audio", () => {
+    expect(verifyAudio(voice({ format: "mka" }), AID)).toEqual({ ok: true, durationMs: 42_500, bytes: 200_000, format: "mka" })
+  })
+
   it("lowercases the format and rounds the duration to a millisecond", () => {
     expect(verifyAudio(voice({ format: "M4A", durationSeconds: 1.23456 }), AID)).toEqual({
       ok: true,
@@ -85,15 +89,20 @@ describe("verifyAudio", () => {
     expect(verifyAudio(voice({ publicId: "elsewhere/x" }), "elsewhere/x")).toEqual({ ok: false, problem: "audio_missing" })
   })
 
-  it("refuses an audio over 15 MB and accepts exactly 15 MB", () => {
+  it("takes the size cap from the caller, so a server can raise or lower it", () => {
+    expect(verifyAudio(voice({ bytes: 150_000_000 }), AID, 200_000_000).ok).toBe(true)
+    expect(verifyAudio(voice({ bytes: 150_000_000 }), AID, 120_000_000)).toEqual({ ok: false, problem: "audio_too_large" })
+  })
+
+  it("refuses an audio over the cap and accepts exactly the cap", () => {
     expect(verifyAudio(voice({ bytes: MAX_AUDIO_BYTES }), AID).ok).toBe(true)
     expect(verifyAudio(voice({ bytes: MAX_AUDIO_BYTES + 1 }), AID)).toEqual({ ok: false, problem: "audio_too_large" })
   })
 
-  it("accepts up to 2 minutes (plus a second of recorder drift) and refuses longer", () => {
+  it("accepts up to 60 minutes (plus 5 seconds of recorder drift) and refuses longer", () => {
     expect(verifyAudio(voice({ durationSeconds: MAX_AUDIO_MS / 1000 }), AID).ok).toBe(true)
-    expect(verifyAudio(voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 1 }), AID).ok).toBe(true)
-    expect(verifyAudio(voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 1.5 }), AID)).toEqual({
+    expect(verifyAudio(voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 5 }), AID).ok).toBe(true)
+    expect(verifyAudio(voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 5.5 }), AID)).toEqual({
       ok: false,
       problem: "audio_too_long",
     })

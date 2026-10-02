@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("server-only", () => ({}))
 
-import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryAudioUrl, cloudinaryUrl, squareTransform } from "./cloudinary-url"
+import { FULL_TRANSFORM, THUMB_TRANSFORM, cloudinaryUrl, squareTransform } from "./cloudinary-url"
 import type { AssetInfo, AudioInfo, CloudinaryAssets } from "./cloudinary-assets"
 import { createMemoryWith, type CreateMemoryDeps } from "./create-memory"
 import type { Memory } from "./memory"
@@ -81,6 +81,7 @@ function setup(
   const follow = vi.fn<CreateMemoryDeps["follow"]>(async () => ({ ok: false, reason: "network" }))
   const repository: MemoryRepository = {
     listForVisitor: vi.fn(),
+    findForVisitor: vi.fn(),
     createPending: vi.fn(async () => stored()),
     countRecentBy: vi.fn(async () => opts.recent ?? 0),
   }
@@ -702,7 +703,7 @@ describe("createMemoryWith: audio", () => {
       height: null,
       thumbUrl: null,
       fullUrl: null,
-      audio: { url: cloudinaryAudioUrl("demo", AID, "abcd"), durationMs: 42_500 },
+      audio: { url: "/api/memories/11111111-1111-4111-8111-111111111111/audio", durationMs: 42_500 },
     })
     expect(JSON.stringify(result)).not.toMatch(/publicId|audioPublicId|"format"|"bytes"/)
   })
@@ -713,8 +714,8 @@ describe("createMemoryWith: audio", () => {
     ["is an image", voice({ resourceType: "image" }), "audio_type"],
     ["has a format we do not allow", voice({ format: "flac" }), "audio_type"],
     ["has no duration", voice({ durationSeconds: null }), "audio_type"],
-    ["is over 15 MB", voice({ bytes: MAX_AUDIO_BYTES + 1 }), "audio_too_large"],
-    ["is longer than 2 minutes", voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 5 }), "audio_too_long"],
+    ["is over the size cap", voice({ bytes: MAX_AUDIO_BYTES + 1 }), "audio_too_large"],
+    ["is longer than 60 minutes", voice({ durationSeconds: MAX_AUDIO_MS / 1000 + 10 }), "audio_too_long"],
   ])("destroys the audio and refuses when it %s", async (_name, info, reason) => {
     const { full, repository, assets } = setup({}, { audio: info })
     expect(await createMemoryWith(full, audioIn())).toEqual({ ok: false, reason })

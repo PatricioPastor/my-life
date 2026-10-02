@@ -19,12 +19,13 @@ afterEach(() => {
 const clip = { blob: new Blob(["x"], { type: "audio/webm" }), name: "recuerdo.webm", url: "blob:clip" }
 const noAudioGraph: LevelEnv = { createContext: () => null }
 
-function setup(state: Partial<RecorderState> = {}, over: Partial<AudioSectionProps> = {}, withClip = true) {
+function setup(state: Partial<RecorderState> = {}, over: Partial<AudioSectionProps> = {}, withClip = true, sizeBytes = 0) {
   const recorder = {
     state: { ...INITIAL_RECORDER, ...state },
     supported: true,
     clip: state.phase === "recorded" || state.phase === "playing" ? (withClip ? clip : null) : null,
     stream: null,
+    sizeBytes,
     start: vi.fn(async () => {}),
     stop: vi.fn(),
     discard: vi.fn(),
@@ -54,8 +55,9 @@ describe("AudioSection: idle", () => {
     expect(screen.getByRole("button", { name: "Grabar" })).toBeTruthy()
     expect(screen.getByLabelText("Subir audio")).toBeTruthy()
     expect(screen.getByText(AUDIO_COPY.hint)).toBeTruthy()
-    expect(AUDIO_COPY.hint).toMatch(/2 minutos/)
-    expect(AUDIO_COPY.hint).toMatch(/15 MB/)
+    expect(AUDIO_COPY.hint).toBe(
+      "Hasta 60 minutos. Para audios largos usa MP3, M4A u OGG; un WAV de una hora es demasiado pesado.",
+    )
   })
 
   it("starts recording on Grabar", () => {
@@ -123,12 +125,34 @@ describe("AudioSection: asking for the microphone and recording", () => {
     expect(screen.getByRole("status").textContent).toBe(AUDIO_COPY.requesting)
   })
 
+  it("shows the elapsed time, the approximate size so far and no warning in the first hour's early minutes", () => {
+    setup({ phase: "recording", elapsedMs: 600_000 }, {}, true, 34_567_890)
+    expect(screen.getByRole("timer").textContent).toContain("10:00 / 60:00")
+    expect(screen.getByRole("timer").textContent).toContain("~35 MB")
+    expect(screen.getByRole("status").textContent).toBe(AUDIO_COPY.recording)
+  })
+
+  it("warns, quietly, from 55 minutes that the recording will stop by itself", () => {
+    setup({ phase: "recording", elapsedMs: 55 * 60 * 1000 }, {}, true, 50_000_000)
+    const statuses = screen.getAllByRole("status").map((el) => el.textContent)
+    expect(statuses).toContain("Quedan 5 min. La grabación se detendrá sola a los 60 minutos.")
+    // A polite status, not an alert: the recording carries on.
+    expect(screen.queryByRole("alert")).toBeNull()
+  })
+
+  it("does not warn one second before", () => {
+    setup({ phase: "recording", elapsedMs: 55 * 60 * 1000 - 1000 }, {}, true, 50_000_000)
+    expect(screen.getAllByRole("status").map((el) => el.textContent)).not.toContain(
+      "Quedan 5 min. La grabación se detendrá sola a los 60 minutos.",
+    )
+  })
+
   it("shows the time against the cap and a Detener button while recording", () => {
     const { recorder } = setup({ phase: "recording", elapsedMs: 7_400 })
     const timer = screen.getByRole("timer")
     expect(timer.textContent).toContain("0:07")
-    expect(timer.textContent).toContain("2:00")
-    expect(MAX_AUDIO_MS).toBe(120_000)
+    expect(timer.textContent).toContain("60:00")
+    expect(MAX_AUDIO_MS).toBe(3_600_000)
     expect(screen.queryByRole("button", { name: "Grabar" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Detener" }))
     expect(recorder.stop).toHaveBeenCalledTimes(1)

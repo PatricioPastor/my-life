@@ -43,7 +43,7 @@ const domainRow = (() => {
 })()
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
-function fakeDb(rows: unknown[] = [row]) {
+function fakeDb(rows: unknown[] = [row], one: unknown = row) {
   const calls: Array<{ name: string; args: unknown[] }> = []
   const tx = {
     $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -58,6 +58,10 @@ function fakeDb(rows: unknown[] = [row]) {
       findMany: vi.fn(async (arg: unknown) => {
         calls.push({ name: "findMany", args: [arg] })
         return rows
+      }),
+      findFirst: vi.fn(async (arg: unknown) => {
+        calls.push({ name: "findFirst", args: [arg] })
+        return one
       }),
       count: vi.fn(async (arg: unknown) => {
         calls.push({ name: "count", args: [arg] })
@@ -123,6 +127,31 @@ describe("PrismaMemoryRepository", () => {
     it("returns an empty list when there are no rows", async () => {
       const { db } = fakeDb([])
       expect(await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")).toEqual([])
+    })
+  })
+
+  describe("findForVisitor", () => {
+    const ID = "11111111-1111-4111-8111-111111111111"
+
+    it("runs in one transaction that sets the handle before reading, so row-level security decides", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).findForVisitor("ana", ID)
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+      expect(calls.map((c) => c.name)).toEqual(["setConfig", "findFirst"])
+      expect(calls[0].args[1]).toBe("ana")
+    })
+
+    it("asks for that id among the approved rows and the visitor's own pending ones, like the listing", async () => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).findForVisitor("ana", ID)
+      expect(tx.memory.findFirst).toHaveBeenCalledWith({
+        where: { id: ID, OR: [{ status: "approved" }, { handle: "ana", status: "pending" }] },
+      })
+    })
+
+    it("maps the row to the domain, and answers null when the visitor may not see one", async () => {
+      expect(await new PrismaMemoryRepository(() => fakeDb().db as never).findForVisitor("ana", ID)).toEqual(domainRow)
+      expect(await new PrismaMemoryRepository(() => fakeDb([], null).db as never).findForVisitor("ana", ID)).toBeNull()
     })
   })
 

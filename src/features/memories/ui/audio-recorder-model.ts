@@ -106,6 +106,26 @@ export function fileNameFor(mime: string): string {
   return `recuerdo.${extension}`
 }
 
+/** How long before the cap the recorder starts to say how much time is left: five minutes. */
+export const RECORDER_WARN_AT_MS = MAX_AUDIO_MS - 5 * 60 * 1000
+
+/**
+ * The quiet line shown while recording close to the cap, or null before it: the minutes left and that the recording
+ * stops by itself. Not an error: the recording goes on.
+ */
+export function recordingNotice(elapsedMs: number): string | null {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < RECORDER_WARN_AT_MS) return null
+  const remainingMs = Math.max(MAX_AUDIO_MS - elapsedMs, 0)
+  const left = remainingMs <= 60_000 ? "Queda menos de 1 min." : `Quedan ${Math.ceil(remainingMs / 60_000)} min.`
+  return `${left} La grabación se detendrá sola a los ${MAX_AUDIO_MS / 60_000} minutos.`
+}
+
+/** An approximate size for the recording so far, in decimal KB or MB like Cloudinary counts them. */
+export function formatBytes(bytes: number): string {
+  const value = Number.isFinite(bytes) && bytes > 0 ? bytes : 0
+  return value >= 1_000_000 ? `${Math.round(value / 1_000_000)} MB` : `${Math.round(value / 1000)} KB`
+}
+
 /** `m:ss`, rounding down. */
 export function formatClock(ms: number): string {
   const total = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0

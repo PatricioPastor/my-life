@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MAX_AUDIO_MS } from "../upload-limits"
+import { MAX_AUDIO_BYTES, MAX_AUDIO_MS } from "../upload-limits"
 import { useAudioRecorder, type RecorderEnv } from "./use-audio-recorder"
 
 type Handler = ((event?: unknown) => void) | null
@@ -145,7 +145,75 @@ describe("useAudioRecorder: recording", () => {
     expect(result.current.clip!.name).toBe("recuerdo.m4a")
   })
 
-  it("stops by itself at 2 minutes, and never keeps more", async () => {
+  it("records with a timeslice, so the browser hands the audio over in small chunks while it goes", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    expect(FakeRecorder.instances[0].start).toHaveBeenCalledTimes(1)
+    expect(FakeRecorder.instances[0].start).toHaveBeenCalledWith(2000)
+  })
+
+  it("keeps the MIME it picked: webm/opus first, mp4 on Safari", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    expect(FakeRecorder.instances[0].options).toEqual({ mimeType: "audio/webm;codecs=opus" })
+    FakeRecorder.supported = new Set(["audio/mp4"])
+    act(() => result.current.discard())
+    await start(result)
+    expect(FakeRecorder.instances[1].options).toEqual({ mimeType: "audio/mp4" })
+  })
+
+  it("counts the bytes as the chunks arrive, for the size shown while recording", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    expect(result.current.sizeBytes).toBe(0)
+    await start(result)
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: new Blob([new Uint8Array(1500)]) }))
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: new Blob([new Uint8Array(500)]) }))
+    expect(result.current.sizeBytes).toBe(2000)
+  })
+
+  it("starts counting again for a new take", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: new Blob([new Uint8Array(1500)]) }))
+    act(() => result.current.discard())
+    expect(result.current.sizeBytes).toBe(0)
+    await start(result)
+    expect(result.current.sizeBytes).toBe(0)
+  })
+
+  it("does not hold the whole recording as base64 or text: the clip is the Blob itself, joined from the chunks", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    const first = new Blob([new Uint8Array(10)], { type: "audio/webm" })
+    const second = new Blob([new Uint8Array(20)], { type: "audio/webm" })
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: first }))
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: second }))
+    FakeRecorder.data = ""
+    act(() => result.current.stop())
+    expect(result.current.clip!.blob).toBeInstanceOf(Blob)
+    expect(result.current.clip!.blob.size).toBe(30)
+  })
+
+  it("stops by itself when the recording reaches the size cap, before the time one", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    act(() => FakeRecorder.instances[0].ondataavailable?.({ data: { size: MAX_AUDIO_BYTES } as Blob }))
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(FakeRecorder.instances[0].stop).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not wake the form more than twice a second: an hour of ticks at 10 Hz would render 36,000 times", async () => {
+    const { result } = renderHook(() => useAudioRecorder(env()))
+    await start(result)
+    const setInterval = vi.spyOn(window, "setInterval")
+    act(() => result.current.discard())
+    await start(result)
+    expect(setInterval.mock.calls.at(-1)?.[1]).toBeGreaterThanOrEqual(500)
+  })
+
+  it("stops by itself at 60 minutes, and never keeps more", async () => {
     const { result } = renderHook(() => useAudioRecorder(env()))
     await start(result)
     act(() => {

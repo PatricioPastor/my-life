@@ -99,13 +99,13 @@ describe("validateForm: audio", () => {
     expect(errors.audio).toBeUndefined()
   })
 
-  it("refuses an audio of the wrong type, over 15 MB, or longer than 2 minutes", () => {
+  it("refuses an audio of the wrong type, over the size cap, or longer than 60 minutes", () => {
     expect(validateForm({ ...ok, audio: voice({ type: "image/png", name: "a.png" }) }).audio).toBe(COPY.audioType)
     expect(validateForm({ ...ok, audio: voice({ size: MAX_AUDIO_BYTES + 1 }) }).audio).toBe(COPY.audioSize)
     expect(validateForm({ ...ok, audio: voice({ durationMs: MAX_AUDIO_MS + 1 }) }).audio).toBe(COPY.audioLong)
   })
 
-  it("accepts exactly 15 MB and exactly 2 minutes, and an audio whose length the browser could not read", () => {
+  it("accepts exactly the cap and exactly 60 minutes, and an audio whose length the browser could not read", () => {
     expect(validateForm({ ...ok, audio: voice({ size: MAX_AUDIO_BYTES }) }).audio).toBeUndefined()
     expect(validateForm({ ...ok, audio: voice({ durationMs: MAX_AUDIO_MS }) }).audio).toBeUndefined()
     expect(validateForm({ ...ok, audio: voice({ durationMs: null }) }).audio).toBeUndefined()
@@ -128,7 +128,7 @@ describe("validateForm: audio", () => {
 
   it("speaks about the audio in neutral Spanish", () => {
     expect(COPY.audioType).toBe("Elige un audio WebM, OGG, MP3, M4A, AAC o WAV.")
-    expect(COPY.audioSize).toBe("El audio supera los 15 MB.")
-    expect(COPY.audioLong).toBe("El audio dura más de 2 minutos.")
+    expect(COPY.audioSize).toBe("El audio supera los 100 MB. Para audios largos usa MP3, M4A u OGG.")
+    expect(COPY.audioLong).toBe("El audio dura más de 60 minutos.")
   })
 })

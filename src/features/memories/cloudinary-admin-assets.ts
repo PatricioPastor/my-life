@@ -55,6 +55,28 @@ function toAssetInfo(body: unknown): AssetInfo {
   }
 }
 
+function durationOf(b: Record<string, unknown>): number | null {
+  const nested = recordOrUndefined(b.video_metadata)?.duration
+  const seconds = typeof b.duration === "number" ? b.duration : nested
+  return typeof seconds === "number" ? seconds : null
+}
+
+/**
+ * Whether Cloudinary says the asset has no picture. The Admin API nests its stream details in `video_metadata`
+ * (observed on a Chrome recording: `is_audio`, `audio`, an empty `video`), while a `is_audio` at the top is the
+ * upload answer's shape; both are read, an explicit flag winning. With no flag, an audio stream and no video
+ * stream (no `video_codec`, no non-empty `video`) is audio.
+ */
+function isAudioOf(b: Record<string, unknown>): boolean {
+  const nested = recordOrUndefined(b.video_metadata)
+  if (typeof b.is_audio === "boolean") return b.is_audio
+  if (typeof nested?.is_audio === "boolean") return nested.is_audio
+  const hasAudio = b.has_audio === true || nested?.has_audio === true || recordOrUndefined(b.audio ?? nested?.audio) !== undefined
+  const video = recordOrUndefined(b.video ?? nested?.video)
+  const hasVideo = typeof b.video_codec === "string" || (video !== undefined && Object.keys(video).length > 0)
+  return hasAudio && !hasVideo
+}
+
 function toAudioInfo(body: unknown): AudioInfo {
   const b = body as Record<string, unknown> | null
   if (
@@ -73,13 +95,8 @@ function toAudioInfo(body: unknown): AudioInfo {
     type: b.type,
     format: b.format,
     bytes: b.bytes,
-    durationSeconds: typeof b.duration === "number" ? b.duration : null,
-    // `is_audio` when Cloudinary says it; otherwise an audio stream with no video stream (the documented
-    // `audio` and `video` objects of a media answer).
-    isAudio:
-      typeof b.is_audio === "boolean"
-        ? b.is_audio
-        : recordOrUndefined(b.audio) !== undefined && recordOrUndefined(b.video) === undefined,
+    durationSeconds: durationOf(b),
+    isAudio: isAudioOf(b),
   }
 }
 

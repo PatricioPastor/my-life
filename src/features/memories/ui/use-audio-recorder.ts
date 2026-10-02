@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
-import { MAX_AUDIO_MS } from "../upload-limits"
+import { MAX_AUDIO_BYTES, MAX_AUDIO_MS } from "../upload-limits"
 import {
   INITIAL_RECORDER,
   errorFromName,
@@ -18,7 +18,8 @@ export interface RecorderLike {
   ondataavailable: ((event: { data: Blob }) => void) | null
   onstop: (() => void) | null
   onerror: ((event: unknown) => void) | null
-  start(): void
+  /** `timeslice`: deliver the audio in chunks of about this many milliseconds, instead of all of it at the end. */
+  start(timeslice?: number): void
   stop(): void
 }
 
@@ -62,7 +63,13 @@ interface Session {
   discarded: boolean
 }
 
-const TICK_MS = 100
+/**
+ * The clock only shows whole seconds, and an hour of ticks every 100 ms would render the form 36,000 times: twice a second
+ * is plenty, and the cap still lands within half a second.
+ */
+const TICK_MS = 500
+/** How often the browser hands over the audio recorded so far, so an hour is never one huge buffer built at the end. */
+const TIMESLICE_MS = 2000
 
 function release(session: Session) {
   window.clearInterval(session.timer)
@@ -71,8 +78,9 @@ function release(session: Session) {
 
 /**
  * Container logic for recording a voice in the browser. Asks for the microphone, records with `MediaRecorder` in the
- * best container the browser can (webm/opus, or mp4 on Safari), stops at 2 minutes by itself and keeps the take as a
- * named clip with an object URL. It also holds an uploaded file the same way, so the form has one audio either way.
+ * best container the browser can (webm/opus, or mp4 on Safari) and receives it in 2 second chunks, stops at 60 minutes
+ * (or the size cap) by itself and keeps the take as a named clip with an object URL: the chunks are joined into one Blob,
+ * which is uploaded as it is (never read, encoded or copied). It also holds an uploaded file the same way, so the form has one audio either way.
  * The state machine is pure (`recorderReducer`); this hook only does the side effects and cleans up after them: it
  * stops the tracks, clears the timer, closes nothing it does not own and revokes every object URL it made.
  */
@@ -81,6 +89,8 @@ export function useAudioRecorder(env?: RecorderEnv) {
   const [state, dispatch] = useReducer(recorderReducer, INITIAL_RECORDER)
   const [clip, setClip] = useState<RecordedClip | null>(null)
   const [stream, setStream] = useState<MediaStream | null>(null)
+  /** Bytes received so far in this take: the approximate size shown while recording. */
+  const [sizeBytes, setSizeBytes] = useState(0)
   const session = useRef<Session | null>(null)
   const pending = useRef(false)
   /** Bumped to abandon a request that is still waiting for the microphone. */
@@ -142,6 +152,7 @@ export function useAudioRecorder(env?: RecorderEnv) {
     // Recording again over a held audio starts over.
     releaseUrl()
     setClip(null)
+    setSizeBytes(0)
     dispatch({ type: "request" })
 
     let media: MediaStream
@@ -171,6 +182,7 @@ export function useAudioRecorder(env?: RecorderEnv) {
     }
 
     const chunks: Blob[] = []
+    let received = 0
     const startedAt = environment.now()
     const current: Session = { recorder, stream: media, timer: 0, discarded: false }
     const stopCurrent = () => {
@@ -178,7 +190,11 @@ export function useAudioRecorder(env?: RecorderEnv) {
     }
 
     recorder.ondataavailable = (event) => {
-      if (event?.data && event.data.size > 0) chunks.push(event.data)
+      if (event?.data && event.data.size > 0) {
+        chunks.push(event.data)
+        received += event.data.size
+        if (!current.discarded) setSizeBytes(received)
+      }
     }
     recorder.onerror = () => {
       release(current)
@@ -204,12 +220,12 @@ export function useAudioRecorder(env?: RecorderEnv) {
 
     session.current = current
     setStream(media)
-    recorder.start()
+    recorder.start(TIMESLICE_MS)
     dispatch({ type: "started" })
     current.timer = window.setInterval(() => {
       const elapsed = environment.now() - startedAt
       dispatch({ type: "tick", elapsedMs: elapsed })
-      if (elapsed >= MAX_AUDIO_MS) stopCurrent()
+      if (elapsed >= MAX_AUDIO_MS || received >= MAX_AUDIO_BYTES) stopCurrent()
     }, TICK_MS)
   }, [environment, hold, releaseUrl])
 
@@ -223,6 +239,7 @@ export function useAudioRecorder(env?: RecorderEnv) {
     setStream(null)
     releaseUrl()
     setClip(null)
+    setSizeBytes(0)
     dispatch({ type: "discard" })
   }, [abandon, releaseUrl])
 
@@ -246,5 +263,5 @@ export function useAudioRecorder(env?: RecorderEnv) {
     [],
   )
 
-  return { state: state as RecorderState, supported, clip, stream, start, stop, discard, load, playback }
+  return { state: state as RecorderState, supported, clip, stream, sizeBytes, start, stop, discard, load, playback }
 }
