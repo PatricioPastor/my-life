@@ -271,6 +271,11 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **Finding 3 fixed.** `startPositions` resolves each orb in dependency order (memoized, with a cycle guard that makes the closing orb fall back to its layout spot), so C lands beside the spot B was just given, whatever the list order. RED observed: 3 of 23 failed; GREEN 23.
   - **Checks.** lint clean, typecheck clean, test 183 files and 3113 passed, build `/` stays `○`, `prisma validate` valid; also typecheck and test at the rewritten T5 commit in a temporary worktree (see the report).
   - **History (old to new).** `f70a965` to `bc99b1a` (T5), `4426014` to `0987595` (T6), `ee759fd` to `77aa2d8` (docs), `0dfc870` to `9a436aa` (privacy fix). The fixup and autosquash hit no conflict.
+- 2026-10-02 — **T6 link-consent fix** (route: delegated writer; `fix(memories): link consent never carries over to the photo`).
+  - **Review finding** `R3-link-consent-transfers-to-photo` (WARNING): a resolved link ticked the consent by itself; clearing the link left it on, so the photo's exact GPS went to `suggest` (Nominatim) without the visitor ever ticking it for the photo.
+  - **Fix.** Consent is `{ on, auto, prior }`: a link that resolves sets `auto` and remembers what the visitor had chosen (`prior`); clearing or editing the link (even while it is read again) gives `prior` back. Any tick or untick by the visitor is explicit (`auto` off) and persists. The photo's position is sent only while the visitor's own consent is on.
+  - **TDD.** RED observed: 3 of 126 failed in `add-memory.test.tsx` (clear the link, edit it into another, edited link fails). GREEN: 126 passing after updating one older test that relied on the leak ("goes back to the photo suggestion when the link is cleared" now waits for the visitor's own tick). New tests also cover explicit tick before the link and explicit untick/tick during it (they passed already: regression guards) and a second photo after consent (named once, the first photo's late answer ignored).
+  - **Checks.** lint clean, typecheck clean, test 3120 passed, build `/` stays `○`.
 
 ## Next step
 

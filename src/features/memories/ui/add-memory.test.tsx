@@ -551,6 +551,28 @@ describe("AddMemory place section", () => {
     expect(suggest).not.toHaveBeenCalled()
   })
 
+  it("names a second photo picked after consent once, and ignores the first photo's late answer", async () => {
+    const { parseGps, suggest } = setup()
+    const SECOND = { latitude: 40.712776, longitude: -74.005974 }
+    let finishFirst!: (r: SuggestPlaceResult) => void
+    parseGps.mockResolvedValueOnce(EXACT).mockResolvedValueOnce(SECOND)
+    suggest.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
+    pickWithGps()
+    await tick()
+    await waitFor(() => expect(suggest).toHaveBeenCalledTimes(1))
+    pick(photo({ name: "dos.jpg" }))
+    await screen.findByText(PLACE_COPY.awaitingConsent)
+    await act(async () => finishFirst({ ok: true, label: "Primera, Lugar", address: null }))
+    expect(screen.queryByText("Parece que fue en Primera, Lugar")).toBeNull()
+    expect(suggest).toHaveBeenCalledTimes(1)
+    suggest.mockResolvedValueOnce({ ok: true, label: "Nueva York", address: null })
+    await tick()
+    expect(await screen.findByText("Parece que fue en Nueva York")).toBeTruthy()
+    expect(suggest).toHaveBeenCalledTimes(2)
+    expect(suggest).toHaveBeenLastCalledWith({ lat: 40.712776, lng: -74.005974 })
+    expect(screen.queryByText("Parece que fue en Primera, Lugar")).toBeNull()
+  })
+
   it("suggests the place, with a safe link to check it on the map", async () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
@@ -866,8 +888,87 @@ describe("AddMemory Google Maps link", () => {
     paste(LINK)
     await screen.findByText("Según el link: Plaza Italia")
     paste("")
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    // Back to the photo's place, still waiting for the visitor's own consent.
+    expect(await screen.findByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
     expect(screen.queryByText("Según el link: Plaza Italia")).toBeNull()
+    fireEvent.click(checkbox())
+    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+  })
+
+  describe("consent that the link set by itself", () => {
+    const tickBox = () => fireEvent.click(checkbox())
+
+    it("does not carry over to the photo when the link is cleared: nothing is sent and the box is off", async () => {
+      const { suggest } = await openWithGps()
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      paste("")
+      expect(await screen.findByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
+      expect(checkbox().checked).toBe(false)
+      expect(suggest).not.toHaveBeenCalled()
+    })
+
+    it("does not carry over to the photo while the link is edited into another one", async () => {
+      const { suggest, resolveLink } = await openWithGps()
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      resolveLink.mockImplementation(() => new Promise(() => {}))
+      paste("https://maps.app.goo.gl/Other")
+      expect(await screen.findByText(PLACE_COPY.linkReading)).toBeTruthy()
+      expect(checkbox().checked).toBe(false)
+      expect(suggest).not.toHaveBeenCalled()
+    })
+
+    it("does not carry over when the edited link fails", async () => {
+      const { suggest, resolveLink } = await openWithGps()
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      resolveLink.mockResolvedValue({ ok: false, reason: "unreadable" })
+      paste("https://example.com/x")
+      await screen.findByText("No pudimos leer la ubicación de ese link.")
+      expect(checkbox().checked).toBe(false)
+      expect(suggest).not.toHaveBeenCalled()
+    })
+
+    it("gives back the consent the visitor had ticked before the link, and names the photo's place", async () => {
+      const { suggest } = await openWithGps()
+      tickBox()
+      await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      paste("")
+      expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+      expect(checkbox().checked).toBe(true)
+      expect(suggest).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps the visitor's own untick after the link is cleared, sending nothing", async () => {
+      const { suggest, create } = await openWithGps()
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      tickBox()
+      expect(checkbox().checked).toBe(false)
+      paste("")
+      expect(await screen.findByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
+      expect(checkbox().checked).toBe(false)
+      expect(suggest).not.toHaveBeenCalled()
+      submit()
+      await waitFor(() => expect(create).toHaveBeenCalled())
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
+    })
+
+    it("keeps the consent the visitor ticks while the link is the place, after the link is cleared", async () => {
+      const { suggest } = await openWithGps()
+      paste(LINK)
+      await screen.findByText("Según el link: Plaza Italia")
+      tickBox()
+      tickBox()
+      expect(checkbox().checked).toBe(true)
+      paste("")
+      expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+      expect(checkbox().checked).toBe(true)
+      expect(suggest).toHaveBeenCalledTimes(1)
+    })
   })
 
   it("removes the consent again when a link on a photo with no GPS is cleared", async () => {

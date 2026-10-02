@@ -101,7 +101,12 @@ function MemoryForm({
   const [relation, setRelation] = useState<RelatedMemory | null>(props.related ?? null)
   const [date, setDate] = useState(props.related?.happenedOn ?? "")
   // Off by default: the visitor opts in to keeping the place of this photo.
-  const [shareLocation, setShareLocation] = useState(false)
+  // `auto` marks consent that a resolved link ticked by itself; `prior` is what the visitor had chosen before it did.
+  // Only the visitor's own tick counts for the photo's position: clearing or editing the link gives `prior` back.
+  const [consent, setConsent] = useState({ on: false, auto: false, prior: false })
+  const shareLocation = consent.on
+  const setShareLocation = (on: boolean) => setConsent({ on, auto: false, prior: on })
+  const giveBackConsent = () => setConsent((c) => (c.auto ? { on: c.prior, auto: false, prior: c.prior } : c))
   // Off by default too: "Mismo lugar" keeps the place of the memory this one is related to. It and the photo's own place
   // (or a pasted link) are two ways to answer the same question, so choosing one lets go of the other.
   const [samePlace, setSamePlace] = useState(false)
@@ -119,7 +124,7 @@ function MemoryForm({
   const audioRun = useRef(0)
   // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
   const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => {
-    setShareLocation(true)
+    setConsent((c) => (c.auto ? c : { on: true, auto: true, prior: c.on }))
     setSamePlace(false)
   })
   const linkPlace = link.state.status === "ok"
@@ -218,6 +223,8 @@ function MemoryForm({
   // Clearing the link of a photo with no GPS leaves nothing to keep, so the consent goes with it.
   const onLinkChange = (text: string) => {
     link.change(text)
+    // The link no longer is the chosen place (cleared, or being read again): its consent does not pass to the photo.
+    giveBackConsent()
     if (!text.trim() && place.status !== "found") setShareLocation(false)
   }
 
