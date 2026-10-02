@@ -12,6 +12,21 @@ const SIDE_MIN_DIAMETER = 150
 /** Room kept above the sphere for the close control, and under it for the play control that hangs off its rim. */
 const SIDE_TOP = 56
 const SIDE_BOTTOM = 56
+/** Room kept above the sphere for the top bar (the way back, Compartir, Cerrar). */
+const TOP_CLEAR = { narrow: 84, wide: 96 }
+/** Under the sphere, the caption block (title, date, place, views, the controls row) and the screen's own bottom margin. */
+export const CAPTION_BLOCK = { narrow: 200, wide: 170 }
+const BOTTOM_MARGIN = 40
+/** Between the sphere's rim and the player (or the caption, when there is no player). */
+const PLAYER_GAP = 4
+
+/**
+ * How tall the player under the sphere is (CSS px, gap included): on a phone the progress has a row of its own and the
+ * volume another (a 44 px target each), so neither is squeezed; on a wider screen they share one row.
+ */
+export function playerHeight(narrow: boolean): number {
+  return narrow ? 92 : 52
+}
 
 export interface GlassLayout {
   /** The sphere's diameter, in CSS px. */
@@ -20,6 +35,8 @@ export interface GlassLayout {
   anchor: Point
   /** Where the caption, date and place float: under the sphere, or in a column beside it on short screens. */
   caption: "below" | "side"
+  /** How tall the player under the sphere is, gap included. */
+  player: number
 }
 
 /**
@@ -31,16 +48,21 @@ export function glassLayout(vp: Viewport): GlassLayout {
   if (vp.height < SHORT_HEIGHT && vp.width > vp.height * 1.3) {
     const diameter = Math.max(Math.min(vp.height - SIDE_TOP - SIDE_BOTTOM, vp.width * 0.4), SIDE_MIN_DIAMETER)
     const top = SIDE_TOP + (vp.height - SIDE_TOP - SIDE_BOTTOM - diameter) / 2
-    return { diameter: Math.round(diameter), anchor: { x: 0.32, y: (top + diameter / 2) / vp.height }, caption: "side" }
+    return { diameter: Math.round(diameter), anchor: { x: 0.32, y: (top + diameter / 2) / vp.height }, caption: "side", player: playerHeight(false) }
   }
   const narrow = vp.width < 640
+  const kind = narrow ? "narrow" : "wide"
+  const top = TOP_CLEAR[kind]
+  // Everything under the sphere is reserved first: the player, the caption block and the bottom margin. The sphere takes
+  // what is left, so on a short screen it is the sphere that gives way, never the text.
+  const below = playerHeight(narrow) + PLAYER_GAP + CAPTION_BLOCK[kind] + BOTTOM_MARGIN
+  const room = vp.height - top - below
   const diameter = Math.round(
-    Math.min(Math.max(Math.min(vp.width * (narrow ? 0.8 : 0.5), vp.height * (narrow ? 0.42 : 0.62)), MIN_DIAMETER), MAX_DIAMETER),
+    Math.min(Math.max(Math.min(vp.width * (narrow ? 0.8 : 0.5), vp.height * (narrow ? 0.42 : 0.62), room), MIN_DIAMETER), MAX_DIAMETER),
   )
-  // Leave room under the sphere for the caption (about 150 px), and keep it clear of the close control above.
-  const room = vp.height - diameter
-  const above = narrow ? Math.max(room * 0.3, 72) : Math.max(room * 0.4, 56)
-  return { diameter, anchor: { x: 0.5, y: Math.min((above + diameter / 2) / vp.height, 0.62) }, caption: "below" }
+  // Any room the sphere does not use is shared above and below it.
+  const above = top + Math.max(room - diameter, 0) * 0.4
+  return { diameter, anchor: { x: 0.5, y: (above + diameter / 2) / vp.height }, caption: "below", player: playerHeight(narrow) }
 }
 
 /** The lens canvas draws at the screen's own density, up to this (a single canvas, so it can afford it). */
@@ -58,6 +80,8 @@ export interface LensGeometry {
   /** The canvas around the sphere (room for its rim): square, device-aligned, its backing store exactly `device` px. */
   canvas: { device: number; css: number; left: number; top: number }
   caption: GlassLayout["caption"]
+  /** How tall the player under the sphere is, gap included. */
+  player: number
 }
 
 /**
@@ -84,5 +108,6 @@ export function lensGeometry(vp: Viewport, devicePixelRatio: number): LensGeomet
     anchor: { x: center.x / vp.width, y: center.y / vp.height },
     canvas: { device, css, left: center.x - css / 2, top: center.y - css / 2 },
     caption: layout.caption,
+    player: layout.player,
   }
 }

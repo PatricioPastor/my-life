@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react"
 import Link from "next/link"
 import { Dialog } from "radix-ui"
 import { formatMemoryDate } from "../format"
@@ -9,6 +9,7 @@ import { ladderOf, pickSize } from "../photo-ladder"
 import type { ShareMemoryResult } from "../share/share-view"
 import type { RecordViewResult } from "../views/view-result"
 import type { Viewport } from "./camera"
+import { captionTier, type CaptionTier } from "./caption-text"
 import { lensGeometry, type LensGeometry } from "./glass-layout"
 import { GlassSphere } from "./glass-orb"
 import { GlassVoice } from "./glass-voice"
@@ -76,9 +77,24 @@ const Chevron = ({ flip }: { flip?: boolean }) => (
   </svg>
 )
 
+/** The title's size for each tier (see `captionTier`): the longer the caption, the smaller, so it stays a few calm lines. */
+const TITLE_SIZE: Record<CaptionTier, string> = {
+  lg: "text-[length:var(--type-3)]",
+  md: "text-[length:var(--type-2)]",
+  sm: "text-[length:var(--type-1)]",
+}
+
+/** The sphere's gap above the caption when there is no player between them. */
+const CAPTION_GAP = 16
+/** Between the player and the caption. */
+const PLAYER_TO_CAPTION = 4
+
 /**
- * The caption, date and place floating by the sphere, between the previous and next controls. On a switch the text
- * lets go first and the next one comes in with a short stagger once the camera is half way across.
+ * The caption, date and place under the sphere, with the controls to move between memories in a row of their own (so
+ * they never squeeze the text). The block is bounded: it starts under the sphere (and its player) and ends above the
+ * bottom of the screen, so it cannot run off it. The title steps down in size for a long caption and is cut to a few
+ * lines, with "Ver más" to open all of it in a panel that scrolls. On a switch the text lets go first and the next one
+ * comes in with a short stagger once the camera is half way across.
  */
 function GlassCaption({
   memory,
@@ -102,8 +118,32 @@ function GlassCaption({
   /** A guest has nothing to step to: the caption stands alone. */
   stepless: boolean
 }) {
-  const { diameter, center, caption: captionAt } = geometry
+  const { diameter, center, caption: captionAt, player } = geometry
   const side = captionAt === "side"
+  const tier = captionTier(memory.caption)
+  // Which memory the caption is open (or found cut) for: another memory starts collapsed, with no effect to reset it.
+  const [expandedFor, setExpandedFor] = useState<string | null>(null)
+  const [clippedFor, setClippedFor] = useState<string | null>(null)
+  const expanded = expandedFor === memory.id
+  const clipped = clippedFor === memory.id
+  const title = useRef<HTMLHeadingElement>(null)
+
+  // Whether the title is cut by its line clamp. Only measured while collapsed (open, it has no clamp to measure), and
+  // again whenever its box changes (a rotation, a resize, the font arriving).
+  useLayoutEffect(() => {
+    const el = title.current
+    if (!el || expandedFor === memory.id) return
+    const measure = () => {
+      const cut = el.scrollHeight > el.clientHeight + 1
+      setClippedFor((now) => (cut ? memory.id : now === memory.id ? null : now))
+    }
+    measure()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [memory.id, memory.caption, expandedFor])
+
   const prevButton = (
     <button
       type="button"
@@ -130,58 +170,93 @@ function GlassCaption({
       <Chevron flip />
     </button>
   )
+  const more =
+    clipped || expanded ? (
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={TEXT_ID}
+        data-magnetic="light"
+        data-cursor-label={expanded ? "Ver menos" : "Ver más"}
+        className="press pointer-events-auto flex h-11 shrink-0 items-center px-4 text-xs tracking-[0.08em] text-ink-muted"
+        onClick={() => setExpandedFor(expanded ? null : memory.id)}
+      >
+        {expanded ? "Ver menos" : "Ver más"}
+      </button>
+    ) : null
   const pending = memory.status === "pending"
   const views = formatViewCount(memory.viewCount + (newViewers.has(memory.id) ? 1 : 0))
+  const align = side ? "text-left" : "text-center"
 
   return (
-    <>
+    <div
+      data-glass-caption
+      data-caption={captionAt}
+      data-leaving={leaving || undefined}
+      data-entering={entering || undefined}
+      aria-live="polite"
+      className={
+        side
+          ? "pointer-events-none absolute flex max-h-[calc(100%-7rem)] -translate-y-1/2 flex-col items-start gap-1"
+          : `pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 flex-col px-4 ${
+              stepless
+                ? // The guest's way in sits at the bottom edge: the text stops above it.
+                  "bottom-[max(5rem,calc(env(safe-area-inset-bottom)+4.5rem))]"
+                : "bottom-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.5rem))]"
+            }`
+      }
+      style={
+        side
+          ? {
+              top: center.y,
+              left: Math.round(center.x + diameter / 2 + 24),
+              right: "max(1.5rem, calc(env(safe-area-inset-right) + 0.5rem))",
+            }
+          : { top: Math.round(center.y + diameter / 2 + (hasVoice ? player + PLAYER_TO_CAPTION : CAPTION_GAP)) }
+      }
+    >
       <div
-        data-glass-caption
-        data-caption={captionAt}
-        data-leaving={leaving || undefined}
-        data-entering={entering || undefined}
-        aria-live="polite"
-        className={
-          side
-            ? "pointer-events-none absolute flex -translate-y-1/2 flex-col items-start gap-3"
-            : `pointer-events-none absolute left-1/2 flex w-full max-w-[640px] -translate-x-1/2 items-center gap-3 px-3 ${stepless ? "justify-center" : "justify-between"}`
-        }
-        style={
-          side
-            ? {
-                top: center.y,
-                left: Math.round(center.x + diameter / 2 + 24),
-                right: "max(1.5rem, calc(env(safe-area-inset-right) + 0.5rem))",
-              }
-            : { top: Math.round(center.y + diameter / 2 + (hasVoice ? 64 : 40)) }
-        }
+        data-glass-panel
+        data-expanded={expanded || undefined}
+        // A drag on the text that is open scrolls it; the swipe only turns the page on a mostly horizontal one.
+        className={`min-h-0 w-full touch-pan-y overflow-y-auto overscroll-contain ${expanded ? "pointer-events-auto" : ""}`}
+        onPointerDown={expanded ? (event) => event.stopPropagation() : undefined}
       >
-        {!side && !stepless && prevButton}
-        <div key={memory.id} className={side ? "mem-caption-text min-w-0 text-left" : "mem-caption-text min-w-0 text-center"}>
-          <Dialog.Title className="t-title m-0 text-[length:var(--type-3)] text-ink">{memory.caption}</Dialog.Title>
+        <div key={memory.id} id={TEXT_ID} data-glass-text className={`mem-caption-text min-w-0 ${align}`}>
+          <Dialog.Title
+            ref={title}
+            data-size={tier}
+            className={`t-title m-0 text-ink leading-[1.25] text-balance ${TITLE_SIZE[tier]} ${expanded ? "" : "line-clamp-3"}`}
+          >
+            {memory.caption}
+          </Dialog.Title>
           <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted">
             {formatMemoryDate(memory.happenedOn)}
           </p>
-          {memory.place?.name && <p className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint">{memory.place.name}</p>}
+          {memory.place?.name && <p className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted">{memory.place.name}</p>}
           {/* Plain, quiet text: not a control, and `aria-live="off"` so the count catching up after an open is not announced. */}
           {views && (
-            <p data-glass-views aria-live="off" className="m-0 mt-0.5 text-[11px] tracking-[0.06em] text-ink-faint tabular-nums">
+            <p data-glass-views aria-live="off" className="m-0 mt-0.5 text-xs tracking-[0.06em] text-ink-muted tabular-nums">
               {views}
             </p>
           )}
           {pending && <p className="m-0 mt-1 text-xs tracking-[0.08em] text-ink-muted">Pendiente de aprobación</p>}
         </div>
-        {!side && !stepless && nextButton}
-        {side && !stepless && (
-          <div className="flex items-center gap-2">
-            {prevButton}
-            {nextButton}
-          </div>
-        )}
       </div>
-    </>
+      {!stepless ? (
+        <div data-glass-nav className={`flex shrink-0 items-center ${side ? "gap-2" : "h-12 justify-between"}`}>
+          {prevButton}
+          {more}
+          {nextButton}
+        </div>
+      ) : (
+        more && <div className="flex shrink-0 justify-center">{more}</div>
+      )}
+    </div>
   )
 }
+
+const TEXT_ID = "memory-glass-text"
 
 /** What a guest has instead of the journey's way back: "Universo" on top, and a quiet way in below. Both go to the start. */
 function GuestExits({ onExit }: { onExit: () => void }) {

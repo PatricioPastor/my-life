@@ -29,9 +29,11 @@ type VoiceStyle = CSSProperties & Record<`--${string}`, string | number>
 const BARS_TOP = 0.25
 const BARS_WIDTH = 0.6
 const BARS_HEIGHT = 0.12
-/** The controls under the sphere: as wide as the sphere (and a bit more), within the screen and these limits (CSS px). */
-const ROW_MIN = 300
-const ROW_MAX = 460
+/** The controls under the sphere on a wide screen: as wide as the sphere (and a bit more), within these limits (CSS px). */
+const ROW_MIN = 380
+const ROW_MAX = 480
+/** On a phone the controls take the width of the screen (less its margins) up to this. */
+const STACK_MAX = 420
 
 /**
  * The voice of a memory: its audio, a play button at the center of the sphere over a contrast scrim, live frequency bars
@@ -124,7 +126,9 @@ export function GlassVoice({
   if (!memory.audio) return null
   const { diameter, center } = geometry
   const total = memory.audio.durationMs / 1000
-  const rowWidth = Math.min(Math.max(Math.round(diameter * 1.25), ROW_MIN), ROW_MAX)
+  // On a phone the progress has a row of its own across the screen, and the volume another under it.
+  const stacked = geometry.player > 60
+  const rowWidth = stacked ? STACK_MAX : Math.min(Math.max(Math.round(diameter * 1.25), ROW_MIN), ROW_MAX)
   const playing = status === "playing"
   return (
     <>
@@ -176,7 +180,8 @@ export function GlassVoice({
       {/* Under the sphere: progress and volume. A drag on them is not a swipe, so it never reaches the dialog's swipe. */}
       <div
         data-glass-player
-        className="pointer-events-auto absolute flex h-12 -translate-x-1/2 items-center gap-1"
+        data-stacked={stacked || undefined}
+        className={`pointer-events-auto absolute flex -translate-x-1/2 ${stacked ? "flex-col" : "h-12 items-center gap-1"}`}
         style={{ left: center.x, top: Math.round(center.y + diameter / 2 + 4), width: `min(calc(100% - 2rem), ${rowWidth}px)`, "--pc": memory.orbColor } as VoiceStyle}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -186,8 +191,14 @@ export function GlassVoice({
           </span>
         ) : (
           <>
-            <AudioScrubber elapsed={played} total={total} disabled={failed || waiting} onSeek={seek} />
-            <VolumeControl pref={volume} onChange={changeVolume} />
+            <div data-glass-row className={stacked ? "flex h-11 items-center gap-1" : "flex h-12 min-w-0 flex-1 items-center gap-1"}>
+              <AudioScrubber elapsed={played} total={total} disabled={failed || waiting} onSeek={seek} />
+            </div>
+            {!stacked ? <VolumeControl pref={volume} onChange={changeVolume} /> : (
+              <div data-glass-row className="flex h-11 items-center justify-center gap-1">
+                <VolumeControl pref={volume} onChange={changeVolume} stacked />
+              </div>
+            )}
           </>
         )}
       </div>

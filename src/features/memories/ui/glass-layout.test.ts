@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { LENS_MAX_DPR, OPEN_ZOOM, glassLayout, lensGeometry } from "./glass-layout"
+import { CAPTION_BLOCK, LENS_MAX_DPR, OPEN_ZOOM, glassLayout, lensGeometry, playerHeight } from "./glass-layout"
 
 describe("glassLayout", () => {
   it("is a big sphere on a desktop, limited by the height", () => {
@@ -35,6 +35,55 @@ describe("glassLayout", () => {
   it("opens at a zoom inside the camera range", () => {
     expect(OPEN_ZOOM).toBeGreaterThan(1)
     expect(OPEN_ZOOM).toBeLessThanOrEqual(3)
+  })
+})
+
+describe("glassLayout reserves the room the text under the sphere needs", () => {
+  const phones = [
+    { width: 360, height: 640 },
+    { width: 360, height: 740 },
+    { width: 390, height: 844 },
+    { width: 412, height: 915 },
+  ]
+  const desktops = [
+    { width: 1280, height: 720 },
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]
+
+  it("leaves the player and the whole caption block between the sphere and the bottom, on every phone and desktop", () => {
+    for (const vp of [...phones, ...desktops]) {
+      const narrow = vp.width < 640
+      const { diameter, anchor, caption } = glassLayout(vp)
+      expect(caption).toBe("below")
+      const bottom = anchor.y * vp.height + diameter / 2
+      const needed = playerHeight(narrow) + CAPTION_BLOCK[narrow ? "narrow" : "wide"]
+      expect(vp.height - bottom, `${vp.width}x${vp.height}`).toBeGreaterThanOrEqual(needed)
+    }
+  })
+
+  it("shrinks the sphere, rather than the text, on a short phone", () => {
+    const short = glassLayout({ width: 360, height: 640 }).diameter
+    const tall = glassLayout({ width: 360, height: 844 }).diameter
+    expect(short).toBeLessThan(tall)
+  })
+
+  it("keeps the sphere under the top bar", () => {
+    for (const vp of [...phones, ...desktops]) {
+      const { diameter, anchor } = glassLayout(vp)
+      expect(anchor.y * vp.height - diameter / 2, `${vp.width}x${vp.height}`).toBeGreaterThanOrEqual(76)
+    }
+  })
+
+  it("stacks the progress and the volume on a phone, side by side on a desktop", () => {
+    expect(playerHeight(true)).toBeGreaterThan(playerHeight(false))
+    expect(playerHeight(false)).toBe(52)
+  })
+
+  it("reports the player's height in the geometry the glass lays out from", () => {
+    expect(lensGeometry({ width: 390, height: 844 }, 2).player).toBe(playerHeight(true))
+    expect(lensGeometry({ width: 1440, height: 900 }, 1).player).toBe(playerHeight(false))
   })
 })
 

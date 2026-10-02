@@ -6,6 +6,8 @@ import { effectiveVolume, volumeText, type VolumePref } from "./player-model"
 interface VolumeControlProps {
   pref: VolumePref
   onChange: (pref: VolumePref) => void
+  /** On a phone the volume has a row to itself, so its slider can be longer. */
+  stacked?: boolean
 }
 
 type RangeStyle = CSSProperties & { "--fill": string }
@@ -31,7 +33,7 @@ const SpeakerIcon = ({ level }: { level: "off" | "low" | "high" }) => (
  * The volume of the voice: a mute button and a slider. The button says whether it is pressed; the slider reads as a
  * percentage ("70 %") or "Silenciado". Both are 44 px targets.
  */
-export function VolumeControl({ pref, onChange }: VolumeControlProps) {
+export function VolumeControl({ pref, onChange, stacked = false }: VolumeControlProps) {
   const level = effectiveVolume(pref)
   const toggleMute = () => {
     if (pref.muted) onChange({ ...pref, muted: false })
@@ -60,7 +62,7 @@ export function VolumeControl({ pref, onChange }: VolumeControlProps) {
         aria-label="Volumen"
         aria-valuetext={volumeText(pref)}
         data-glass-volume
-        className="mem-range w-16 shrink-0 max-[380px]:w-12"
+        className={`mem-range shrink-0 ${stacked ? "w-44" : "w-24"}`}
         style={{ "--fill": `${Math.round(level * 100)}%` } as RangeStyle}
         onChange={(event) => onChange({ volume: Number(event.currentTarget.value) / 100, muted: false })}
       />

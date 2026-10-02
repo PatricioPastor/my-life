@@ -694,6 +694,47 @@ describe("GlassView player", () => {
     })
   })
 
+  describe("room on a phone", () => {
+    const PHONE = { width: 360, height: 740 }
+    const player = () => dialog().querySelector<HTMLElement>("[data-glass-player]")!
+    const widthOf = (el: HTMLElement) => Number(/(?:^|\s)w-(\d+)(?:\s|$)/.exec(el.className)?.[1]) * 4
+
+    it("gives the progress a full-width row of its own and the volume the next one", () => {
+      mount({ memory: both }, PHONE)
+      const rows = player().querySelectorAll<HTMLElement>("[data-glass-row]")
+      expect(player().getAttribute("data-stacked")).toBe("true")
+      expect(rows).toHaveLength(2)
+      expect(rows[0].contains(progress())).toBe(true)
+      expect(rows[1].contains(volumeSlider())).toBe(true)
+      expect(rows[1].contains(muteButton())).toBe(true)
+    })
+
+    it("lets the progress take the width of the screen, not what is left beside the volume", () => {
+      mount({ memory: both }, PHONE)
+      expect(player().style.width).toContain("100% - 2rem")
+      expect(player().querySelector("[data-glass-row]")!.contains(volumeSlider())).toBe(false)
+    })
+
+    it("keeps the volume slider at 96 px or more, at 360 px too", () => {
+      mount({ memory: both }, PHONE)
+      expect(widthOf(volumeSlider())).toBeGreaterThanOrEqual(96)
+      expect(volumeSlider().className).not.toMatch(/max-\[/)
+    })
+
+    it("keeps the controls in one row on a wide screen", () => {
+      mount({ memory: both })
+      expect(player().getAttribute("data-stacked")).toBeNull()
+      expect(player().querySelectorAll("[data-glass-row]")).toHaveLength(1)
+      expect(widthOf(volumeSlider())).toBeGreaterThanOrEqual(96)
+    })
+
+    it("makes every control in the player at least 44 px tall", () => {
+      mount({ memory: both }, PHONE)
+      expect(progress().className).toContain("mem-range")
+      for (const row of player().querySelectorAll<HTMLElement>("[data-glass-row]")) expect(row.className).toMatch(/h-(11|12)/)
+    })
+  })
+
   describe("labels and targets", () => {
     it("names every control in Spanish", () => {
       mount({ memory: both })
@@ -861,6 +902,174 @@ describe("GlassView next and previous", () => {
     fireEvent.pointerDown(sphere, { pointerType: "touch", clientX: 300, clientY: 400 })
     fireEvent.pointerUp(sphere, { pointerType: "touch", clientX: 304, clientY: 402 })
     expect(props.onStep).not.toHaveBeenCalled()
+  })
+})
+
+describe("GlassView caption", () => {
+  const LONG = "Una tarde cualquiera que se volvió inolvidable: caminamos sin rumbo, nos reímos de todo y terminamos cenando en la vereda."
+  const prev = view("x", "Antes")
+  const next = view("y", "Después")
+  const caption = () => dialog().querySelector<HTMLElement>("[data-glass-caption]")!
+  const titleOf = (text: string) => within(dialog()).getByText(text)
+  const guestProps = (): Props => ({
+    memory: view("l", LONG),
+    prev,
+    next,
+    reduced: false,
+    onStep: vi.fn(),
+    onClose: vi.fn(),
+    onRestoreFocus: vi.fn(),
+    onWarm: vi.fn(),
+    lens: null,
+    travel: () => null,
+    switching: false,
+  })
+
+  /** Gives every element a layout, so a clamped title measures as taller than the box it is clamped to. */
+  function clampTo(box: { scroll: number; client: number }) {
+    vi.spyOn(Element.prototype, "scrollHeight", "get").mockReturnValue(box.scroll)
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(box.client)
+  }
+
+  describe("size", () => {
+    it("steps the title down as the caption gets longer", () => {
+      mount({ memory: view("s", "Una tarde de lluvia") })
+      expect(titleOf("Una tarde de lluvia").getAttribute("data-size")).toBe("lg")
+      cleanup()
+      const medium = "x".repeat(60)
+      mount({ memory: view("m", medium) })
+      expect(titleOf(medium).getAttribute("data-size")).toBe("md")
+      cleanup()
+      mount({ memory: view("l", LONG) })
+      expect(titleOf(LONG).getAttribute("data-size")).toBe("sm")
+    })
+
+    it("sets the title with a reading line height, not the tight one of a display heading", () => {
+      mount({ memory: view("l", LONG) })
+      expect(titleOf(LONG).className).toMatch(/leading-\[1\.\d+\]/)
+    })
+
+    it("keeps the date, place and views at 12 px or more", () => {
+      const place = { lat: -34.59, lng: -58.42, name: "Palermo, Buenos Aires" }
+      mount({ memory: view("p", "Una tarde de lluvia", { place, viewCount: 5 }) })
+      const small = Array.from(caption().querySelectorAll("p")).filter((p) => /text-\[(?:[0-9]|1[01])px\]/.test(p.className))
+      expect(small).toEqual([])
+    })
+  })
+
+  describe("clamp and expand", () => {
+    const toggle = () => within(dialog()).queryByRole("button", { name: /^Ver (más|menos)$/ })
+
+    it("clamps the title to a few lines, and keeps every word in the dialog's name", () => {
+      mount({ memory: view("l", LONG) })
+      expect(titleOf(LONG).className).toContain("line-clamp-3")
+      expect(screen.getByRole("dialog", { name: LONG })).toBeTruthy()
+    })
+
+    it("offers nothing to expand while the whole caption fits", () => {
+      clampTo({ scroll: 60, client: 60 })
+      mount({ memory: view("s", "Una tarde de lluvia") })
+      expect(toggle()).toBeNull()
+    })
+
+    it("offers Ver más once the caption is cut, and says it is collapsed", () => {
+      clampTo({ scroll: 140, client: 60 })
+      mount({ memory: view("l", LONG) })
+      const button = toggle()!
+      expect(button.textContent).toBe("Ver más")
+      expect(button.getAttribute("aria-expanded")).toBe("false")
+      expect(button.getAttribute("aria-controls")).toBe(caption().querySelector("[data-glass-text]")!.id)
+    })
+
+    it("expands to the whole caption in a panel that scrolls, and collapses again", () => {
+      clampTo({ scroll: 140, client: 60 })
+      mount({ memory: view("l", LONG) })
+      fireEvent.click(toggle()!)
+      const button = within(dialog()).getByRole("button", { name: "Ver menos" })
+      expect(button.getAttribute("aria-expanded")).toBe("true")
+      expect(titleOf(LONG).className).not.toContain("line-clamp")
+      const panel = caption().querySelector<HTMLElement>("[data-glass-panel]")!
+      expect(panel.className).toContain("overflow-y-auto")
+      expect(panel.getAttribute("data-expanded")).toBe("true")
+      fireEvent.click(button)
+      expect(titleOf(LONG).className).toContain("line-clamp-3")
+      expect(toggle()!.getAttribute("aria-expanded")).toBe("false")
+    })
+
+    it("starts collapsed on the next memory", () => {
+      clampTo({ scroll: 140, client: 60 })
+      const { again } = mount({ memory: view("l", LONG) })
+      fireEvent.click(toggle()!)
+      again({ memory: view("m", `${LONG} Y después.`) })
+      expect(toggle()!.getAttribute("aria-expanded")).toBe("false")
+    })
+
+    it("is a 44 px target", () => {
+      clampTo({ scroll: 140, client: 60 })
+      mount({ memory: view("l", LONG) })
+      expect(toggle()!.className).toContain("h-11")
+    })
+
+    it("lets the panel pan vertically, so it scrolls on a touch screen", () => {
+      mount({ memory: view("l", LONG) })
+      expect(caption().querySelector("[data-glass-panel]")!.className).toContain("touch-pan-y")
+    })
+  })
+
+  describe("room", () => {
+    it("is bounded between the sphere and the bottom of the screen, never past it", () => {
+      mount({ memory: view("l", LONG), prev, next }, { width: 360, height: 740 })
+      expect(caption().className).toMatch(/bottom-\[max\(/)
+      expect(caption().style.top).not.toBe("")
+    })
+
+    it("starts under the player row when the memory has a voice", () => {
+      const viewport = { width: 360, height: 740 }
+      mount({ memory: view("l", LONG, { audio: voice }), prev, next }, viewport)
+      const geometry = lensGeometry(viewport, 1)
+      const player = dialog().querySelector<HTMLElement>("[data-glass-player]")!
+      const playerBottom = parseFloat(player.style.top) + (geometry.player - 4)
+      expect(parseFloat(caption().style.top)).toBeGreaterThanOrEqual(playerBottom)
+    })
+
+    it("leaves the bottom corner to the guest's way in, so the two never meet", () => {
+      render(<GlassView {...guestProps()} guestExit={vi.fn()} container={document.body} viewport={DESKTOP} />)
+      expect(caption().className).toMatch(/bottom-\[max\(5rem/)
+      const link = within(dialog()).getByRole("link", { name: "Entrar al universo" })
+      expect(link.className).toMatch(/bottom-\[max\(1\.5rem/)
+    })
+
+    it("keeps the column bounded beside the sphere on a short landscape screen", () => {
+      mount({ memory: view("l", LONG), prev, next }, { width: 844, height: 390 })
+      expect(caption().getAttribute("data-caption")).toBe("side")
+      expect(caption().className).toMatch(/max-h-/)
+    })
+  })
+
+  describe("previous and next", () => {
+    it("sit in a row of their own, so they never squeeze the text", () => {
+      mount({ memory: view("l", LONG), prev, next }, { width: 360, height: 740 })
+      const nav = caption().querySelector<HTMLElement>("[data-glass-nav]")!
+      const previous = within(dialog()).getByRole("button", { name: "Anterior" })
+      const following = within(dialog()).getByRole("button", { name: "Siguiente" })
+      expect(nav.contains(previous) && nav.contains(following)).toBe(true)
+      expect(nav.contains(titleOf(LONG))).toBe(false)
+      expect(caption().querySelector("[data-glass-panel]")!.contains(previous)).toBe(false)
+    })
+
+    it("keep their labels and 48 px targets, and the keyboard still turns the page", () => {
+      const { props } = mount({ memory: view("l", LONG), prev, next }, { width: 360, height: 740 })
+      for (const name of ["Anterior", "Siguiente"]) {
+        expect(within(dialog()).getByRole("button", { name }).className).toContain("size-12")
+      }
+      fireEvent.keyDown(dialog(), { key: "ArrowRight" })
+      expect(props.onStep).toHaveBeenLastCalledWith("y")
+    })
+
+    it("are absent for a guest, who has nothing to step to", () => {
+      render(<GlassView {...guestProps()} guestExit={vi.fn()} container={document.body} viewport={DESKTOP} />)
+      expect(caption().querySelector("[data-glass-nav]")).toBeNull()
+    })
   })
 })
 
