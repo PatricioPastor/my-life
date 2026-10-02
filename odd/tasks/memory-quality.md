@@ -58,7 +58,7 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - The title behavior.
   - The critical pass.
   - The orb → glass interaction and the switch between memories: lazy-loaded, continuous and precise (user priority added during T2).
-- [ ] **T3 — Integrate and review.**
+- [x] **T3 — Integrate and review.**
 - [ ] **T4 — Deliver.**
   - Apply the migration after authorization: `prisma/migrations/20261004000000_memory_long_audio` (T1). It drops and re-adds the two audio range checks in one `ALTER TABLE`, with bounds of 3,605,000 ms and 2,000,000,000 bytes; no column, grant or policy changes. Expand-safe: the old code's rows (125,000 ms, 15 MB) are inside the new bounds. Apply it before the deploy, so the new code never meets the old checks.
   - Optional server env var `MEMORY_MAX_AUDIO_BYTES` (a whole number of bytes, read server-side only; default 100,000,000; capped at 2,000,000,000). Do not set it unless the Cloudinary plan allows more.
@@ -120,6 +120,16 @@ Strict (global `CLAUDE.md`). Runner `pnpm test`.
   - **Migration.** `20261004000000_memory_long_audio`: one `ALTER TABLE` that drops and re-adds `memories_audio_duration_range` (1 to 3,605,000) and `memories_audio_bytes_range` (1 to 2,000,000,000). Nothing else changes. Covered by the migration lint tests (snake_case, RLS untouched, no grants, no other table, old bounds contained).
   - **TDD.** Strict. RED was observed first for the limits and copy (7 files, 13 tests failing), the eager params (3 failing), the chunk planner, uploader and XHR branch (2 files unable to import, 3 failing), the route (import failures), the readiness hook (import failure) and the recorder (14 failing). One hook bug (a new `fetch` seam on every render restarted the check) was found by the tests and fixed.
 
+- 2026-10-01: **T3 done** (route: direct inline, one writer in the main directory, branch `feat/memory-quality`; strict TDD, runner `pnpm test`; no delegation: integration of two already-reviewed branches plus one small wiring). `git merge --no-ff feat/long-audio` (`19c9083`; the hotfix `eec19d4` rides in with T1: `cloudinary-admin-assets.ts` and `AUDIO_STORED_FORMATS` are intact).
+  - **Conflicts.** `list-memories.ts` (imports and the DTO tail): kept T2's `photo: toPhoto(...)` ladder and T1's `audio.url` = `memoryAudioPath(id)`; `cloudinaryAudioUrl` is no longer imported there (the route uses it). `list-memories.test.ts` and `create-memory.test.ts`: both import sets (`memoryAudioPath`, `squareTransform`), the audio expectation points at the route. `memory-view.ts` merged cleanly (one DTO: `photo.sizes` plus `audio.url`); only its `MemoryAudio` comment was updated. This file: both entries kept, T1, T2 and T3 checked.
+  - **Wiring** (`f30b0ae`). `GlassVoice` calls `useAudioReadiness(memory.audio?.url ?? null)`. `processing`: the play control is disabled and the quiet `role="status"` "Procesando audio…" replaces the length; no `<audio>` element exists yet (so nothing preloads a 503). `checking`: the normal control, disabled, no flash of the copy. `unavailable` (or an element error): "Audio no disponible", disabled. `ready`: the T2 control with "0:12 / 1:05" and the `<audio>`. The hook retries on its own (5 s, 10 s, 20 s, then 30 s, about 5 minutes).
+  - **Same-origin audio.** `crossOrigin="anonymous"` stays (harmless same-origin, and Web Audio can read it). In the browser the analyser got the level (the rings in `i-08-audio-playing`), and Chromium issued `Range: bytes=0-` and `bytes=262144-` through the `<audio>` element (a mock answering 206 with `Content-Range`); the route's own 206 behaviour is covered by `route.test.ts` and `serve-audio.test.ts`. A real Safari seek is for T4.
+  - **RED evidence.** 5 of the 6 new glass-view tests failed before the wiring (the readiness is never asked; no "Procesando audio…" control; checking and unavailable states; the retry-then-play test); the 6th, which pins the same-origin `crossOrigin` and src, passed on arrival.
+  - **Smoke** (dev server on 3001, Chromium with software GL, 1440x900, a temporary `/zz-harness` page with fixtures and `page.route` mocks of the audio route; the page was deleted before the commits): approach and glass with a photo, the switch to the next memory, Escape back to the constellation (every orb `idle`, no focus held: the same state as before opening), and an audio-only glass that showed "Procesando audio…", then the control and play ("0:01 / 0:06") once the mock answered. Shots `shots/i-01` to `i-08` in the session scratchpad.
+  - **Checks.** `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test` 159 files, 2563 tests passed; `pnpm build` ok (`/` `○`, `/api/memories/[id]/audio` `ƒ`).
+  - **Review.** Every commit on both branches was approved before; the merge commit and `f30b0ae` are the only new ones (small, under 1,800 lines).
+  - **Cleanup.** The `long-audio` worktree and the branch `feat/long-audio` were removed after the merge commit existed.
+
 ## Next step
 
-PLACEHOLDER
+T4: apply migration `20261004000000_memory_long_audio` after the user authorizes it; a live check of long audio (chunks, eager processing, 206 ranges, Safari seek) and of image quality at zoom (CORS for the new signed sizes); then fast-forward main.
