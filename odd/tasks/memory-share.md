@@ -55,7 +55,7 @@ Strict. Runner `pnpm test`.
 - [x] **T1 — Share token, server action and guest data access** (token sign/verify, `shareMemory` action, guest DTO lookup for approved memories, token-gated audio).
 - [x] **T2 — Guest page `/m/[token]`** (guest glass view, exits to `/`, redirects, metadata and OG image, analytics).
 - [x] **T3 — Share button in the glass view** (Web Share and clipboard fallback).
-- [ ] **T4 — Deliver.** Full checks and RDD. A live check after authorization: share a real approved memory, open it with no cookies, play its audio, check the OG preview, check that an invalid token redirects. Then fast-forward main.
+- [x] **T4 — Deliver.** Full checks and RDD. A live check after authorization: share a real approved memory, open it with no cookies, play its audio, check the OG preview, check that an invalid token redirects. Then fast-forward main.
 
 ## Progress
 
@@ -88,4 +88,7 @@ Strict. Runner `pnpm test`.
 
 ## Next step
 
-T4: the live check passed (the session-based Share button click was skipped, the guest one passed). Remaining: the final full checks and RDD for the branch, then fast-forward main.
+Delivered.
+- RDD approved the whole range (`cf24b66..6180e59`, lineage `review-6216d42e37b76377`), and `main` was fast-forwarded to `6180e59` and pushed on 2026-10-02 with the user's approval. The live check passed (`2eebc33`).
+- In production, share URLs use `NEXT_PUBLIC_SITE_URL`, or else Vercel's `VERCEL_PROJECT_PRODUCTION_URL` (`src/shared/site/site-url.ts`).
+- Follow-ups for a real device: `navigator.share` on iOS Safari, and the OG preview in WhatsApp or Slack crawlers.
