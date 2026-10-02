@@ -187,6 +187,21 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
     - The glow's strength on the void.
     - The 4 / 8 px lower "Recuerdos" on phone and md.
     - A slow load: the control appears mid-rise, or after it.
+- 2026-10-02: **T4 reviewed.** T4 review `review-9a94c900e9410115` approved and acknowledged, reviewed boundary `e2aaf8d`; its one advisory (md tokens compile) was proven in Chromium: `--bar-y` 1.75rem / `--bar-x` 2.25rem at 1440.
+- 2026-10-02: **T5 visual check (Playwright, real Chromium).** Every target PASS at 390, 360 and 1440 px.
+  - Header mirror: off by 0.95 px before the polish below ("Contribuir" ink 21.98 px from the right, the chevron's 22.94 px from the left). Title vs chevron ≤ 0.4 px.
+  - Concentric pairs: close 12 = 32 − 20; footer 12; badge 6 = 12 − 6; audio controls 8 = 12 − 4.
+  - Text centering ≤ 1 px. Smallest hit area 40 × 40. Contrast ≥ 8.77:1.
+  - Polish findings: the phone sheet's top edge jumped between steps (1→2: 190 px at 390, 128 at 360; 2→3: back 106 / 44); the last swatch row hugged the left; the 0.95 px mirror; the sheet opened on Cerrar; the place's status and help line in the no-location state.
+- 2026-10-02: **T5a polish done**, commit `57e750a` `fix(memories): steady sheet, centered swatches and a true mirror`.
+  - T5a route: delegated writer (4 files).
+  1. **Steady sheet.** Rule: one height for every step, the desktop's 680 px, which holds the tallest step (Cuéntalo, about 650 px at 390 wide from the measured deltas). Phones: `h-[min(92dvh,calc(100%-max(0.5rem,env(safe-area-inset-top))),680px)]`, so it never passes 92dvh nor the top safe area and still shrinks above the keyboard (the `100%` is the content box the keyboard inset pads). From md: `md:h-[min(100%,680px)]` as before; `max-h` is gone. A shorter step stays top-aligned, a longer one scrolls in the body, the footer stays pinned with its safe-area padding.
+  2. **Centered swatches.** The row is `flex w-full max-w-[17.125rem] flex-wrap justify-center gap-0.5` (6 × 2.75rem + 5 × 0.125rem = 274 px), for the swatches and the empty slots. 14 swatches lay out 6, 6, then 2 in the middle. 44 px cells, DOM order and the index-based keys are unchanged.
+  3. **True mirror.** `pr-px` on the word inside `ContributeButton`, with a comment on the optical reason (Silkscreen's trailing side bearing vs the chevron's square-cap overhang). It sits on the word rather than the button so the box keeps `BAR_CONTROL` exactly, which `mobile-layout.test.tsx` and `contribute-button.test.tsx` pin as equal to the way back's; the painted result is the same 1 px. `top-bar.ts` is unchanged.
+  4. **Initial focus.** `onOpenAutoFocus` prevents Radix's default (Cerrar) and focuses step 1's heading (`data-step-heading`), the way every step change does.
+  5. **Place copy and hierarchy.** The status line is a plain hint while there is no place (no photo, reading it, no location); a place keeps the fields' ink. The help line shows only while there is a place to keep (the photo's, before or after the consent, or a resolved link), and says only what the place is for: "El lugar sirve para ubicar tu recuerdo en el universo." The consent still says what is kept and who sees it, so "saving" is said once. No dangling `aria-describedby`. Consent, privacy and what is saved are unchanged.
+  - Compiled CSS checked with `@tailwindcss/postcss`: the phone and md heights and `max-w-[17.125rem]` resolve to the intended declarations.
+  - Evidence: RED observed first (16 failing across the six test files), then green. `pnpm vitest run src/features/memories`: 94 files, 2310 tests passed. `pnpm test`: 3354 passed, 1 failed, the known flaky `memories-place.test.tsx` "restores the camera exactly under reduced motion", which passed alone. `pnpm lint`: exit 0. `pnpm typecheck`: exit 0.
 
 ## Follow-ups
 
@@ -194,7 +209,8 @@ About 1,400 authored changed lines (T1 ~250, T2 ~400, T3 ~600, T4 ~150).
 - `src/types/exifr-lite.d.ts` (outside the T2 surface) still declares only `gps` and says only the GPS reader is used. `photo-exif.ts` augments the module with `parse`. Move that declaration into the `.d.ts` and drop the unused `gps` declaration.
 - ~~Optional: a PGlite test that app_user can insert `happened_time`.~~ **Resolved in the T3 prelude (`2f80414`).**
 - `ui/memories-space.tsx` (outside the T4 surface) still calls the control "the pill in the top bar" in the `ContributeState` comment.
+- Place copy: before the consent no place is shown, yet the link's label already asks "¿No fue ahí?". Use "Si quieres, pega un link de Google Maps" until a place is on screen (tests in `add-memory.test.tsx` pin the current label).
 
 ## Next step
 
-Assess T4 from the reviewed boundary `03f1d9a` (`eebb5d3` and this record), then T5: browser screenshots at 390 px and desktop, including the optical checks listed under T4.
+Assess T5a from the reviewed boundary `e2aaf8d` (`57e750a` and this record), re-check the sheet height and the mirror in Chromium, then apply the migration with authorization and fast-forward `main` after approval.
