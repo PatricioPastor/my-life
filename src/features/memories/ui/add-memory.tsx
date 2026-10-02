@@ -33,7 +33,7 @@ export interface AddMemoryProps {
   prepare: (input: PrepareUploadInput) => Promise<PrepareUploadResult>
   create: (input: CreateMemoryInput) => Promise<CreateMemoryResult>
   upload: UploadToCloudinary
-  /** Names the place of the photo's GPS position; the server rounds it before geocoding (a server action). */
+  /** Names the place of the photo's GPS position, called only once the visitor has consented to keep the place (a server action). */
   suggest: SuggestPlace
   /** Reads a pasted Google Maps link on the server (a server action). */
   resolveLink: ResolveLink
@@ -117,13 +117,14 @@ function MemoryForm({
   const swatches = picked ? (palette.status === "ready" ? palette.colors : []) : hasAudio ? voiceSwatches : []
   const orbColor = chosenColor && swatches.includes(chosenColor) ? chosenColor : (swatches[0] ?? null)
   const audioRun = useRef(0)
-  const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest)
   // A link that resolves is the visitor choosing the place: it counts as consent, which they can still untick.
   const link = useMapsLink(props.resolveLink, props.linkDebounceMs ?? 400, () => {
     setShareLocation(true)
     setSamePlace(false)
   })
   const linkPlace = link.state.status === "ok"
+  // The photo's exact position goes to the server only once the visitor consents, and not while a link is the chosen place.
+  const { place, begin: readPlace, reset: resetPlace } = usePhotoPlace(props.parseGps, props.suggest, shareLocation && !linkPlace)
   const hasPlace = place.status === "found" || linkPlace
   const [errors, setErrors] = useState<FormErrors>({})
   const [phase, setPhase] = useState<Phase>({ kind: "idle" })

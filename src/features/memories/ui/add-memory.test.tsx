@@ -457,6 +457,9 @@ describe("AddMemory place section", () => {
     open()
     pick(file)
   }
+  // The place is only named once the visitor ticks the consent.
+  const tick = async () => fireEvent.click(await screen.findByRole("checkbox", { name: PLACE_COPY.consent }))
+  const PLACE = "Parece que fue en Palermo, Buenos Aires"
 
   it("asks for a photo first, and always shows the helper text", () => {
     setup()
@@ -475,7 +478,8 @@ describe("AddMemory place section", () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    await tick()
+    expect(await screen.findByText(PLACE)).toBeTruthy()
     expect(screen.getByText("Honduras 4000, Buenos Aires")).toBeTruthy()
   })
 
@@ -484,7 +488,8 @@ describe("AddMemory place section", () => {
     parseGps.mockResolvedValue(EXACT)
     suggest.mockResolvedValue({ ok: true, label: "Palermo, Buenos Aires", address: null })
     pickWithGps()
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    await tick()
+    expect(await screen.findByText(PLACE)).toBeTruthy()
     expect(document.getElementById("memory-place-address")).toBeNull()
   })
 
@@ -492,7 +497,8 @@ describe("AddMemory place section", () => {
     const { parseGps, resolveLink } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await tick()
+    await screen.findByText(PLACE)
     resolveLink.mockResolvedValue({ ok: true, lat: -34.58, lng: -58.42, label: "UOCRA", address: "Av. Rivadavia 1234, Junín" })
     fireEvent.change(screen.getByRole("textbox", { name: /link de Google Maps/ }), { target: { value: "https://maps.app.goo.gl/AbCd" } })
     expect(await screen.findByText("Según el link: UOCRA")).toBeTruthy()
@@ -500,18 +506,57 @@ describe("AddMemory place section", () => {
     expect(screen.queryByText("Honduras 4000, Buenos Aires")).toBeNull()
   })
 
-  it("sends the exact position to the suggestion call (the server geocodes exactly it, to the stored 6 decimals)", async () => {
+  it("sends the exact position to the suggestion call only once the visitor consents (6 decimals, as stored)", async () => {
     const { suggest, parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
+    await screen.findByText(PLACE_COPY.awaitingConsent)
+    expect(suggest).not.toHaveBeenCalled()
+    await tick()
     await waitFor(() => expect(suggest).toHaveBeenCalledWith({ lat: -34.593701, lng: -58.425123 }))
+    expect(suggest).toHaveBeenCalledTimes(1)
+  })
+
+  it("before consent says the photo has a location and invites ticking the box, with no coordinates, label or map link", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    expect(await screen.findByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
+    expect(checkbox().checked).toBe(false)
+    expect(screen.queryByRole("link", { name: "Ver en el mapa" })).toBeNull()
+    expect(document.body.textContent).not.toMatch(/34\.5|58\.4|Palermo|Cerca de/)
+    expect(suggest).not.toHaveBeenCalled()
+  })
+
+  it("names the place once per photo however many times the consent is toggled", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await tick()
+    await screen.findByText(PLACE)
+    fireEvent.click(checkbox())
+    fireEvent.click(checkbox())
+    fireEvent.click(checkbox())
+    expect(suggest).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(PLACE)).toBeTruthy()
+  })
+
+  it("sends nothing for a second photo picked before any consent", async () => {
+    const { parseGps, suggest } = setup()
+    parseGps.mockResolvedValue(EXACT)
+    pickWithGps()
+    await screen.findByText(PLACE_COPY.awaitingConsent)
+    pick(photo({ name: "dos.jpg" }))
+    await screen.findByText(PLACE_COPY.awaitingConsent)
+    expect(suggest).not.toHaveBeenCalled()
   })
 
   it("suggests the place, with a safe link to check it on the map", async () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    await tick()
+    expect(await screen.findByText(PLACE)).toBeTruthy()
     const link = screen.getByRole("link", { name: "Ver en el mapa" }) as HTMLAnchorElement
     expect(link.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.593701,-58.425123")
     expect(link.getAttribute("target")).toBe("_blank")
@@ -525,6 +570,7 @@ describe("AddMemory place section", () => {
     open()
     pick(photo())
     fill()
+    await tick()
     expect(await screen.findByText("Cerca de -34.59, -58.43")).toBeTruthy()
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
@@ -535,6 +581,7 @@ describe("AddMemory place section", () => {
     parseGps.mockResolvedValue(EXACT)
     suggest.mockRejectedValue(new Error("down"))
     pickWithGps()
+    await tick()
     expect(await screen.findByText("Cerca de -34.59, -58.43")).toBeTruthy()
   })
 
@@ -544,9 +591,10 @@ describe("AddMemory place section", () => {
     let finish!: (r: SuggestPlaceResult) => void
     suggest.mockImplementation(() => new Promise((resolve) => (finish = resolve)))
     pickWithGps()
+    await tick()
     expect(await screen.findByText(PLACE_COPY.naming)).toBeTruthy()
     await act(async () => finish({ ok: true, label: "Palermo, Buenos Aires", address: "Honduras 4000, Buenos Aires" }))
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(await screen.findByText(PLACE)).toBeTruthy()
   })
 
   it("says so when the photo has no location", async () => {
@@ -569,7 +617,7 @@ describe("AddMemory place section", () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await screen.findByText(PLACE_COPY.awaitingConsent)
     expect(checkbox().checked).toBe(false)
     const ids = checkbox().getAttribute("aria-describedby")!.split(" ")
     expect(ids.map((id) => document.getElementById(id)?.textContent)).toContain(HELP)
@@ -581,8 +629,8 @@ describe("AddMemory place section", () => {
     open()
     pick(photo())
     fill()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
-    fireEvent.click(checkbox())
+    await tick()
+    await screen.findByText(PLACE)
     expect(checkbox().checked).toBe(true)
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
@@ -595,9 +643,10 @@ describe("AddMemory place section", () => {
     open()
     pick(photo())
     fill()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await tick()
+    await screen.findByText(PLACE)
     fireEvent.click(checkbox())
-    fireEvent.click(checkbox())
+    expect(checkbox().checked).toBe(false)
     submit()
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ shareLocation: false }))
@@ -610,6 +659,7 @@ describe("AddMemory place section", () => {
     suggest.mockImplementationOnce(() => new Promise((resolve) => (finishFirst = resolve)))
     open()
     pick(photo({ name: "uno.jpg" }))
+    await tick()
     await screen.findByText(PLACE_COPY.naming)
 
     parseGps.mockResolvedValue(undefined)
@@ -624,10 +674,10 @@ describe("AddMemory place section", () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps(photo({ name: "uno.jpg" }))
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
-    fireEvent.click(checkbox())
+    await tick()
+    await screen.findByText(PLACE)
     pick(photo({ name: "dos.jpg" }))
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await screen.findByText(PLACE_COPY.awaitingConsent)
     expect(checkbox().checked).toBe(false)
   })
 
@@ -639,7 +689,7 @@ describe("AddMemory place section", () => {
     open()
     pick(photo())
     fill()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await screen.findByText(PLACE_COPY.awaitingConsent)
     submit()
     await screen.findByRole("button", { name: /Subiendo/ })
     expect(checkbox().disabled).toBe(true)
@@ -652,8 +702,7 @@ describe("AddMemory place section", () => {
     open()
     pick(photo())
     fill()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
-    fireEvent.click(checkbox())
+    await tick()
     submit()
     expect((await screen.findByRole("status")).textContent).toBe(
       "Listo. Tu recuerdo quedó pendiente de aprobación. No pudimos guardar el lugar.",
@@ -664,7 +713,8 @@ describe("AddMemory place section", () => {
     const { parseGps } = setup()
     parseGps.mockResolvedValue(EXACT)
     pickWithGps()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await tick()
+    await screen.findByText(PLACE)
     expect(document.body.textContent).not.toMatch(/desde dónde fue/i)
   })
 })
@@ -682,7 +732,7 @@ describe("AddMemory Google Maps link", () => {
     open()
     pick(photo())
     fill()
-    await screen.findByText("Parece que fue en Palermo, Buenos Aires")
+    await screen.findByText(PLACE_COPY.awaitingConsent)
     return ctx
   }
   async function openWithoutGps(over: Partial<AddMemoryProps> = {}) {
@@ -729,6 +779,13 @@ describe("AddMemory Google Maps link", () => {
     expect(checkbox().checked).toBe(true)
     const map = screen.getByRole("link", { name: "Ver en el mapa" }) as HTMLAnchorElement
     expect(map.getAttribute("href")).toBe("https://www.google.com/maps?q=-34.58,-58.42")
+  })
+
+  it("does not send the photo's own position when the consent came from a pasted link", async () => {
+    const { suggest } = await openWithGps()
+    paste(LINK)
+    await screen.findByText("Según el link: Plaza Italia")
+    expect(suggest).not.toHaveBeenCalled()
   })
 
   it("lets the visitor untick the consent that the link ticked", async () => {
@@ -788,8 +845,8 @@ describe("AddMemory Google Maps link", () => {
     const error = await screen.findByText(message)
     expect(input().getAttribute("aria-invalid")).toBe("true")
     expect(input().getAttribute("aria-describedby")!.split(" ")).toContain(error.id)
-    // The suggestion from the photo stays, and the consent is not ticked.
-    expect(screen.getByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    // The photo's place stays as it was (still waiting for consent), and the consent is not ticked.
+    expect(screen.getByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
     expect(checkbox().checked).toBe(false)
   })
 
@@ -869,7 +926,7 @@ describe("AddMemory Google Maps link", () => {
     await screen.findByText("Según el link: Plaza Italia")
     parseGps.mockResolvedValue(EXACT)
     pick(photo({ name: "otra.jpg" }))
-    expect(await screen.findByText("Parece que fue en Palermo, Buenos Aires")).toBeTruthy()
+    expect(await screen.findByText(PLACE_COPY.awaitingConsent)).toBeTruthy()
     expect(input().value).toBe("")
     expect(checkbox().checked).toBe(false)
   })

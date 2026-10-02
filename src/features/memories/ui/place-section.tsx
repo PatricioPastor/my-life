@@ -34,6 +34,10 @@ function shownPlace(place: PhotoPlace, link: MapsLinkState) {
       address: link.address,
     }
   }
+  // Before the consent the photo's position is not shown (no coordinates, no name, no map link): only that it has one.
+  if (place.status === "found" && place.awaitingConsent) {
+    return { lat: null, lng: null, text: PLACE_COPY.awaitingConsent, address: null }
+  }
   if (place.status === "found") {
     const text = place.naming
       ? PLACE_COPY.naming
@@ -80,7 +84,7 @@ export function PlaceSection({ place, link, onLinkChange, consent, onConsentChan
         <p id="memory-place-status" aria-live="polite" className="t-body m-0 text-[length:var(--type-1)] text-ink">
           {statusText(place, link.state)}
         </p>
-        {shown && (
+        {shown && shown.lat !== null && shown.lng !== null && (
           <a
             href={googleMapsUrl(shown.lat, shown.lng)}
             target="_blank"

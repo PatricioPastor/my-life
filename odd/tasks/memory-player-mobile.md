@@ -234,7 +234,7 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
   - **Checks.** lint clean, typecheck clean, test 181 files and 3075 passed, build `/` stays `○`.
   - **Visual.** Glass caption with "UOCRA" then "Av. Rivadavia 1234, Junín" (390 and 1440); the form with the suggested place plus "Honduras 4000, Buenos Aires", then the link's own name and address replacing it; the new consent line.
   - **Open concerns.**
-    - The exact position now goes to Nominatim (public, third party) once the photo is picked, before the visitor consents to keep it; only the consent decides what is stored. Worth knowing.
+    - The exact position now goes to Nominatim (public, third party) once the photo is picked, before the visitor consents to keep it; only the consent decides what is stored. Worth knowing. (Fixed by the T6 privacy fix below: it is sent only after consent.)
     - `DTO.place.address` shows the street to everyone who can enter, as asked.
     - "Avenida" is the only abbreviation: Nominatim returns the street name in full.
     - The `memories_insert` policy has not been run against a real database (offline work). See the live checks.
@@ -247,6 +247,12 @@ Strict (project setting, as in every earlier feature). Runner `pnpm test` (Vites
     5. `UPDATE memories SET related_memory_id = ...` as `app_user`: refused (no grant). Deleting the parent as the owner sets the child's `related_memory_id` to NULL.
     6. `listMemories` for a visitor who cannot see the parent returns `relatedId: null`; for one who can, the id; a guest's shared memory has `relatedId: null`.
     7. Create a contribution from a memory with "Mismo lugar" and read it back: the position, name, address and source equal the parent's, and the DTO's `place.lat/lng` are 2 decimals.
+- 2026-10-02 — **T6 privacy fix** (route: delegated writer; `fix(memories): name the photo's place only after location consent`).
+  - **Why.** After T6 the exact GPS position went to `suggest` (and on to Nominatim, a third party) as soon as a photo was picked, before the visitor ticked the consent. Exact location must not leave the browser before consent.
+  - **Behaviour.** `usePhotoPlace(parseGps, suggest, consent)` still reads the GPS locally on pick, but asks the server only when consent is on: at once if it already is, otherwise when it is turned on; once per picked photo (toggles reuse the answer; turning it off calls nothing). Supersede and unmount guards kept. The consent passed is `shareLocation && !linkPlace`, so a pasted link as the chosen place never sends the photo's position.
+  - **UI.** New state `awaitingConsent`: the place section says "Esta foto trae ubicación. Marca la casilla para sugerirte el lugar." with the consent checkbox, and no coordinates, name or map link. After consent the old behaviour applies ("Buscando el lugar…", name, address). "Mismo lugar" and Maps links are unchanged.
+  - **TDD.** RED observed: 27 failing (5 in the new `use-photo-place.test.tsx`, 22 in `add-memory.test.tsx`: no call before consent, call after, one call across toggles, awaiting copy, link consent sends nothing). GREEN: both files, 128 passing.
+  - **Checks.** lint clean, typecheck clean, test 182 files and 3088 passed, build `/` stays `○`.
 
 ## Next step
 
