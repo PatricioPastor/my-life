@@ -30,7 +30,7 @@ const voice = (id: string) =>
 function fakeRenderer() {
   let n = 0
   const textures = new Map<object, string>()
-  const draws: Array<{ a: LensSlot; b: LensSlot | null; mix: number; glass: number; warp: number; time: number }> = []
+  const draws: Array<{ a: LensSlot; b: LensSlot | null; mix: number; glass: number; warp: number; time: number; fog: number }> = []
   const renderer = {
     texture: vi.fn((source: { url: string }) => {
       const t = { id: ++n }
@@ -45,7 +45,7 @@ function fakeRenderer() {
     }),
     resize: vi.fn(),
     clear: vi.fn(),
-    draw: vi.fn((a: LensSlot, b: LensSlot | null, frame: { mix: number; glass: number; warp: number; time: number }) => {
+    draw: vi.fn((a: LensSlot, b: LensSlot | null, frame: { mix: number; glass: number; warp: number; time: number; fog: number }) => {
       draws.push({ a, b, ...frame })
     }),
     dispose: vi.fn(),
@@ -179,6 +179,8 @@ describe("the lens", () => {
     const fading = draws.at(-1)!
     expect(nameOf(fading.a)).toBe("a-384")
     expect(nameOf(fading.b)).toBe("a-1600")
+    // Only sharpening: no fog, it just comes into focus.
+    expect(fading.fog).toBe(0)
     for (let t = 48; t < 1200; t += 16) frame(t)
     expect(nameOf(draws.at(-1)!.a)).toBe("a-1600")
     expect(draws.at(-1)!.b).toBeNull()
@@ -213,6 +215,8 @@ describe("the lens", () => {
     expect(nameOf(mid.b)).toBe("b-1600")
     expect(mid.mix).toBeGreaterThan(0.2)
     expect(mid.mix).toBeLessThan(0.8)
+    // The glass fogs a little while it changes memory, which hides the double image of a plain crossfade.
+    expect(mid.fog).toBe(1)
     for (let t = 700; t < 1400; t += 16) frame(t, { travel: t > 1000 ? null : 1 })
     expect(nameOf(draws.at(-1)!.a)).toBe("b-1600")
   })

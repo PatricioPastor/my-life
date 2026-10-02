@@ -141,8 +141,8 @@ describe("the glass renderer", () => {
     const renderer = createGlassRenderer(fakeCanvas(gl), {})!
     const tex = renderer.texture(photo)
     const a: LensSlot = { texture: tex, light: [0, 0, 0], lightWeight: 0, tint: [0.5, 0.6, 0.9] }
-    renderer.draw(a, voice, { time: 1, warp: 0, glow: 0, glass: 0.5, mix: 0.25 })
-    expect(of("uniform1f").map(([, v]) => v)).toEqual(expect.arrayContaining([0.25, 0.5]))
+    renderer.draw(a, voice, { time: 1, warp: 0, glow: 0, glass: 0.5, mix: 0.25, fog: 0.75 })
+    expect(of("uniform1f").map(([, v]) => v)).toEqual(expect.arrayContaining([0.25, 0.5, 0.75]))
     expect(of("drawArrays")).toEqual([["TRIANGLES", 0, 3]])
   })
 

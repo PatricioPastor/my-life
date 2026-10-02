@@ -17,6 +17,8 @@ export interface LensFrame extends GlassMotion {
   time: number
   glass: number
   mix: number
+  /** 1 while it dissolves to another memory: the glass fogs a little mid-way, hiding the double image. 0 to sharpen. */
+  fog?: number
 }
 
 export interface GlassRenderer {
@@ -122,6 +124,7 @@ uniform float uWarp;
 uniform float uGlow;
 uniform float uRadius;
 uniform float uAa;
+uniform float uFog;
 
 const float LENS_C = ${f(GLASS.lens.center)};
 const float LENS_R0 = ${f(GLASS.lens.rimStart)};
@@ -151,7 +154,8 @@ float lensRadius(float r) {
 
 vec3 photoAt(sampler2D tex, vec2 p) {
   vec2 uv = clamp(0.5 + 0.5 * p, 0.0, 1.0);
-  return texture(tex, vec2(uv.x, 1.0 - uv.y)).rgb;
+  // Mid-dissolve between two memories the glass fogs a little (a mip bias), so they blend instead of doubling.
+  return texture(tex, vec2(uv.x, 1.0 - uv.y), uFog * 9.6 * uMix * (1.0 - uMix)).rgb;
 }
 
 vec3 refracted(sampler2D tex, vec2 p, float ca) {
@@ -290,6 +294,7 @@ export function createGlassRenderer(canvas: HTMLCanvasElement, options: GlassOpt
     "uGlow",
     "uRadius",
     "uAa",
+    "uFog",
   ])
   const b = locate(blend, ["uPhotoA", "uPhotoB", "uHasA", "uHasB", "uMix"])
 
@@ -403,6 +408,7 @@ export function createGlassRenderer(canvas: HTMLCanvasElement, options: GlassOpt
       ctx.uniform1f(u.uGlow, frame.glow)
       ctx.uniform1f(u.uRadius, radius)
       ctx.uniform1f(u.uAa, aa)
+      ctx.uniform1f(u.uFog, other ? (frame.fog ?? 0) : 0)
       ctx.drawArrays(ctx.TRIANGLES, 0, 3)
     },
     dispose: () => {

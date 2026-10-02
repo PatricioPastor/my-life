@@ -3,13 +3,17 @@ import type { Camera } from "./camera"
 
 /**
  * Opening a memory is an approach, not a zoom: the camera flies to the orb, the orb opens into the glass view, and
- * closing flies back to where the camera was. This is that state machine, pure; the component runs the flights.
+ * closing flies back to where the camera was. Moving to another memory from the glass is one motion: the glass stays,
+ * the camera carries the world under it to the next orb, and a new step on the way retargets that same motion. This is
+ * that state machine, pure; the component runs the flights.
  */
 export type Approach =
   | { phase: "idle" }
   /** Flying to an orb. `back` is the camera to return to, taken when the first orb was activated. */
   | { phase: "flying"; id: string; back: Camera }
   | { phase: "open"; id: string; back: Camera }
+  /** The glass stays open while the camera carries the world to another orb (`id`, the latest one asked for). */
+  | { phase: "switching"; id: string; back: Camera }
   /** Flying back to `back`. */
   | { phase: "leaving"; id: string; back: Camera }
 
@@ -30,17 +34,18 @@ export function reduceApproach(state: Approach, event: ApproachEvent): Approach 
       if (state.phase === "leaving") return { phase: "flying", id: event.id, back: state.back }
       return state
     case "arrived":
-      return state.phase === "flying" ? { phase: "open", id: state.id, back: state.back } : state
+      return state.phase === "flying" || state.phase === "switching" ? { phase: "open", id: state.id, back: state.back } : state
     case "close":
-      return state.phase === "flying" || state.phase === "open"
+      return state.phase === "flying" || state.phase === "open" || state.phase === "switching"
         ? { phase: "leaving", id: state.id, back: state.back }
         : state
     case "left":
       return state.phase === "leaving" ? IDLE : state
     case "step":
-      return state.phase === "flying" || state.phase === "open"
-        ? { phase: "flying", id: event.id, back: state.back }
-        : state
+      if ((state.phase === "flying" || state.phase === "open" || state.phase === "switching") && state.id === event.id) return state
+      if (state.phase === "flying") return { phase: "flying", id: event.id, back: state.back }
+      if (state.phase === "open" || state.phase === "switching") return { phase: "switching", id: event.id, back: state.back }
+      return state
   }
 }
 

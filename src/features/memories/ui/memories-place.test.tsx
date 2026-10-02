@@ -561,13 +561,16 @@ describe("MemoriesPlace previous and next", () => {
   /** Waits for the glass to be open on this caption (the camera flew to the neighbour). */
   const arriveAt = (caption: string) => advanceUntil(() => screen.queryByRole("dialog", { name: caption }) !== null)
 
-  it("flies to the next and previous memory with the arrow keys", () => {
+  it("moves to the next and previous memory with the arrow keys, keeping the glass open on the way", () => {
     render(<MemoriesPlace state={three} />)
     open(/Una tarde de lluvia/)
     fireEvent.keyDown(glass(), { key: "ArrowRight" })
-    expect(phase()).toBe("flying")
-    expect(dialogOpen()).toBe(false)
+    expect(phase()).toBe("switching")
+    // One motion: the sphere stays and the camera carries the world under it.
+    expect(dialogOpen()).toBe(true)
     arriveAt("La casa nueva")
+    // The caption changes half way across; the motion lands a moment later.
+    advanceUntil(() => phase() === "open")
     fireEvent.keyDown(glass(), { key: "ArrowLeft" })
     arriveAt("Una tarde de lluvia")
     fireEvent.keyDown(glass(), { key: "ArrowLeft" })
@@ -629,8 +632,38 @@ describe("MemoriesPlace previous and next", () => {
     const sphere = glass().querySelector("[data-glass-sphere]")!
     fireEvent.pointerDown(sphere, { pointerType: "touch", clientX: 300, clientY: 400 })
     fireEvent.pointerUp(sphere, { pointerType: "touch", clientX: 180, clientY: 410 })
-    expect(phase()).toBe("flying")
+    expect(phase()).toBe("switching")
     arriveAt("La casa nueva")
+  })
+
+  it("retargets rapid arrows as one motion: no stacking, it lands once on the last one, exactly centered", () => {
+    const five = ready(...["a", "b", "c", "d", "e"].map((id, i) => view(id, `Recuerdo ${id}`, { happenedOn: `2024-03-1${i}` })))
+    render(<MemoriesPlace state={five} />)
+    open(/Recuerdo a/)
+    const phases: string[] = []
+    fireEvent.keyDown(glass(), { key: "ArrowRight" })
+    for (let k = 0; k < 2; k++) {
+      advance(1, 60)
+      phases.push(phase()!)
+      fireEvent.keyDown(glass(), { key: "ArrowRight" })
+    }
+    advanceUntil(() => phase() === "open")
+    expect(phases.every((p) => p === "switching")).toBe(true)
+    expect(screen.getByRole("dialog", { name: "Recuerdo d" })).toBeTruthy()
+    const { center } = lensGeometry({ width: window.innerWidth, height: window.innerHeight }, window.devicePixelRatio || 1)
+    const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(transformOf(/Recuerdo d/) ?? "")!
+    expect(Math.abs(Number(m[1]) - center.x)).toBeLessThan(0.01)
+    expect(Math.abs(Number(m[2]) - center.y)).toBeLessThan(0.01)
+  })
+
+  it("can be closed in the middle of a switch, and flies home", () => {
+    render(<MemoriesPlace state={three} />)
+    open(/Una tarde de lluvia/)
+    fireEvent.keyDown(glass(), { key: "ArrowRight" })
+    advance(2)
+    fireEvent.keyDown(glass(), { key: "Escape" })
+    expect(phase()).toBe("leaving")
+    advanceUntil(() => phase() === "idle")
   })
 })
 
@@ -714,6 +747,16 @@ describe("MemoriesPlace reduced motion", () => {
     fireEvent.click(orbAt(/Una tarde de lluvia/))
     await waitFor(() => expect(dialogOpen()).toBe(true))
     expect(phase()).toBe("open")
+  })
+
+  it("switches memories with a plain crossfade: the glass stays, the camera cuts under it", async () => {
+    render(<MemoriesPlace state={three} />)
+    fireEvent.click(orbAt(/Una tarde de lluvia/))
+    await waitFor(() => expect(dialogOpen()).toBe(true))
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowRight" })
+    expect(dialogOpen()).toBe(true)
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "La casa nueva" })).not.toBeNull())
+    await waitFor(() => expect(phase()).toBe("open"))
   })
 
   it("fades the world out around the cut", async () => {

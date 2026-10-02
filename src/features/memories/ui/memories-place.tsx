@@ -79,7 +79,15 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
   const ordered = useMemo(() => orderByDate(memories), [memories])
   const approach = useApproach(controller, ordered, points, anchor)
   const current = approach.state
-  const open = current.phase === "open" ? (memories.find((m) => m.id === current.id) ?? null) : null
+  // The glass stays open while the camera carries the world to another memory.
+  const glassOn = current.phase === "open" || current.phase === "switching"
+  const open = glassOn ? (memories.find((m) => m.id === current.id) ?? null) : null
+  // How far a switch has come: the glass dissolves and the caption changes in step with it.
+  const phaseRef = useRef(current.phase)
+  useEffect(() => {
+    phaseRef.current = current.phase
+  }, [current.phase])
+  const travel = useCallback(() => (phaseRef.current === "switching" ? controller.progress() : null), [controller])
   const approached = current.phase === "idle" ? null : (memories.find((m) => m.id === current.id) ?? null)
 
   // Build the glass renderer when the browser is idle; dispose of it with the space.
@@ -119,6 +127,9 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
     let out = 0
     let back = 0
     controller.setCut((apply) => {
+      // A newer cut replaces the one in progress: only the latest swap happens.
+      window.clearTimeout(out)
+      window.clearTimeout(back)
       root.dataset.cut = "out"
       out = window.setTimeout(() => {
         apply()
@@ -258,6 +269,8 @@ export function MemoriesPlace({ state, accent, action }: MemoriesPlaceProps) {
         onRestoreFocus={restoreFocus}
         onWarm={warm}
         lens={glass}
+        travel={travel}
+        switching={current.phase === "switching"}
       />
     </div>
   )

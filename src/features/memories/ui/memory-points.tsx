@@ -6,7 +6,7 @@ import type { MemoryView } from "../memory-view"
 import { rimColor } from "../orb-color"
 import { approachSizes, ladderOf, PHOTO_RUNGS, pickSize } from "../photo-ladder"
 import type { Approach } from "./approach"
-import { focusCamera, orbScale, type Bounds, type Point } from "./camera"
+import { focusCamera, orbScale, worldToScreen, type Bounds, type Point } from "./camera"
 import type { CameraController } from "./camera-controller"
 import { startConstellation, type ConstellationLoop } from "./constellation-loop"
 import { createSim } from "./constellation-sim"
@@ -76,13 +76,24 @@ type PointStyle = CSSProperties & Record<`--${string}`, string>
  * of it while the glass is open, and back down with the flight home, so it is exactly the orb's size as the camera
  * lands whatever zoom it left from. Before a cut (reduced motion) there is no flight: it waits, then is there.
  */
-export function approachAmount(phase: Approach["phase"], progress: number | null, reduced: boolean): number {
+export function approachAmount(phase: Approach["phase"], progress: number | null, reduced: boolean, nearness = 1): number {
   if (phase === "open") return 1
+  // A switch: the next orb grows only as it slides in under the sphere (see `inscribedAmount`).
+  if (phase === "switching") return nearness
   // No progress means the flight has landed (the phase follows a moment later), or, under reduced motion, that the
   // cut has not happened yet.
   if (phase === "flying") return reduced ? 0 : (progress ?? 1)
   if (phase === "leaving") return reduced ? 0 : 1 - (progress ?? 1)
   return 0
+}
+
+/**
+ * How far the next orb's disc may have grown when its center is `distance` px from the sphere's (0..1): just enough
+ * to stay inside the sphere's rim, so under the glass it grows into the sphere as it arrives and is never seen past it.
+ */
+export function inscribedAmount(distance: number, diameter: number, base: number): number {
+  if (!(diameter > base)) return distance <= 0 ? 1 : 0
+  return Math.min(Math.max((diameter - 2 * distance - base) / (diameter - base), 0), 1)
 }
 
 /**
@@ -130,6 +141,7 @@ export function MemoryPoints({
   const approachIndex = useRef<number | null>(null)
   const approachRef = useRef(approachId)
   const phaseRef = useRef(approachPhase)
+  const amountRef = useRef<((at: number) => number) | null>(null)
   // Where each orb was when the simulation last stopped, so a new memory never makes the others jump back.
   const carry = useRef<Map<string, { x: number; y: number }> | null>(null)
 
@@ -240,8 +252,17 @@ export function MemoryPoints({
     // The orb being approached stays put and its disc grows toward the glass as the camera comes in.
     const applyApproach = () => {
       const at = approachIndex.current
-      loop.emphasize(at, at === null ? 0 : approachAmount(phaseRef.current, controller.progress(), reduced), lensRef.current.diameter)
+      loop.emphasize(at, at === null ? 0 : amountOf(at), lensRef.current.diameter)
     }
+    // How far the approached orb's disc has grown: with the flights, or by how close it is to the sphere on a switch.
+    const amountOf = (at: number) => {
+      const cam = controller.camera()
+      const screen = worldToScreen(cam, size.current, loop.positionOf(at))
+      const { center, diameter } = lensRef.current
+      const nearness = inscribedAmount(Math.hypot(screen.x - center.x, screen.y - center.y), diameter, THUMB_PX * orbScale(cam.zoom))
+      return approachAmount(phaseRef.current, controller.progress(), reduced, nearness)
+    }
+    amountRef.current = amountOf
     approachIndex.current = approachRef.current === null ? null : (index.get(approachRef.current) ?? null)
     loop.hold("approach", approachIndex.current)
     applyApproach()
@@ -356,7 +377,7 @@ export function MemoryPoints({
     const at = approachId === null ? null : (indexById.current.get(approachId) ?? null)
     approachIndex.current = at
     loop.hold("approach", at)
-    loop.emphasize(at, at === null ? 0 : approachAmount(approachPhase, controller.progress(), reduced), lensRef.current.diameter)
+    loop.emphasize(at, at === null ? 0 : (amountRef.current?.(at) ?? 0), lensRef.current.diameter)
   }, [approachId, approachPhase, controller, reduced])
 
   return (

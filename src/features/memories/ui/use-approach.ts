@@ -36,11 +36,16 @@ export function useApproach(
 ): ApproachControls {
   const [state, dispatch] = useReducer(reduceApproach, IDLE)
 
-  const flyToOrb = (id: string) => {
+  /** The camera that puts an orb on the sphere's center, with the orb pinned there first, or null. */
+  const aimAt = (id: string) => {
     const world = points.current?.pin(id) ?? null
-    if (!world) return
+    return world ? focusCamera(world, controller.viewport(), OPEN_ZOOM, anchor()) : null
+  }
+
+  const flyToOrb = (id: string) => {
+    const target = aimAt(id)
+    if (!target) return
     controller.setEnabled(false)
-    const target = focusCamera(world, controller.viewport(), OPEN_ZOOM, anchor())
     controller.flyTo(target, { onDone: () => dispatch({ type: "arrived" }) })
   }
 
@@ -52,9 +57,9 @@ export function useApproach(
       flyToOrb(id)
     },
     close: () => {
-      if (state.phase !== "flying" && state.phase !== "open") return
+      if (state.phase !== "flying" && state.phase !== "open" && state.phase !== "switching") return
       const { back } = state
-      const glassOpen = state.phase === "open"
+      const glassOpen = state.phase === "open" || state.phase === "switching"
       dispatch({ type: "close" })
       controller.flyTo(back, {
         // The glass melts back into the orb first; the camera leaves once it has.
@@ -66,9 +71,15 @@ export function useApproach(
       })
     },
     step: (id) => {
-      if (state.phase !== "flying" && state.phase !== "open") return
+      if (state.phase !== "flying" && state.phase !== "open" && state.phase !== "switching") return
+      if (id === state.id) return
       dispatch({ type: "step", id })
-      flyToOrb(id)
+      // From the open glass a new motion starts; on the way, the same motion bends toward the new memory.
+      if (state.phase === "open") flyToOrb(id)
+      else {
+        const target = aimAt(id)
+        if (target) controller.retarget(target)
+      }
     },
     neighbor: (direction) => (state.phase === "idle" ? null : neighborOf(ordered, state.id, direction)),
   }

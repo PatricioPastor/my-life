@@ -45,9 +45,25 @@ describe("the approach state machine", () => {
     expect(reduceApproach(leaving, { type: "left" })).toEqual(IDLE)
   })
 
-  it("steps to another orb from the glass, keeping the camera to return to", () => {
+  it("switches to another memory from the glass without closing it, keeping the camera to return to", () => {
     const open: Approach = { phase: "open", id: "a", back }
-    expect(reduceApproach(open, { type: "step", id: "b" })).toEqual({ phase: "flying", id: "b", back })
+    expect(reduceApproach(open, { type: "step", id: "b" })).toEqual({ phase: "switching", id: "b", back })
+  })
+
+  it("retargets a switch on the way: one motion, aimed at the latest memory", () => {
+    const switching: Approach = { phase: "switching", id: "b", back }
+    expect(reduceApproach(switching, { type: "step", id: "c" })).toEqual({ phase: "switching", id: "c", back })
+    expect(reduceApproach(switching, { type: "step", id: "b" })).toBe(switching)
+  })
+
+  it("opens on the new memory when the switch lands, and can be closed on the way", () => {
+    const switching: Approach = { phase: "switching", id: "b", back }
+    expect(reduceApproach(switching, { type: "arrived" })).toEqual({ phase: "open", id: "b", back })
+    expect(reduceApproach(switching, { type: "close" })).toEqual({ phase: "leaving", id: "b", back })
+    expect(reduceApproach(switching, { type: "activate", id: "z", camera: back })).toBe(switching)
+  })
+
+  it("retargets the first flight too, before the glass has opened", () => {
     expect(reduceApproach({ phase: "flying", id: "b", back }, { type: "step", id: "c" })).toEqual({
       phase: "flying",
       id: "c",

@@ -355,6 +355,95 @@ describe("flights", () => {
     expect(controller.progress()).toBeNull()
   })
 
+  it("retargets a flight on the way without a jump: the path bends, and it lands exactly on the new target", () => {
+    setup()
+    const done = vi.fn()
+    controller.flyTo(target, { onDone: done })
+    const path: Array<{ x: number; y: number }> = []
+    const record = () => path.push({ x: controller.camera().x, y: controller.camera().y })
+    for (let i = 0; i < 30; i++) {
+      controller.step(1 / 60)
+      record()
+    }
+    const next = { x: target.x + 260, y: target.y - 120, zoom: target.zoom }
+    controller.retarget(next)
+    for (let i = 0; i < 200; i++) {
+      controller.step(1 / 60)
+      record()
+    }
+    expect(controller.camera()).toEqual(next)
+    expect(done).toHaveBeenCalledTimes(1)
+    // No jump: the change of velocity between frames is no worse than the flight's own, unbent, at its steepest.
+    const steepest = (points: Array<{ x: number; y: number }>) => {
+      let worst = 0
+      for (let i = 2; i < points.length; i++) {
+        const ax = points[i].x - 2 * points[i - 1].x + points[i - 2].x
+        const ay = points[i].y - 2 * points[i - 1].y + points[i - 2].y
+        worst = Math.max(worst, Math.hypot(ax, ay))
+      }
+      return worst
+    }
+    controller.jump(controller.home())
+    controller.flyTo(target)
+    const straight: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < 200; i++) {
+      controller.step(1 / 60)
+      straight.push({ x: controller.camera().x, y: controller.camera().y })
+    }
+    expect(steepest(path)).toBeLessThan(steepest(straight) * 1.25)
+  })
+
+  it("follows rapid retargets as one motion, ending on the last one and calling back once", () => {
+    setup()
+    const done = vi.fn()
+    controller.flyTo(target, { onDone: done })
+    const last = { x: target.x + 600, y: target.y, zoom: target.zoom }
+    for (let k = 1; k <= 3; k++) {
+      for (let i = 0; i < 9; i++) controller.step(1 / 60)
+      controller.retarget({ x: target.x + 200 * k, y: target.y, zoom: target.zoom })
+    }
+    expect(done).not.toHaveBeenCalled()
+    for (let i = 0; i < 240; i++) controller.step(1 / 60)
+    expect(controller.camera()).toEqual(last)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps going past the end of its curve until it has settled on a late target, with no overshoot", () => {
+    setup()
+    controller.flyTo(target)
+    for (let i = 0; i < 70; i++) controller.step(1 / 60)
+    const late = { x: target.x + 300, y: target.y, zoom: target.zoom }
+    controller.retarget(late)
+    let beyond = 0
+    for (let i = 0; i < 240; i++) {
+      controller.step(1 / 60)
+      beyond = Math.max(beyond, controller.camera().x - late.x)
+    }
+    expect(beyond).toBeLessThanOrEqual(1e-9)
+    expect(controller.camera()).toEqual(late)
+    expect(controller.progress()).toBeNull()
+  })
+
+  it("starts a flight when retargeted at rest", () => {
+    setup()
+    controller.retarget(target)
+    for (let i = 0; i < 120; i++) controller.step(1 / 60)
+    expect(controller.camera()).toEqual(target)
+  })
+
+  it("cuts to the latest target under reduced motion, calling back for that one only", () => {
+    setup(true)
+    const applies: Array<() => void> = []
+    controller.setCut((apply) => applies.push(apply))
+    const done = vi.fn()
+    controller.flyTo(target, { onDone: done })
+    const next = { x: 400, y: 300, zoom: 2 }
+    controller.retarget(next)
+    for (const apply of applies) apply()
+    expect(controller.camera()).toEqual(next)
+    expect(done).toHaveBeenCalledTimes(1)
+  })
+
   it("stops gestures from taking over a flight that is on its way", () => {
     setup()
     controller.setEnabled(false)

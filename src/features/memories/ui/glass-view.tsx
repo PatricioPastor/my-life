@@ -33,7 +33,14 @@ interface GlassViewProps {
   onWarm?: (memory: MemoryView) => void
   /** The persistent WebGL lens, or null (the CSS glass stands in). */
   lens?: Lens | null
+  /** How far the camera has carried the world on a switch (0..1), or null when it is not moving. */
+  travel?: () => number | null
+  /** The camera is carrying the world to another memory: the caption waits for it to be half way. */
+  switching?: boolean
 }
+
+/** The caption changes once the camera is this far across a switch (or at once when there is no travel). */
+const CAPTION_SWAP_AT = 0.45
 
 const Chevron = ({ flip }: { flip?: boolean }) => (
   <svg
@@ -61,16 +68,13 @@ const PauseIcon = () => (
 
 type VoiceStatus = "idle" | "playing" | "error"
 
-/** What changes with each memory: its voice and the caption floating by the sphere. */
-function GlassBody({
+/** The voice of a memory: its audio, its play control under the sphere, and the level the glass reads. */
+function GlassVoice({
   memory,
-  prev,
-  next,
   geometry,
-  onStep,
   open,
   onLevel,
-}: Pick<GlassViewProps, "prev" | "next" | "onStep"> & {
+}: {
   memory: MemoryView
   geometry: LensGeometry
   open: boolean
@@ -97,36 +101,7 @@ function GlassBody({
     else audio.play().catch(() => setStatus("error"))
   }
 
-  const { diameter, center, caption: captionAt } = geometry
-  const side = captionAt === "side"
-  const prevButton = (
-    <button
-      type="button"
-      aria-label="Anterior"
-      disabled={!prev}
-      data-magnetic="light"
-      data-cursor-label="Anterior"
-      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
-      onClick={() => prev && onStep(prev.id)}
-    >
-      <Chevron />
-    </button>
-  )
-  const nextButton = (
-    <button
-      type="button"
-      aria-label="Siguiente"
-      disabled={!next}
-      data-magnetic="light"
-      data-cursor-label="Siguiente"
-      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
-      onClick={() => next && onStep(next.id)}
-    >
-      <Chevron flip />
-    </button>
-  )
-  const pending = memory.status === "pending"
-
+  const { diameter, center } = geometry
   return (
     <>
       {memory.audio && (
@@ -165,9 +140,68 @@ function GlassBody({
           onError={() => setStatus("error")}
         />
       )}
+    </>
+  )
+}
+
+/**
+ * The caption, date and place floating by the sphere, between the previous and next controls. On a switch the text
+ * lets go first and the next one comes in with a short stagger once the camera is half way across.
+ */
+function GlassCaption({
+  memory,
+  hasVoice,
+  prev,
+  next,
+  geometry,
+  leaving,
+  entering,
+  onStep,
+}: Pick<GlassViewProps, "prev" | "next" | "onStep"> & {
+  memory: MemoryView
+  hasVoice: boolean
+  geometry: LensGeometry
+  leaving: boolean
+  entering: boolean
+}) {
+  const { diameter, center, caption: captionAt } = geometry
+  const side = captionAt === "side"
+  const prevButton = (
+    <button
+      type="button"
+      aria-label="Anterior"
+      disabled={!prev}
+      data-magnetic="light"
+      data-cursor-label="Anterior"
+      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
+      onClick={() => prev && onStep(prev.id)}
+    >
+      <Chevron />
+    </button>
+  )
+  const nextButton = (
+    <button
+      type="button"
+      aria-label="Siguiente"
+      disabled={!next}
+      data-magnetic="light"
+      data-cursor-label="Siguiente"
+      className="press pointer-events-auto flex size-12 shrink-0 items-center justify-center text-ink-muted"
+      onClick={() => next && onStep(next.id)}
+    >
+      <Chevron flip />
+    </button>
+  )
+  const pending = memory.status === "pending"
+
+  return (
+    <>
       <div
         data-glass-caption
         data-caption={captionAt}
+        data-leaving={leaving || undefined}
+        data-entering={entering || undefined}
+        aria-live="polite"
         className={
           side
             ? "pointer-events-none absolute flex -translate-y-1/2 flex-col items-start gap-3"
@@ -180,11 +214,11 @@ function GlassBody({
                 left: Math.round(center.x + diameter / 2 + 24),
                 right: "max(1.5rem, calc(env(safe-area-inset-right) + 0.5rem))",
               }
-            : { top: Math.round(center.y + diameter / 2 + (memory.audio ? 64 : 40)) }
+            : { top: Math.round(center.y + diameter / 2 + (hasVoice ? 64 : 40)) }
         }
       >
         {!side && prevButton}
-        <div className={side ? "min-w-0 text-left" : "min-w-0 text-center"}>
+        <div key={memory.id} className={side ? "mem-caption-text min-w-0 text-left" : "mem-caption-text min-w-0 text-center"}>
           <Dialog.Title className="t-title m-0 text-[length:var(--type-3)] text-ink">{memory.caption}</Dialog.Title>
           <p id="memory-glass-date" className="m-0 mt-1.5 text-xs tracking-[0.08em] text-ink-muted">
             {formatMemoryDate(memory.happenedOn)}
@@ -225,6 +259,8 @@ export function GlassView({
   onRestoreFocus,
   onWarm,
   lens = null,
+  travel,
+  switching = false,
 }: GlassViewProps) {
   // The last memory stays on screen while the dialog fades out (and tells where focus goes back to).
   const [held, setHeld] = useState<MemoryView | null>(memory)
@@ -240,6 +276,24 @@ export function GlassView({
   const onLevel = useCallback((reader: () => number) => {
     levelRef.current = reader
   }, [])
+
+  // The caption on screen. On a switch it lets go at once and changes once the camera is half way across.
+  const [caption, setCaption] = useState<MemoryView | null>(memory)
+  // Opening, or a switch that is over (landed, or a cut): the caption is the memory at once.
+  if (memory && (!caption || (!switching && memory.id !== caption.id))) setCaption(memory)
+  const [entering, setEntering] = useState(false)
+  const swapTo = useRef<MemoryView | null>(null)
+  useEffect(() => {
+    swapTo.current = memory && caption && memory.id !== caption.id ? memory : null
+  }, [memory, caption])
+  const onTravel = useCallback((moved: number | null) => {
+    const target = swapTo.current
+    if (!target || (moved !== null && moved < CAPTION_SWAP_AT)) return
+    swapTo.current = null
+    setCaption(target)
+    setEntering(true)
+  }, [])
+  const leaving = memory !== null && caption !== null && memory.id !== caption.id
 
   // The memories on either side are a step away: their photos are fetched and decoded now.
   useEffect(() => {
@@ -317,16 +371,19 @@ export function GlassView({
                 geometry={geometry}
                 reduced={reduced}
                 level={level}
+                travel={travel}
+                onTravel={onTravel}
               />
-              <GlassBody
-                key={shown.id}
-                memory={shown}
-                open={memory !== null}
+              <GlassVoice key={shown.id} memory={shown} open={memory !== null} geometry={geometry} onLevel={onLevel} />
+              <GlassCaption
+                memory={caption ?? shown}
+                hasVoice={shown.audio !== null}
+                leaving={leaving}
+                entering={entering && !leaving}
                 prev={memory ? prev : null}
                 next={memory ? next : null}
                 geometry={geometry}
                 onStep={onStep}
-                onLevel={onLevel}
               />
             </>
           )}

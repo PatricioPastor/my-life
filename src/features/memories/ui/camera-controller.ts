@@ -57,6 +57,11 @@ export interface CameraController extends CameraSource {
   /** Puts the camera somewhere at once. */
   jump: (camera: Camera) => void
   flyTo: (target: Camera, options?: FlightOptions) => void
+  /**
+   * Aims the current flight at a new target without a jump: the path bends toward it through a critically damped
+   * follower and lands on it exactly, calling back once. At rest it starts a flight.
+   */
+  retarget: (target: Camera) => void
   cancelFlight: () => void
   /** How far the current flight has come on its curve (0..1), or null when the camera is not flying. */
   progress: () => number | null
@@ -77,6 +82,18 @@ interface Options {
 }
 
 const QUICK_FLIGHT_S = 0.3
+/** How fast a retargeted flight's aim catches up (rad/s, each spring): about 0.7 s to settle, with no overshoot. */
+const FOLLOW_RATE = 11
+/** A followed aim this close to its target (world px, and in the zoom's log) and this slow counts as there. */
+const FOLLOW_EPSILON = 0.01
+
+/** One exact step of a critically damped spring from `value` (moving at `velocity`) toward `target`. */
+function follow(value: number, velocity: number, target: number, dt: number): [number, number] {
+  const offset = value - target
+  const decay = Math.exp(-FOLLOW_RATE * dt)
+  const k = velocity + FOLLOW_RATE * offset
+  return [target + (offset + k * dt) * decay, (velocity - FOLLOW_RATE * k * dt) * decay]
+}
 /** How far past the edge a drag may pull the camera (screen px), before it stops following. */
 const EDGE_SLACK_PX = 140
 /** A flick only glides if the pointer was still moving this recently (ms) when it let go. */
@@ -86,9 +103,21 @@ const OUTSIDE_VELOCITY_DECAY_PER_S = 12
 /** Things that take their own pointers and keys: the HUD controls and any dialog. */
 const OWN_INPUT = "[data-hud],[role='dialog'],[role='alertdialog']"
 
+/**
+ * The aim a retargeted flight bends toward, per axis (x, y and the log of the zoom): two critically damped springs in
+ * a row, the second chasing the first, so the aim's acceleration never jumps when the target does (no kink, no jolt).
+ */
+interface Follow {
+  /** [lead, its velocity, aim, its velocity] for x, y and log zoom. */
+  x: [number, number, number, number]
+  y: [number, number, number, number]
+  lz: [number, number, number, number]
+}
+
 interface Flight {
   from: Camera
   to: Camera
+  follow: Follow | null
   /** Seconds since it was asked for; negative while it still waits to leave. */
   elapsed: number
   duration: number
@@ -117,6 +146,8 @@ export function createCameraController(options: Options): CameraController {
   let flight: Flight | null = null
   let enabled = true
   let cut: (apply: () => void) => void = (apply) => apply()
+  /** The callback of the cut in progress (reduced motion), handed over when a retarget replaces it. */
+  let pendingDone: (() => void) | undefined
 
   const listeners = new Set<() => void>()
   const notify = () => {
@@ -141,17 +172,25 @@ export function createCameraController(options: Options): CameraController {
     if (reduced && outside()) set(clampCamera(cam, bounds))
   }
 
+  // Under reduced motion every flight is a cut; only the latest one asked for may land.
+  let cutToken = 0
   const cancelFlight = () => {
     flight = null
+    cutToken++
   }
 
   const flyTo: CameraController["flyTo"] = (target, flyOptions = {}) => {
     cancelFlight()
     velocity = { x: 0, y: 0 }
     if (reduced) {
+      const token = cutToken
+      pendingDone = flyOptions.onDone
       cut(() => {
+        if (token !== cutToken) return
         set({ ...target })
-        flyOptions.onDone?.()
+        const done = pendingDone
+        pendingDone = undefined
+        done?.()
       })
       return
     }
@@ -159,11 +198,30 @@ export function createCameraController(options: Options): CameraController {
     flight = {
       from: cam,
       to: target,
+      follow: null,
       elapsed: -Math.max(flyOptions.delay ?? 0, 0),
       duration: curve === "quick" ? QUICK_FLIGHT_S : flightDuration(cam, target),
       curve,
       onDone: flyOptions.onDone,
     }
+  }
+
+  const retarget: CameraController["retarget"] = (target) => {
+    if (reduced) {
+      // A new cut replaces the one in progress, and takes over its callback.
+      const done = pendingDone
+      cutToken++
+      flyTo(target, { onDone: done })
+      return
+    }
+    if (!flight) {
+      flyTo(target)
+      return
+    }
+    // The aim starts where the flight was headed, at rest, and catches up with the new target from there.
+    const lz = Math.log(flight.to.zoom)
+    flight.follow ??= { x: [flight.to.x, 0, flight.to.x, 0], y: [flight.to.y, 0, flight.to.y, 0], lz: [lz, 0, lz, 0] }
+    flight.to = target
   }
 
   /** A short move to `target` (a key press, a double tap), instant under reduced motion. */
@@ -181,13 +239,35 @@ export function createCameraController(options: Options): CameraController {
       if (flight.elapsed < 0) return
       const u = flight.elapsed / flight.duration
       const done = flight.onDone
-      if (u >= 1) {
+      let aim = flight.to
+      let settled = true
+      const f = flight.follow
+      if (f) {
+        const chase = (axis: [number, number, number, number], target: number) => {
+          const [lead, leadV] = follow(axis[0], axis[1], target, dt)
+          const [aimed, aimedV] = follow(axis[2], axis[3], lead, dt)
+          axis[0] = lead
+          axis[1] = leadV
+          axis[2] = aimed
+          axis[3] = aimedV
+        }
+        chase(f.x, flight.to.x)
+        chase(f.y, flight.to.y)
+        chase(f.lz, Math.log(flight.to.zoom))
+        aim = { x: f.x[2], y: f.y[2], zoom: Math.exp(f.lz[2]) }
+        settled =
+          Math.hypot(f.x[2] - flight.to.x, f.y[2] - flight.to.y) < FOLLOW_EPSILON &&
+          Math.abs(f.lz[2] - Math.log(flight.to.zoom)) < FOLLOW_EPSILON * 1e-3 &&
+          Math.hypot(f.x[3], f.y[3]) < FOLLOW_EPSILON * 10
+      }
+      if (u >= 1 && settled) {
         const to = flight.to
         flight = null
         set({ ...to })
         done?.()
       } else {
-        set(flight.curve === "quick" ? settleAt(flight.from, flight.to, u) : flightAt(flight.from, flight.to, u))
+        const v = Math.min(u, 1)
+        set(flight.curve === "quick" ? settleAt(flight.from, aim, v) : flightAt(flight.from, aim, v))
       }
       return
     }
@@ -417,6 +497,7 @@ export function createCameraController(options: Options): CameraController {
       set(next)
     },
     flyTo,
+    retarget,
     cancelFlight,
     progress: () => {
       if (!flight) return null

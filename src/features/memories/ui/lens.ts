@@ -319,7 +319,9 @@ export function createLens({ cache, createRenderer = createGlassRenderer, schedu
       // Under reduced motion nothing moves by itself: draw only when something changed.
       const state = `${a.key}|${b?.key}|${mix.toFixed(3)}|${glass.toFixed(3)}|${motion.glow.toFixed(3)}`
       if (!input.reduced || state !== drawn) {
-        renderer.draw(a, b, { time, warp: motion.warp, glow: motion.glow, glass, mix })
+        // Fog only when it changes memory; a sharper size of the same photo just comes into focus.
+        const fog = b && b.id !== a.id ? 1 : 0
+        renderer.draw(a, b, { time, warp: motion.warp, glow: motion.glow, glass, mix, fog })
         drawn = state
       }
       return { glow: motion.glow, glass }

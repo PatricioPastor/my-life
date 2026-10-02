@@ -541,6 +541,29 @@
   .mem-glass[data-state="closed"] .mem-glass-sphere[data-reduced="true"] {
     animation: mem-fade-out 180ms ease-out both;
   }
+  /* Moving to another memory: the caption lets go quickly, and the next one comes in once the camera is half way,
+     its lines staggered a little (caption, date, place). */
+  .mem-caption-text {
+    transition:
+      opacity 140ms ease-out,
+      filter 140ms ease-out;
+  }
+  [data-glass-caption][data-leaving="true"] .mem-caption-text {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  [data-glass-caption][data-entering="true"] .mem-caption-text > * {
+    animation: mem-caption-in 360ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  }
+  [data-glass-caption][data-entering="true"] .mem-caption-text > :nth-child(2) {
+    animation-delay: 50ms;
+  }
+  [data-glass-caption][data-entering="true"] .mem-caption-text > :nth-child(3) {
+    animation-delay: 100ms;
+  }
+  [data-glass-caption][data-entering="true"] .mem-caption-text > :nth-child(4) {
+    animation-delay: 150ms;
+  }
   /* A soft halo in the memory's color, drawn in CSS around the sphere: a radial gradient that fades to nothing inside
      its own box, so no edge of it is ever seen. It comes in with the glass and brightens with the voice. */
   .mem-glass-halo {
@@ -660,6 +683,13 @@
     }
     .mem-world {
       transition-duration: 110ms;
+    }
+    [data-glass-caption][data-entering="true"] .mem-caption-text > * {
+      animation-name: fade;
+      animation-duration: 200ms;
+    }
+    .mem-caption-text {
+      transition-property: opacity;
     }
     .mem-glass-css {
       transform: none;
@@ -1594,6 +1624,18 @@
   to {
     opacity: 0;
     transform: translateY(24px);
+  }
+}
+@keyframes mem-caption-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }
 /* Holds a closing dialog on screen (nothing changes) while what is in it finishes its own exit. */

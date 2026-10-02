@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { MemoryView } from "../memory-view"
 import { worldBounds, type Camera } from "./camera"
 import { createCameraController, type CameraController } from "./camera-controller"
-import { MemoryPoints, approachAmount, type PointsHandle } from "./memory-points"
+import { MemoryPoints, approachAmount, inscribedAmount, type PointsHandle } from "./memory-points"
 import { OPEN_ZOOM, lensGeometry } from "./glass-layout"
 import { PHOTO_RUNGS, approachSizes } from "../photo-ladder"
 import type { PhotoCache } from "./photo-cache"
@@ -572,6 +572,11 @@ describe("how far the approach disc has grown", () => {
     expect(approachAmount("leaving", 0.25, false)).toBe(0.75)
   })
 
+  it("follows how close the next orb is to the sphere during a switch", () => {
+    expect(approachAmount("switching", 0.3, false, 0.25)).toBe(0.25)
+    expect(approachAmount("switching", null, true, 1)).toBe(1)
+  })
+
   it("never pops when a flight has landed but the phase has not caught up yet", () => {
     expect(approachAmount("flying", null, false)).toBe(1)
     expect(approachAmount("leaving", null, false)).toBe(0)
@@ -581,6 +586,24 @@ describe("how far the approach disc has grown", () => {
     expect(approachAmount("flying", null, true)).toBe(0)
     expect(approachAmount("leaving", null, true)).toBe(0)
     expect(approachAmount("open", null, true)).toBe(1)
+  })
+})
+
+describe("the next orb sliding under the sphere", () => {
+  const D = 558
+  const base = 40
+
+  it("stays its own size while it is clear of the sphere, and is the sphere once centered", () => {
+    expect(inscribedAmount(D / 2 + 10, D, base)).toBe(0)
+    expect(inscribedAmount(0, D, base)).toBe(1)
+  })
+
+  it("is always inside the sphere's rim on the way in, so it is never seen growing past it", () => {
+    for (let x = 0; x <= D; x += 3) {
+      const a = inscribedAmount(x, D, base)
+      const size = base + (D - base) * a
+      if (a > 0) expect(x + size / 2).toBeLessThanOrEqual(D / 2 + 1e-9)
+    }
   })
 })
 

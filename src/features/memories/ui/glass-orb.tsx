@@ -20,7 +20,13 @@ interface GlassSphereProps {
   reduced: boolean
   /** The voice level, 0..1, read every frame (no React state per frame). */
   level: () => number
+  /** How far the camera has carried the world on a switch (0..1), or null when it is not moving. */
+  travel?: () => number | null
+  /** Told every frame how far a switch has come, so the caption can change at the right moment. */
+  onTravel?: (travel: number | null) => void
 }
+
+const still = () => null
 
 /**
  * The glass sphere, laid exactly over the disc the approached orb grew into (same center, same size, on whole device
@@ -28,7 +34,17 @@ interface GlassSphereProps {
  * the way out; otherwise a CSS glass circle stands in. A soft halo is drawn in CSS around it, so no canvas edge can
  * ever clip it. The voice lights the halo and moves the glass every frame.
  */
-export function GlassSphere({ memory, photoUrl, open, lens, geometry, reduced, level }: GlassSphereProps) {
+export function GlassSphere({
+  memory,
+  photoUrl,
+  open,
+  lens,
+  geometry,
+  reduced,
+  level,
+  travel = still,
+  onTravel,
+}: GlassSphereProps) {
   const [failed, setFailed] = useState(false)
   const mode: GlassMode = lens !== null && !failed && lens.available() ? "webgl" : "css"
   const own = useRef<HTMLDivElement>(null)
@@ -71,9 +87,11 @@ export function GlassSphere({ memory, photoUrl, open, lens, geometry, reduced, l
     const tick = (now: number) => {
       raf = 0
       const voice = level()
+      const moved = travel()
+      onTravel?.(moved)
       const motion = glassMotion(voice, reduced)
       const out =
-        mode === "webgl" && lens ? lens.frame(now, { level: voice, reduced, travel: null }) : { glow: motion.glow, glass: open ? 1 : 0 }
+        mode === "webgl" && lens ? lens.frame(now, { level: voice, reduced, travel: moved }) : { glow: motion.glow, glass: open ? 1 : 0 }
       if (Math.abs(out.glow - glow) > 0.003) el.style.setProperty("--glow", (glow = out.glow).toFixed(3))
       if (Math.abs(motion.warp - warp) > 0.003) el.style.setProperty("--warp", (warp = motion.warp).toFixed(3))
       if (Math.abs(out.glass - glass) > 0.003) el.style.setProperty("--glass", (glass = out.glass).toFixed(3))
@@ -88,7 +106,7 @@ export function GlassSphere({ memory, photoUrl, open, lens, geometry, reduced, l
       cancelAnimationFrame(raf)
       document.removeEventListener("visibilitychange", onVisibility)
     }
-  }, [lens, mode, reduced, level, open])
+  }, [lens, mode, reduced, level, open, travel, onTravel])
 
   const style: SphereStyle = {
     "--pc": memory.orbColor,

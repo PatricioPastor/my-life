@@ -41,6 +41,8 @@ interface Props {
   onRestoreFocus: (id: string) => void
   onWarm: (memory: MemoryView) => void
   lens: Lens | null
+  travel: () => number | null
+  switching: boolean
 }
 
 const DESKTOP = { width: 1440, height: 900 }
@@ -56,6 +58,8 @@ function mount(over: Partial<Props> = {}, viewport: { width: number; height: num
     onRestoreFocus: vi.fn(),
     onWarm: vi.fn(),
     lens: null,
+    travel: () => null,
+    switching: false,
     ...over,
   }
   const utils = render(<GlassView {...props} container={document.body} viewport={viewport} />)
@@ -456,6 +460,67 @@ describe("GlassView renderer selection", () => {
     expect(halo).not.toBeNull()
     expect(lens.canvas.contains(halo)).toBe(false)
     expect(halo.getAttribute("aria-hidden")).toBe("true")
+  })
+})
+
+describe("GlassView switching memories", () => {
+  const other = view("o", "Otra tarde")
+
+  it("keeps the sphere and its lens while it moves to another memory, and dissolves into it", () => {
+    const { lens } = fakeLens()
+    const { again } = mount({ lens })
+    again({ memory: other, lens })
+    expect(lens.detach).not.toHaveBeenCalled()
+    expect(lens.show).toHaveBeenLastCalledWith(other)
+    expect(lens.release).not.toHaveBeenCalled()
+  })
+
+  it("tells the lens how far the camera has carried the world on the switch", () => {
+    const { lens } = fakeLens()
+    mount({ lens, travel: () => 0.4 })
+    runFrames(2)
+    expect(lens.frame.mock.calls.at(-1)![1]).toMatchObject({ travel: 0.4 })
+  })
+
+  it("lets the caption go, then brings the next one in once the camera is half way", () => {
+    let travel: number | null = 0.1
+    const reader = () => travel
+    const { again } = mount({ travel: reader })
+    again({ memory: other, travel: reader, switching: true })
+    runFrames(1)
+    const leaving = dialog().querySelector("[data-glass-caption]")!
+    expect(leaving.textContent).toContain("Una tarde de lluvia")
+    expect(leaving.getAttribute("data-leaving")).toBe("true")
+    travel = 0.6
+    runFrames(1)
+    const entering = dialog().querySelector("[data-glass-caption]")!
+    expect(entering.textContent).toContain("Otra tarde")
+    expect(entering.hasAttribute("data-leaving")).toBe(false)
+    expect(entering.getAttribute("data-entering")).toBe("true")
+    expect(screen.getByRole("dialog", { name: "Otra tarde" })).toBeTruthy()
+  })
+
+  it("swaps the caption at once when there is no travel (a cut under reduced motion, or a landed step)", () => {
+    const { again } = mount({ reduced: true })
+    again({ memory: other, reduced: true, switching: true })
+    runFrames(1)
+    expect(dialog().querySelector("[data-glass-caption]")!.textContent).toContain("Otra tarde")
+  })
+
+  it("puts the caption of the memory it landed on once the switch is over", () => {
+    const { again } = mount({ travel: () => 0.1 })
+    again({ memory: other, travel: () => 0.1, switching: true })
+    expect(dialog().querySelector("[data-glass-caption]")!.textContent).toContain("Una tarde de lluvia")
+    again({ memory: other, travel: () => null, switching: false })
+    expect(dialog().querySelector("[data-glass-caption]")!.textContent).toContain("Otra tarde")
+  })
+
+  it("stops the voice of the memory it leaves at once", () => {
+    const { again } = mount({ memory: both })
+    fireEvent.click(audioButton())
+    pause.mockClear()
+    again({ memory: other })
+    expect(pause).toHaveBeenCalled()
   })
 })
 
