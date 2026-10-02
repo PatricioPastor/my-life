@@ -36,6 +36,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   placeName: "Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
+  viewCount: 5,
   audio: null,
   ...over,
 })
@@ -92,6 +93,11 @@ describe("findSharedMemoryWith", () => {
     expect(m.photo?.sizes.length).toBeGreaterThan(0)
     expect(JSON.stringify(m)).not.toContain("ana")
     expect(JSON.stringify(m)).not.toContain("abcd")
+  })
+
+  it("shows a guest the view count too (their own open is never recorded)", async () => {
+    const result = await findSharedMemoryWith(setup().full, TOKEN)
+    expect(result.ok && result.memory.viewCount).toBe(5)
   })
 
   it("points the audio at the guest route of this token, never at the session route", async () => {

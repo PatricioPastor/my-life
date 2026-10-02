@@ -46,6 +46,8 @@ export interface Memory {
   locationSource: LocationSource | null
   /** `#rrggbb` the orb glows in. Null only for rows stored before orb colors existed. */
   orbColor: string | null
+  /** How many distinct visitors opened it (kept by the database; the visitors themselves never leave it). */
+  viewCount: number
   /** The voice of the memory; null for a photo-only one. */
   audio: StoredAudio | null
 }

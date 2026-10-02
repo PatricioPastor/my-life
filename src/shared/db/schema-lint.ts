@@ -1,7 +1,8 @@
 /**
  * Static rules for `schema.prisma`, enforced by `schema-lint.test.ts`: the database is
  * snake_case, TypeScript stays camelCase, so every model and enum needs `@@map`, every
- * camelCase scalar field needs `@map`, and every mapped name must be snake_case.
+ * camelCase scalar field needs `@map`, and every mapped name must be snake_case. The owning side of a relation (the one
+ * with `fields:`) must also say what a delete does to its rows (`onDelete`), so cascading is always a decision.
  */
 
 const SNAKE_CASE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/
@@ -59,7 +60,12 @@ export function lintPrismaSchema(source: string): string[] {
       } else {
         const type = /^\w+\s+(\w+)/.exec(line)?.[1] ?? ""
         // A field typed as another model is a relation: it has no column of its own.
-        if (modelNames.has(type) && !enumNames.has(type)) continue
+        if (modelNames.has(type) && !enumNames.has(type)) {
+          if (/@relation\([^)]*\bfields:/.test(line) && !/\bonDelete:/.test(line)) {
+            problems.push(`model ${block.name}: relation ${name} needs an explicit onDelete`)
+          }
+          continue
+        }
         if (mapped === undefined && !SNAKE_CASE.test(name)) {
           problems.push(`model ${block.name}: field ${name} needs a snake_case @map`)
         }

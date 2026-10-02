@@ -62,6 +62,7 @@ export function toMemoryView(
     place: toPlace(memory),
     // Re-checked on the way out: an older row has none, and a hand-edited one must not send a color that sinks.
     orbColor: chooseOrbColor(memory.orbColor, memory.dominantColor),
+    viewCount: memory.viewCount,
     thumbUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, THUMB_TRANSFORM, apiSecret),
     fullUrl: memory.publicId === null ? null : cloudinaryUrl(cloudName, memory.publicId, FULL_TRANSFORM, apiSecret),
     photo: toPhoto(memory, { cloudName, apiSecret }),

@@ -37,6 +37,7 @@ const memory = (over: Partial<MemoryView> = {}): MemoryView => ({
   dominantColor: null,
   place: null,
   orbColor: "#8ab4ff",
+  viewCount: 0,
   thumbUrl: "https://res.cloudinary.com/demo/t",
   fullUrl: "https://res.cloudinary.com/demo/f",
   audio: null,

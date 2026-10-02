@@ -69,6 +69,7 @@ const stored = (over: Partial<Memory> = {}): Memory => ({
   placeName: null,
   locationSource: null,
   orbColor: null,
+  viewCount: 0,
   audio: null,
   ...over,
 })
@@ -290,6 +291,8 @@ describe("createMemoryWith: rate limit and insert", () => {
         dominantColor: null,
         place: null,
         orbColor: DEFAULT_ORB_COLOR,
+        // A memory nobody has opened yet.
+        viewCount: 0,
         thumbUrl: cloudinaryUrl("demo", PID, THUMB_TRANSFORM, "abcd"),
         fullUrl: cloudinaryUrl("demo", PID, FULL_TRANSFORM, "abcd"),
         photo: {

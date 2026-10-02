@@ -85,7 +85,29 @@ model Memory {
   audioBytes      Int?    @map("audio_bytes")
   audioDurationMs Int?    @map("audio_duration_ms")
 
+  /// How many DISTINCT visitors have opened it: kept by a trigger on `memory_views` (never written by app_user).
+  viewCount Int                @default(dbgenerated("0")) @map("view_count")
+  views     MemoryViewRecord[]
+
   @@index([status, happenedOn], map: "memories_status_happened_on_idx")
   @@index([handle, createdAt], map: "memories_handle_created_at_idx")
   @@map("memories")
+}
+
+/// Which visitor opened which approved memory: one row per (memory, visitor), however many times they open it. The
+/// handle is who opened it and never leaves the server. Named `MemoryViewRecord` so it does not clash with the
+/// `MemoryView` DTO. app_user may insert a row, bump `last_viewed_at` and `open_count`, and read its own rows.
+model MemoryViewRecord {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memoryId      String   @map("memory_id") @db.Uuid
+  memory        Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  /// The visitor's Instagram handle (normalized).
+  handle        String   @db.VarChar(30)
+  firstViewedAt DateTime @default(dbgenerated("now()")) @map("first_viewed_at") @db.Timestamptz(3)
+  lastViewedAt  DateTime @default(dbgenerated("now()")) @map("last_viewed_at") @db.Timestamptz(3)
+  openCount     Int      @default(dbgenerated("1")) @map("open_count")
+
+  @@unique([memoryId, handle], map: "memory_views_memory_id_handle_key")
+  @@index([memoryId], map: "memory_views_memory_id_idx")
+  @@map("memory_views")
 }

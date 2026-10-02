@@ -36,6 +36,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   placeName: null,
   locationSource: null,
   orbColor: "#ff9a3c",
+  viewCount: 0,
   audio: { publicId: AID, format: "mka", bytes: 90_000_000, durationMs: 3_600_000 },
   ...over,
 })

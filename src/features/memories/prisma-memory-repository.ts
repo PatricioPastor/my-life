@@ -3,7 +3,12 @@ import type { Memory as MemoryRow, PrismaClient } from "@/generated/prisma/clien
 import { getPrisma } from "@/shared/db/client"
 import { withVisitor } from "@/shared/db/with-visitor"
 import type { Memory, NewMemory } from "./memory"
-import { DuplicatePublicIdError, type ApprovedMemoryReader, type MemoryRepository } from "./memory-repository"
+import {
+  DuplicatePublicIdError,
+  type ApprovedMemoryReader,
+  type MemoryRepository,
+  type ViewRecorder,
+} from "./memory-repository"
 import { storedPaletteOf, whitelistMetadata } from "./photo-details"
 
 /** The most memories one listing returns. */
@@ -36,6 +41,7 @@ function toDomain(row: MemoryRow): Memory {
     placeName: row.placeName,
     locationSource: row.locationSource,
     orbColor: row.orbColor,
+    viewCount: row.viewCount,
     audio:
       row.audioPublicId !== null && row.audioFormat !== null && row.audioBytes !== null && row.audioDurationMs !== null
         ? { publicId: row.audioPublicId, format: row.audioFormat, bytes: row.audioBytes, durationMs: row.audioDurationMs }
@@ -44,11 +50,25 @@ function toDomain(row: MemoryRow): Memory {
 }
 
 /**
+ * A row-level security refusal as it reaches us: PostgreSQL's SQLSTATE 42501 (`insufficient_privilege`, "new row violates
+ * row-level security policy"), either as the error's own code, in Prisma's `meta` for a raw query, or in its message.
+ */
+function isRlsRefusal(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  const { code, meta, message } = error as { code?: unknown; meta?: { code?: unknown }; message?: unknown }
+  return (
+    code === "42501" ||
+    meta?.code === "42501" ||
+    (typeof message === "string" && /row-level security|42501/i.test(message))
+  )
+}
+
+/**
  * Adapter over Prisma. The client is resolved lazily (`getDb`), so constructing the repository
  * never connects. Row-level security does the authorization: every read and write runs through
  * `withVisitor`, so the policies see the visitor's handle.
  */
-export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryReader {
+export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryReader, ViewRecorder {
   constructor(private readonly getDb: () => Db = getPrisma) {}
 
   async listForVisitor(handle: string): Promise<Memory[]> {
@@ -114,6 +134,29 @@ export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryR
     } catch (error) {
       // P2002 is the unique-constraint violation code; public_id and audio_public_id are the unique columns a visitor sets.
       if ((error as { code?: unknown } | null)?.code === "P2002") throw new DuplicatePublicIdError()
+      throw error
+    }
+  }
+
+  async recordView(handle: string, memoryId: string): Promise<{ counted: boolean }> {
+    try {
+      // One statement: a new (memory, visitor) pair is inserted (open_count defaults to 1, and the AFTER INSERT trigger
+      // adds the visitor to the memory's count); a known pair takes the UPDATE path instead, which fires no INSERT trigger.
+      // The only columns written are the ones app_user may. `open_count` comes back to tell the two apart: 1 is a new pair.
+      const rows = await withVisitor(
+        this.getDb(),
+        handle,
+        (tx) => tx.$queryRaw<{ open_count: number }[]>`
+          INSERT INTO memory_views (memory_id, handle)
+          VALUES (${memoryId}::uuid, ${handle})
+          ON CONFLICT (memory_id, handle) DO UPDATE
+          SET last_viewed_at = now(), open_count = memory_views.open_count + 1
+          RETURNING open_count`,
+      )
+      return { counted: Number(rows[0]?.open_count) === 1 }
+    } catch (error) {
+      // The author's own memory and one that is not approved fail the insert policy: nothing to record, nothing to say.
+      if (isRlsRefusal(error)) return { counted: false }
       throw error
     }
   }

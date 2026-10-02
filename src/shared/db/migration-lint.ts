@@ -4,8 +4,9 @@
  *  - every created identifier (table, column, type, index) is snake_case, including columns added or renamed later
  *    and renamed constraints;
  *  - row-level security is never turned off or un-forced;
- *  - nothing is granted to PUBLIC, app_user never gets UPDATE, DELETE or ALL, and no INSERT grant covers a
- *    column the database fills itself (id, status, created_at).
+ *  - nothing is granted to PUBLIC, app_user never gets DELETE or ALL, UPDATE only per column (never on an identity
+ *    column, never on memories), and no INSERT grant covers a column the database fills itself (id, status, created_at);
+ *  - a SECURITY DEFINER function pins its search_path and has EXECUTE revoked from PUBLIC.
  * `_prisma_migrations` is created by Prisma itself and is exempt from the table rules.
  */
 
@@ -13,7 +14,15 @@ export const SNAKE_CASE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/
 
 /** Columns the runtime role must never write: the database fills them. */
 const DB_FILLED_COLUMNS = ["id", "status", "created_at"]
-const FORBIDDEN_PRIVILEGES = /\b(UPDATE|DELETE|ALL|TRUNCATE|REFERENCES|TRIGGER)\b/i
+const FORBIDDEN_PRIVILEGES = /\b(DELETE|ALL|TRUNCATE|REFERENCES|TRIGGER)\b/i
+/** Columns that say which row it is or who owns it: a column-level UPDATE never covers them. */
+const IMMUTABLE_COLUMNS = ["id", "handle", "memory_id", "status", "created_at"]
+/** Tables app_user can never update, not even one column. */
+const NEVER_UPDATED_TABLES = ["memories"]
+
+/** `CREATE FUNCTION name(...) ... $tag$ body $tag$ ...;`: the name, what comes before the body, the tag, what follows it. */
+const FUNCTION =
+  /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?"?([A-Za-z_]\w*)"?([^$]*)\$([A-Za-z_]*)\$[\s\S]*?\$\3\$([^;]*);/gi
 
 const PRISMA_TABLE = "_prisma_migrations"
 const IDENT = String.raw`(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?`
@@ -119,10 +128,36 @@ export function lintMigration(rawSql: string): string[] {
     if (FORBIDDEN_PRIVILEGES.test(privileges.replace(/\([^)]*\)/g, ""))) {
       problems.push(`app_user must not get ${privileges.replace(/\s+/g, " ").trim()}`)
     }
+    const table = /\bON\s+(?:TABLE\s+)?(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?/i.exec(statement)?.[1] ?? ""
+    for (const update of privileges.matchAll(/\bUPDATE\b(?:\s*\(([^)]*)\))?/gi)) {
+      if (update[1] === undefined) {
+        problems.push(`app_user must not get table-wide UPDATE on ${table}: grant it per column`)
+        continue
+      }
+      if (NEVER_UPDATED_TABLES.includes(table)) problems.push(`app_user must not get UPDATE on ${table}`)
+      for (const column of update[1].split(",").map((c) => c.trim().replace(/"/g, ""))) {
+        if (IMMUTABLE_COLUMNS.includes(column)) problems.push(`UPDATE grant includes "${column}", which never changes`)
+      }
+    }
     const insertColumns = /INSERT\s*\(([^)]*)\)/i.exec(privileges)?.[1] ?? ""
     for (const column of insertColumns.split(",").map((c) => c.trim().replace(/"/g, ""))) {
       if (DB_FILLED_COLUMNS.includes(column)) problems.push(`INSERT grant includes "${column}", which the database fills`)
     }
+  }
+
+  for (const m of sql.matchAll(FUNCTION)) {
+    const [, name, head, , tail] = m
+    // The attributes sit before the body (`LANGUAGE ... SECURITY DEFINER AS $$`) or after it.
+    const attributes = `${head} ${tail}`
+    if (!/\bSECURITY\s+DEFINER\b/i.test(attributes)) continue
+    if (!/\bSET\s+search_path\s*(?:=|TO)\s*\S/i.test(attributes)) {
+      problems.push(`SECURITY DEFINER function "${name}" must SET search_path`)
+    }
+    const revoke = new RegExp(
+      String.raw`REVOKE\s+(?:ALL|EXECUTE)(?:\s+PRIVILEGES)?\s+ON\s+FUNCTION\s+(?:public\.)?"?${name}"?[^;]*\bFROM\s+PUBLIC\b`,
+      "i",
+    )
+    if (!revoke.test(sql)) problems.push(`SECURITY DEFINER function "${name}" needs REVOKE EXECUTE ... FROM PUBLIC`)
   }
 
   return problems

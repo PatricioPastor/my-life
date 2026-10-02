@@ -30,6 +30,7 @@ const memory = (over: Partial<Memory> = {}): Memory => ({
   placeName: "Nueva York",
   locationSource: "photo",
   orbColor: "#ff9a3c",
+  viewCount: 12,
   audio: null,
   ...over,
 })
@@ -77,6 +78,7 @@ describe("listMemoriesWith", () => {
           dominantColor: "#112233",
           place: { lat: 40.71, lng: -74.01, name: "Nueva York" },
           orbColor: "#ff9a3c",
+          viewCount: 12,
           thumbUrl: cloudinaryUrl("demo", "memories/a b", THUMB_TRANSFORM, "abcd"),
           fullUrl: cloudinaryUrl("demo", "memories/a b", FULL_TRANSFORM, "abcd"),
           // An 800 x 600 photo: every rung its 600 px side fills, plus 600 itself; nothing is upscaled.
@@ -101,6 +103,13 @@ describe("listMemoriesWith", () => {
       expect(size.url).toContain(`c_fill,g_auto,w_${size.width},h_${size.width}`)
       expect(size.url).toContain("/image/authenticated/s--")
     }
+  })
+
+  it("sends the number of distinct viewers, as it is stored, and never who they are", async () => {
+    const { full } = deps({}, [memory({ id: "a", viewCount: 0 }), memory({ id: "b", viewCount: 1234 })])
+    const result = await listMemoriesWith(full)
+    expect(result.ok && result.memories.map((m) => m.viewCount)).toEqual([0, 1234])
+    expect(JSON.stringify(result)).not.toMatch(/open_?count|viewers|memory_views/i)
   })
 
   it("never leaks the handle or the public id", async () => {

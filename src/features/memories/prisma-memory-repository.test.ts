@@ -29,6 +29,7 @@ const row = {
   placeName: "Nueva York",
   locationSource: "photo" as const,
   orbColor: "#ff9a3c" as string | null,
+  viewCount: 7,
   audioPublicId: null as string | null,
   audioFormat: null as string | null,
   audioBytes: null as number | null,
@@ -43,12 +44,14 @@ const domainRow = (() => {
 })()
 
 /** Minimal fake of the Prisma surface the adapter touches, recording call order. */
-function fakeDb(rows: unknown[] = [row], one: unknown = row) {
+function fakeDb(rows: unknown[] = [row], one: unknown = row, upsertRows: unknown[] = [{ open_count: 1 }]) {
   const calls: Array<{ name: string; args: unknown[] }> = []
   const tx = {
     $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
-      calls.push({ name: "setConfig", args: [strings.join("?"), ...values] })
-      return []
+      const sql = strings.join("?")
+      const isSetConfig = sql.includes("set_config(")
+      calls.push({ name: isSetConfig ? "setConfig" : "rawQuery", args: [sql, ...values] })
+      return isSetConfig ? [] : upsertRows
     }),
     memory: {
       create: vi.fn(async (arg: unknown) => {
@@ -388,5 +391,72 @@ describe("PrismaMemoryRepository: audio", () => {
     await expect(new PrismaMemoryRepository(() => db as never).createPending("ana", input)).rejects.toBeInstanceOf(
       DuplicatePublicIdError,
     )
+  })
+})
+
+describe("PrismaMemoryRepository: views", () => {
+  const ID = "11111111-1111-4111-8111-111111111111"
+
+  it("reads the view count of a row into the domain", async () => {
+    const { db } = fakeDb()
+    const [memory] = await new PrismaMemoryRepository(() => db as never).listForVisitor("ana")
+    expect(memory.viewCount).toBe(7)
+  })
+
+  describe("recordView", () => {
+    it("runs in one transaction that sets the visitor handle before the upsert", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).recordView("bea", ID)
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+      expect(calls.map((c) => c.name)).toEqual(["setConfig", "rawQuery"])
+      expect(calls[0].args[1]).toBe("bea")
+    })
+
+    it("is one parameterized upsert: a new pair inserts, a known one bumps last_viewed_at and open_count", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).recordView("bea", ID)
+      const [sql, ...values] = calls[1].args as [string, ...unknown[]]
+      const flat = sql.replace(/\s+/g, " ")
+      expect(flat).toContain("INSERT INTO memory_views (memory_id, handle)")
+      expect(flat).toContain("ON CONFLICT (memory_id, handle) DO UPDATE")
+      expect(flat).toContain("last_viewed_at = now()")
+      expect(flat).toContain("open_count = memory_views.open_count + 1")
+      expect(flat).toContain("RETURNING open_count")
+      // Neither the handle nor the id is spliced into the text.
+      expect(sql).not.toContain("bea")
+      expect(sql).not.toContain(ID)
+      expect(values).toEqual([ID, "bea"])
+    })
+
+    it("answers counted when the row was inserted (open_count 1) and not when it already existed", async () => {
+      const first = fakeDb([row], row, [{ open_count: 1 }]).db
+      expect(await new PrismaMemoryRepository(() => first as never).recordView("bea", ID)).toEqual({ counted: true })
+      const again = fakeDb([row], row, [{ open_count: 4 }]).db
+      expect(await new PrismaMemoryRepository(() => again as never).recordView("bea", ID)).toEqual({ counted: false })
+    })
+
+    it("answers not counted when the statement returns nothing", async () => {
+      const { db } = fakeDb([row], row, [])
+      expect(await new PrismaMemoryRepository(() => db as never).recordView("bea", ID)).toEqual({ counted: false })
+    })
+
+    it("treats a row-level security refusal (the author, a pending memory) as a quiet no-op", async () => {
+      for (const error of [
+        Object.assign(new Error("new row violates row-level security policy for table memory_views"), { code: "P2010" }),
+        Object.assign(new Error("Raw query failed"), { code: "P2010", meta: { code: "42501", message: "denied" } }),
+        Object.assign(new Error("denied"), { code: "42501" }),
+      ]) {
+        const { db, tx } = fakeDb()
+        tx.$queryRaw.mockImplementationOnce(async () => []).mockRejectedValueOnce(error)
+        expect(await new PrismaMemoryRepository(() => db as never).recordView("ana", ID)).toEqual({ counted: false })
+      }
+    })
+
+    it("lets any other failure through, for the caller to log", async () => {
+      const { db, tx } = fakeDb()
+      const boom = Object.assign(new Error("connection lost"), { code: "P1001" })
+      tx.$queryRaw.mockImplementationOnce(async () => []).mockRejectedValueOnce(boom)
+      await expect(new PrismaMemoryRepository(() => db as never).recordView("bea", ID)).rejects.toBe(boom)
+    })
   })
 })

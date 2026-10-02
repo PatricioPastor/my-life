@@ -13,6 +13,8 @@ import { resolveMapsLinkWith, type ResolveMapsLinkResult } from "./place/resolve
 import { suggestPlaceWith, type SuggestPlaceResult } from "./place/suggest-place"
 import type { ListMemoriesResult } from "./memory-view"
 import { prepareUploadWith } from "./prepare-upload"
+import { recordMemoryViewWith } from "./views/record-view"
+import type { RecordViewResult } from "./views/view-result"
 import { shareMemoryWith } from "./share/share-memory"
 import type { ShareMemoryResult } from "./share/share-view"
 import { PrismaMemoryRepository } from "./prisma-memory-repository"
@@ -103,4 +105,12 @@ export async function shareMemory(input: { id: string }): Promise<ShareMemoryRes
     },
     input,
   )
+}
+
+/**
+ * Records that the current visitor opened a memory, for the distinct-viewers count. Needs a session; the author's own
+ * memory and any that is not approved are not counted. Never throws. `counted` says whether this visitor was new.
+ */
+export async function recordMemoryView(input: { id: string }): Promise<RecordViewResult> {
+  return recordMemoryViewWith({ currentVisitor, repository: () => new PrismaMemoryRepository(), log }, input)
 }

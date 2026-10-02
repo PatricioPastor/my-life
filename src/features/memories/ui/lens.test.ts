@@ -17,6 +17,7 @@ const memory = (id: string, over: Partial<MemoryView> = {}): MemoryView => ({
   dominantColor: null,
   place: null,
   orbColor: "#8ab4ff",
+  viewCount: 0,
   thumbUrl: `${id}-t`,
   fullUrl: `${id}-f`,
   photo: { sizes: PHOTO_RUNGS.map((width) => ({ width, url: `${id}-${width}` })) },

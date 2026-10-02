@@ -42,6 +42,7 @@ const MEMORY: MemoryView = {
   dominantColor: null,
   place: null,
   orbColor: "#8ab4ff",
+  viewCount: 0,
   thumbUrl: null,
   fullUrl: null,
   audio: { url: "https://res.cloudinary.com/demo/video/authenticated/s--x--/f_mp3/a", durationMs: 4000 },

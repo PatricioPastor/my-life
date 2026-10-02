@@ -17,6 +17,7 @@ const memory = (id: string, happenedOn: string, over: Partial<MemoryView> = {}):
   dominantColor: null,
   place: null,
   orbColor: "#8ab4ff",
+  viewCount: 0,
   thumbUrl: null,
   fullUrl: null,
   audio: null,

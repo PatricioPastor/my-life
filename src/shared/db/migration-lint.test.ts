@@ -97,7 +97,6 @@ CREATE INDEX "myThings_idx" ON "myThings"("createdAt");
   it("flags grants that let app_user or PUBLIC update, delete or do everything", () => {
     for (const grant of [
       `GRANT UPDATE ON "things" TO app_user;`,
-      `GRANT UPDATE ("a") ON "things" TO app_user;`,
       `GRANT DELETE ON "things" TO app_user;`,
       `GRANT ALL ON "things" TO app_user;`,
       `GRANT ALL PRIVILEGES ON "things" TO PUBLIC;`,
@@ -107,6 +106,60 @@ CREATE INDEX "myThings_idx" ON "myThings"("createdAt");
     }
     expect(lintMigration(`GRANT SELECT ON "things" TO app_user;
 GRANT INSERT ("a_b") ON "things" TO app_user;`)).toEqual([])
+  })
+
+  it("allows UPDATE only per column, and never on the identity columns or on memories", () => {
+    expect(lintMigration(`GRANT UPDATE ("last_viewed_at", "open_count") ON "things" TO app_user;`)).toEqual([])
+    expect(lintMigration(`GRANT UPDATE ON "things" TO app_user;`).join("\n")).toContain("table-wide UPDATE")
+    for (const column of ["id", "handle", "memory_id", "status", "created_at"]) {
+      expect(lintMigration(`GRANT UPDATE ("a", "${column}") ON "things" TO app_user;`).join("\n"), column).toContain(column)
+    }
+    expect(lintMigration(`GRANT UPDATE ("caption") ON "memories" TO app_user;`).join("\n")).toContain("memories")
+    expect(lintMigration(`GRANT SELECT, UPDATE ("a") ON "things" TO PUBLIC;`)).not.toEqual([])
+  })
+
+  it("never allows DELETE, not even next to a column-level UPDATE", () => {
+    expect(lintMigration(`GRANT UPDATE ("a"), DELETE ON "things" TO app_user;`).join("\n")).toContain("DELETE")
+  })
+
+  describe("SECURITY DEFINER functions", () => {
+    const fn = (attributes: string, extra = "") => `
+CREATE FUNCTION "bump_things"() RETURNS trigger
+LANGUAGE plpgsql ${attributes}
+AS $$
+BEGIN
+  UPDATE "things" SET "n" = "n" + 1;
+  RETURN NEW;
+END;
+$$;
+${extra}`
+    const revoke = `REVOKE EXECUTE ON FUNCTION "bump_things"() FROM PUBLIC;`
+
+    it("accepts one that pins search_path and revokes EXECUTE from PUBLIC", () => {
+      expect(lintMigration(fn("SECURITY DEFINER SET search_path = public, pg_temp", revoke))).toEqual([])
+    })
+
+    it("flags one without SET search_path", () => {
+      expect(lintMigration(fn("SECURITY DEFINER", revoke)).join("\n")).toContain("search_path")
+    })
+
+    it("reads the attributes after the body too", () => {
+      const after = `
+CREATE FUNCTION "bump_things"() RETURNS trigger AS $$ BEGIN RETURN NEW; END; $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+${revoke}`
+      expect(lintMigration(after)).toEqual([])
+      expect(lintMigration(after.replace("SET search_path = public, pg_temp", "")).join("\n")).toContain("search_path")
+    })
+
+    it("flags one that leaves EXECUTE with PUBLIC", () => {
+      expect(lintMigration(fn("SECURITY DEFINER SET search_path = public, pg_temp")).join("\n")).toContain("REVOKE")
+    })
+
+    it("does not look at a plain (invoker) function, nor at a comment", () => {
+      expect(lintMigration(fn(""))).toEqual([])
+      expect(lintMigration(`-- CREATE FUNCTION x() ... SECURITY DEFINER\n${good}`)).toEqual([])
+    })
   })
 
   it("flags an INSERT grant on a column the database must fill (id, status, created_at)", () => {
@@ -404,5 +457,89 @@ describe("the long audio migration", () => {
 
   it("leaves row-level security and the grants alone", () => {
     expect(code).not.toMatch(/ROW\s+LEVEL\s+SECURITY|CREATE\s+POLICY|DROP\s+POLICY|GRANT|REVOKE/i)
+  })
+})
+
+describe("the memory views migration", () => {
+  const dir = readdirSync(MIGRATIONS_DIR).find((name) => name.endsWith("_memory_views"))
+  const sql = dir ? readFileSync(path.join(MIGRATIONS_DIR, dir, "migration.sql"), "utf8") : ""
+  const code = sql.replace(/--[^\n]*/g, "")
+  const norm = code.replace(/\s+/g, " ")
+  const columnsOf = (privilege: string) => {
+    const grant = new RegExp(`GRANT\\s+${privilege}\\s*\\(([^)]*)\\)\\s+ON\\s+"memory_views"\\s+TO\\s+app_user`, "i").exec(code)
+    return grant ? grant[1].split(",").map((c) => c.trim().replace(/"/g, "")).sort() : null
+  }
+
+  it("exists and sorts after the long audio migration", () => {
+    expect(dir).toBeDefined()
+    expect(dir! > "20261004000000_memory_long_audio").toBe(true)
+  })
+
+  it("passes the migration lint", () => {
+    expect(lintMigration(sql)).toEqual([])
+  })
+
+  it("creates memory_views with a cascading foreign key, a unique pair and an index on memory_id", () => {
+    expect(norm).toMatch(/CREATE TABLE "memory_views"/)
+    expect(norm).toMatch(/"id" UUID NOT NULL DEFAULT gen_random_uuid\(\)/i)
+    expect(norm).toMatch(/"memory_id" UUID NOT NULL/)
+    expect(norm).toMatch(/"handle" VARCHAR\(30\) NOT NULL/)
+    expect(norm).toMatch(/"first_viewed_at" TIMESTAMPTZ\(3\) NOT NULL DEFAULT now\(\)/i)
+    expect(norm).toMatch(/"last_viewed_at" TIMESTAMPTZ\(3\) NOT NULL DEFAULT now\(\)/i)
+    expect(norm).toMatch(/"open_count" INTEGER NOT NULL DEFAULT 1/)
+    expect(norm).toMatch(/CREATE UNIQUE INDEX "memory_views_memory_id_handle_key" ON "memory_views"\("memory_id", "handle"\)/)
+    expect(norm).toMatch(/CREATE INDEX "memory_views_memory_id_idx" ON "memory_views"\("memory_id"\)/)
+    expect(norm).toMatch(/FOREIGN KEY \("memory_id"\) REFERENCES "memories"\("id"\) ON DELETE CASCADE/)
+    expect(norm).toMatch(/CHECK \("open_count" > 0\)/)
+  })
+
+  it("enables and forces row-level security, with the three own-row policies for app_user and none for DELETE", () => {
+    expect(norm).toMatch(/ALTER TABLE "memory_views" ENABLE ROW LEVEL SECURITY/)
+    expect(norm).toMatch(/ALTER TABLE "memory_views" FORCE ROW LEVEL SECURITY/)
+    for (const command of ["SELECT", "INSERT", "UPDATE"]) {
+      expect(norm, command).toMatch(new RegExp(`CREATE POLICY \\w+ ON "memory_views" FOR ${command} TO app_user`))
+    }
+    expect(code).not.toMatch(/CREATE\s+POLICY\s+\w+\s+ON\s+"memory_views"\s+FOR\s+(DELETE|ALL)/i)
+    const own = /handle\s*=\s*NULLIF\(current_setting\('app\.handle',\s*true\),\s*''\)/gi
+    // SELECT, INSERT, UPDATE USING and UPDATE WITH CHECK.
+    expect([...code.matchAll(own)].length).toBeGreaterThanOrEqual(4)
+  })
+
+  it("lets an insert through only for an approved memory the visitor did not write", () => {
+    expect(norm).toMatch(
+      /FOR INSERT TO app_user WITH CHECK \( handle = NULLIF\(current_setting\('app\.handle', true\), ''\) AND EXISTS \( SELECT 1 FROM "memories" m WHERE m\.id = memory_id AND m\.status = 'approved' AND m\.handle <> NULLIF\(current_setting\('app\.handle', true\), ''\) \) \)/,
+    )
+  })
+
+  it("grants app_user column-level INSERT, UPDATE and SELECT, and never DELETE", () => {
+    expect(columnsOf("INSERT")).toEqual(["handle", "memory_id"])
+    expect(columnsOf("UPDATE")).toEqual(["last_viewed_at", "open_count"])
+    expect(columnsOf("SELECT")).toEqual(["first_viewed_at", "handle", "last_viewed_at", "memory_id", "open_count"])
+    expect(code).not.toMatch(/GRANT[^;]*\b(DELETE|ALL)\b|TO\s+PUBLIC/i)
+    // Every grant on the table is one of those three column-level ones.
+    expect([...code.matchAll(/GRANT\s+(\w+)\s*\(/gi)].map((m) => m[1].toUpperCase()).sort()).toEqual(["INSERT", "SELECT", "UPDATE"])
+    expect([...code.matchAll(/GRANT\s+\w+\s+ON\s+"memory_views"/gi)]).toEqual([])
+  })
+
+  it("adds memories.view_count as a non-negative integer that defaults to 0, and grants app_user nothing more on memories", () => {
+    expect(norm).toMatch(/ALTER TABLE "memories" ADD COLUMN "view_count" INTEGER NOT NULL DEFAULT 0/)
+    expect(norm).toMatch(/CONSTRAINT "memories_view_count_non_negative" CHECK \("view_count" >= 0\)/)
+    expect(code).not.toMatch(/GRANT[^;]*ON\s+"memories"/i)
+  })
+
+  it("counts through an owner-owned SECURITY DEFINER trigger with a pinned search_path, run only after a real INSERT", () => {
+    expect(norm).toMatch(/CREATE FUNCTION "memory_views_count_view"\(\) RETURNS trigger/)
+    expect(norm).toMatch(/SECURITY DEFINER/)
+    expect(norm).toMatch(/SET search_path = public, pg_temp/)
+    expect(norm).toMatch(/UPDATE "memories" SET "view_count" = "view_count" \+ 1 WHERE "id" = NEW\."memory_id"/)
+    expect(norm).toMatch(/REVOKE (ALL|EXECUTE) ON FUNCTION "memory_views_count_view"\(\) FROM PUBLIC/)
+    expect(norm).toMatch(
+      /CREATE TRIGGER "memory_views_count_view" AFTER INSERT ON "memory_views" FOR EACH ROW EXECUTE FUNCTION "memory_views_count_view"\(\)/,
+    )
+    expect(code).not.toMatch(/AFTER\s+(UPDATE|DELETE)|INSERT\s+OR\s+UPDATE/i)
+  })
+
+  it("is expand-only: nothing is dropped, renamed or emptied", () => {
+    expect(code).not.toMatch(/DROP\s+(COLUMN|TABLE|CONSTRAINT|INDEX|TYPE|POLICY)|RENAME|DELETE\s+FROM|TRUNCATE|ALTER\s+COLUMN/i)
   })
 })

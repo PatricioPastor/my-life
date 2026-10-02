@@ -25,6 +25,8 @@ export interface MemoryView {
   place: MemoryPlace | null
   /** `#rrggbb`: the color the memory's orb glows in. Always valid, and always light enough for the dark void. */
   orbColor: string
+  /** How many distinct visitors have opened it. Only the number: who they are never leaves the server. */
+  viewCount: number
   /** Null when there is no photo. */
   thumbUrl: string | null
   fullUrl: string | null

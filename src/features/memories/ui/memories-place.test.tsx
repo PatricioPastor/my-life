@@ -32,6 +32,7 @@ const view = (id: string, caption: string, over: Partial<MemoryView> = {}): Memo
   dominantColor: null,
   place: null,
   orbColor: "#8ab4ff",
+  viewCount: 0,
   thumbUrl: `https://res.cloudinary.com/demo/image/upload/t/${id}`,
   fullUrl: `https://res.cloudinary.com/demo/image/upload/f/${id}`,
   audio: null,

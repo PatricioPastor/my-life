@@ -30,6 +30,20 @@ export interface ApprovedMemoryReader {
   findApproved(id: string): Promise<Memory | null>
 }
 
+/**
+ * Port: counting who opened a memory. Apart from {@link MemoryRepository} on purpose: it only ever writes one row, under
+ * the visitor's own handle, and the handles it stores are never read back by the application.
+ */
+export interface ViewRecorder {
+  /**
+   * Records that this visitor opened this memory: the first time adds them to the distinct viewers (`counted: true`), a
+   * later one only bumps their `open_count` and `last_viewed_at` (`counted: false`). Runs under the visitor's handle, so
+   * row-level security decides: an author's own memory or one that is not approved is refused by the database, and that
+   * refusal is a quiet no-op (`counted: false`). Any other failure throws.
+   */
+  recordView(handle: string, memoryId: string): Promise<{ counted: boolean }>
+}
+
 /** A memory with this Cloudinary public id already exists. */
 export class DuplicatePublicIdError extends Error {
   constructor() {
