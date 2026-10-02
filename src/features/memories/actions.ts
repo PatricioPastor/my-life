@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto"
 import { currentVisitor, getSessionSecret } from "@/features/gate/session"
+import { resolveSiteUrl } from "@/shared/site/site-url"
 import { CloudinaryAdminAssets, readCloudinaryConfig } from "./cloudinary-admin-assets"
 import { createMemoryWith } from "./create-memory"
 import { readMaxAudioBytes } from "./max-audio-bytes"
@@ -12,6 +13,8 @@ import { resolveMapsLinkWith, type ResolveMapsLinkResult } from "./place/resolve
 import { suggestPlaceWith, type SuggestPlaceResult } from "./place/suggest-place"
 import type { ListMemoriesResult } from "./memory-view"
 import { prepareUploadWith } from "./prepare-upload"
+import { shareMemoryWith } from "./share/share-memory"
+import type { ShareMemoryResult } from "./share/share-view"
 import { PrismaMemoryRepository } from "./prisma-memory-repository"
 import type { CreateMemoryInput, CreateMemoryResult, PrepareUploadInput, PrepareUploadResult } from "./upload-view"
 
@@ -83,4 +86,21 @@ export async function suggestPlace(input: { lat: number; lng: number }): Promise
  */
 export async function resolveMapsLink(input: { url: string }): Promise<ResolveMapsLinkResult> {
   return resolveMapsLinkWith({ currentVisitor, follow: (url) => followShortLink(url), geocoder: getReverseGeocoder, log }, input)
+}
+
+/**
+ * The link to share an approved memory. Needs a session; a pending or rejected memory, or one the visitor cannot see,
+ * has no link. The server signs the token (see `signShareToken`): the client never builds one.
+ */
+export async function shareMemory(input: { id: string }): Promise<ShareMemoryResult> {
+  return shareMemoryWith(
+    {
+      currentVisitor,
+      repository: () => new PrismaMemoryRepository(),
+      secret: getSessionSecret(),
+      siteUrl: resolveSiteUrl(process.env),
+      log,
+    },
+    input,
+  )
 }

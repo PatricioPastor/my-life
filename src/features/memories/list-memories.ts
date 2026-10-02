@@ -40,7 +40,12 @@ function toPhoto(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): Memo
   return sizes.length > 0 ? { sizes } : null
 }
 
-export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryConfig): MemoryView | null {
+export function toMemoryView(
+  memory: Memory,
+  { cloudName, apiSecret }: DeliveryConfig,
+  /** Where the audio plays from; the session route unless a guest route is given (see `sharedAudioPath`). */
+  audioUrl: string = memoryAudioPath(memory.id),
+): MemoryView | null {
   if (memory.status === "rejected") return null
   // A row with neither a photo nor an audio cannot exist (a CHECK refuses it); if one did, it would show nothing.
   if (memory.publicId === null && memory.audio === null) return null
@@ -62,7 +67,7 @@ export function toMemoryView(memory: Memory, { cloudName, apiSecret }: DeliveryC
     photo: toPhoto(memory, { cloudName, apiSecret }),
     // Neither the original (webm, ogg, m4a...) nor the signed mp3 URL leaves the server: the browser plays from our own
     // route, which streams the audio with byte ranges (Safari and iOS cannot seek a long audio without them).
-    audio: memory.audio ? { url: memoryAudioPath(memory.id), durationMs: memory.audio.durationMs } : null,
+    audio: memory.audio ? { url: audioUrl, durationMs: memory.audio.durationMs } : null,
   }
 }
 

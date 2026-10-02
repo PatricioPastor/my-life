@@ -155,6 +155,29 @@ describe("PrismaMemoryRepository", () => {
     })
   })
 
+  describe("findApproved (a guest, with a share link)", () => {
+    const ID = "11111111-1111-4111-8111-111111111111"
+
+    it("reads inside one transaction with an empty handle, so row-level security only lets approved rows through", async () => {
+      const { db, calls } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).findApproved(ID)
+      expect(db.$transaction).toHaveBeenCalledTimes(1)
+      expect(calls.map((c) => c.name)).toEqual(["setConfig", "findFirst"])
+      expect(calls[0].args[1]).toBe("")
+    })
+
+    it("asks for that id among the approved rows only, restating the policy", async () => {
+      const { db, tx } = fakeDb()
+      await new PrismaMemoryRepository(() => db as never).findApproved(ID)
+      expect(tx.memory.findFirst).toHaveBeenCalledWith({ where: { id: ID, status: "approved" } })
+    })
+
+    it("maps the row to the domain, and answers null when there is none", async () => {
+      expect(await new PrismaMemoryRepository(() => fakeDb().db as never).findApproved(ID)).toEqual(domainRow)
+      expect(await new PrismaMemoryRepository(() => fakeDb([], null).db as never).findApproved(ID)).toBeNull()
+    })
+  })
+
   describe("createPending", () => {
     it("runs inside one transaction", async () => {
       const { db } = fakeDb()

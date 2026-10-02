@@ -21,6 +21,15 @@ export interface MemoryRepository {
   countRecentBy(handle: string, since: Date): Promise<number>
 }
 
+/**
+ * Port: what a guest holding a share link may read. Apart from {@link MemoryRepository} on purpose: it has no visitor,
+ * and the only thing it can ever return is an approved memory.
+ */
+export interface ApprovedMemoryReader {
+  /** One APPROVED memory by id, or null (missing, pending and rejected look the same). Runs without a visitor handle. */
+  findApproved(id: string): Promise<Memory | null>
+}
+
 /** A memory with this Cloudinary public id already exists. */
 export class DuplicatePublicIdError extends Error {
   constructor() {

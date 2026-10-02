@@ -1,17 +1,29 @@
 import "server-only"
 import { cloudinaryAudioUrl } from "./cloudinary-url"
 import type { DeliveryConfig } from "./list-memories"
-import type { MemoryRepository } from "./memory-repository"
+import type { ApprovedMemoryReader, MemoryRepository } from "./memory-repository"
+import { verifyShareToken } from "./share/share-token"
 
-export interface ServeAudioDeps {
-  currentVisitor: () => Promise<{ handle: string } | null>
-  /** Lazy, so building it (which runs the runtime-role guard) happens inside the failure handling. */
-  repository: () => MemoryRepository
+/** What streaming an audio needs, whoever is asking. */
+export interface AudioStreamDeps {
   /** Null when a variable is missing. The secret only signs the delivery URL; it never leaves the server. */
   cloudinary: DeliveryConfig | null
   fetch: typeof fetch
   /** One short line, never with personal data or a URL. */
   log: (message: string) => void
+}
+
+export interface ServeAudioDeps extends AudioStreamDeps {
+  currentVisitor: () => Promise<{ handle: string } | null>
+  /** Lazy, so building it (which runs the runtime-role guard) happens inside the failure handling. */
+  repository: () => MemoryRepository
+}
+
+export interface ServeSharedAudioDeps extends AudioStreamDeps {
+  /** SESSION_SECRET, or null when it is not configured. */
+  secret: string | null
+  /** Lazy, like {@link ServeAudioDeps.repository}. It only ever returns approved memories. */
+  repository: () => ApprovedMemoryReader
 }
 
 /**
@@ -117,16 +129,12 @@ export async function serveAudioWith(
   deps: ServeAudioDeps,
   input: { id: string; range: string | null; signal?: AbortSignal },
 ): Promise<Response> {
-  const cloudinary = deps.cloudinary
   let publicId: string
   try {
     const visitor = await deps.currentVisitor()
     if (!visitor) return fail(401)
     if (!UUID.test(input.id)) return fail(404)
-    if (!cloudinary?.cloudName || !cloudinary.apiSecret) {
-      deps.log("Cloudinary is not configured.")
-      return fail(503)
-    }
+    if (!isConfigured(deps)) return fail(503)
     const memory = await deps.repository().findForVisitor(visitor.handle, input.id)
     if (!memory || memory.status === "rejected" || !memory.audio) return fail(404)
     publicId = memory.audio.publicId
@@ -136,13 +144,60 @@ export async function serveAudioWith(
     return fail(503)
   }
 
-  const range = parseRange(input.range)
+  return streamAudio(deps, publicId, input.range, input.signal)
+}
+
+/**
+ * The audio of a SHARED memory, for a guest with no session: the share token is the credential. It names one memory
+ * and nothing else, so it can only ever reach that memory's audio, and the memory is read as a guest (approved only).
+ * Streaming, ranges, the 416 and the 503 "processing" are exactly those of {@link serveAudioWith}.
+ */
+export async function serveSharedAudioWith(
+  deps: ServeSharedAudioDeps,
+  input: { token: string; range: string | null; signal?: AbortSignal },
+): Promise<Response> {
+  let publicId: string
+  try {
+    if (!deps.secret) {
+      deps.log("The session secret is not configured.")
+      return fail(503)
+    }
+    const id = verifyShareToken(input.token, deps.secret)
+    if (!id) return fail(404)
+    if (!isConfigured(deps)) return fail(503)
+    const memory = await deps.repository().findApproved(id)
+    if (!memory || memory.status !== "approved" || !memory.audio) return fail(404)
+    publicId = memory.audio.publicId
+  } catch (error) {
+    // The name only: messages from the database layer can carry query parameters.
+    deps.log(`Reading a shared memory's audio failed (${error instanceof Error ? error.name : "unknown"}).`)
+    return fail(503)
+  }
+  return streamAudio(deps, publicId, input.range, input.signal)
+}
+
+function isConfigured(deps: AudioStreamDeps): boolean {
+  if (deps.cloudinary?.cloudName && deps.cloudinary.apiSecret) return true
+  deps.log("Cloudinary is not configured.")
+  return false
+}
+
+/** Streams the transcoded mp3 of one stored audio from Cloudinary, with byte ranges (see {@link serveAudioWith}). */
+async function streamAudio(
+  deps: AudioStreamDeps,
+  publicId: string,
+  rangeHeader: string | null,
+  signal: AbortSignal | undefined,
+): Promise<Response> {
+  const cloudinary = deps.cloudinary
+  if (!cloudinary) return fail(503)
+  const range = parseRange(rangeHeader)
   let upstream: Response
   try {
     const url = cloudinaryAudioUrl(cloudinary.cloudName, publicId, cloudinary.apiSecret)
     upstream = await deps.fetch(url, {
       headers: range ? { Range: upstreamRange(range) } : {},
-      signal: input.signal,
+      signal,
       cache: "no-store",
     })
   } catch (error) {

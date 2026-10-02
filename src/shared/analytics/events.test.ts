@@ -53,3 +53,10 @@ describe("memory_audio_recorded", () => {
     expect(sanitizeProps("memory_audio_recorded", { durationMs: 4200, handle: "ana", url: "blob:x" })).toEqual({})
   })
 })
+
+describe("sharing events", () => {
+  it.each(["memory_shared", "shared_memory_opened"] as const)("records %s with no props: never the token, the memory or the url", (name) => {
+    expect(sanitizeProps(name, {})).toEqual({})
+    expect(sanitizeProps(name, { token: "abc.def", id: "11111111-1111-4111-8111-111111111111", url: "https://x/m/abc", handle: "ana" })).toEqual({})
+  })
+})

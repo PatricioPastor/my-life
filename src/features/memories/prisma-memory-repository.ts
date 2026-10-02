@@ -3,7 +3,7 @@ import type { Memory as MemoryRow, PrismaClient } from "@/generated/prisma/clien
 import { getPrisma } from "@/shared/db/client"
 import { withVisitor } from "@/shared/db/with-visitor"
 import type { Memory, NewMemory } from "./memory"
-import { DuplicatePublicIdError, type MemoryRepository } from "./memory-repository"
+import { DuplicatePublicIdError, type ApprovedMemoryReader, type MemoryRepository } from "./memory-repository"
 import { storedPaletteOf, whitelistMetadata } from "./photo-details"
 
 /** The most memories one listing returns. */
@@ -48,7 +48,7 @@ function toDomain(row: MemoryRow): Memory {
  * never connects. Row-level security does the authorization: every read and write runs through
  * `withVisitor`, so the policies see the visitor's handle.
  */
-export class PrismaMemoryRepository implements MemoryRepository {
+export class PrismaMemoryRepository implements MemoryRepository, ApprovedMemoryReader {
   constructor(private readonly getDb: () => Db = getPrisma) {}
 
   async listForVisitor(handle: string): Promise<Memory[]> {
@@ -69,6 +69,13 @@ export class PrismaMemoryRepository implements MemoryRepository {
     const row = await withVisitor(this.getDb(), handle, (tx) =>
       tx.memory.findFirst({ where: { id, OR: [{ status: "approved" }, { handle, status: "pending" }] } }),
     )
+    return row ? toDomain(row) : null
+  }
+
+  async findApproved(id: string): Promise<Memory | null> {
+    // A guest has no handle: an empty one makes `app.handle` NULL, so the select policy lets only approved rows through.
+    // The explicit `status` restates it, so a loosened policy cannot widen what a link reveals.
+    const row = await withVisitor(this.getDb(), "", (tx) => tx.memory.findFirst({ where: { id, status: "approved" } }))
     return row ? toDomain(row) : null
   }
 
