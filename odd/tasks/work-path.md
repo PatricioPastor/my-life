@@ -74,7 +74,7 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - Feed the Proyectos facet and `Reader` with real project entries.
   - Add `next.config.ts` tracing.
   - Route: delegated (writer trigger, 2+ non-trivial files).
-- [ ] **T2 — `/trabajo` work mode.**
+- [x] **T2 — `/trabajo` work mode.** Done in `49d0eda`; review approved.
   - Public `/trabajo` and `/trabajo/[slug]`.
   - The journey starts at `sky` with no gate, only Proyectos lit, and no orb.
   - Deep link to an entry, plus the "Mi historia" link.
@@ -84,6 +84,11 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - "Mi trabajo" goes to `/trabajo`; "Mi historia" continues today's flow.
   - Tests.
   - Route: delegated (writer trigger).
+- [ ] **T4 — Make `/trabajo` indexable.**
+  - `robots: index, follow` and a canonical URL on `/trabajo` and `/trabajo/[slug]`.
+  - A `sitemap.ts` covering those routes, built from `site-url`.
+  - Deep-link analytics events (`R3-deeplink-analytics`).
+  - Route: delegated. The same writer does T3 and T4, one commit each, and both are reviewed as one slice.
 
 ## Checks
 
@@ -128,3 +133,7 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - **Routes:** `generateStaticParams`, `generateMetadata` (from the project's title and summary), `dynamicParams = false` plus `notFound()`. The `og:image` is restored explicitly.
   - **Folded in:** `R3-facets-identity` (`useMemo`, with an honest RED from temporarily removing it) and `R3-empty-projects-path` (tests in both modes).
   - **Open for the user:** both work routes inherit `noindex, nofollow` from the root layout. Moving around inside `/trabajo` does not change the URL.
+  - **RDD:** assessed medium (`slice_budget_reached`), consent granted, one lens (reliability). Lineage `review-cd08c65b926dff7e` over `4f9fc3b..b7a1db8` was **approved and acknowledged**, and its authority is burned. The reviewed boundary is now `b7a1db8`.
+  - **Advisory:** `R3-deeplink-analytics` (suggestion). A deep link starts directly on `entry`, so it skips the `facet_opened` and `entry_opened` events. This is folded into T4.
+- 2026-10-06, **T2 done.**
+- 2026-10-06, **User decision:** "Indexar solo /trabajo". `/trabajo` and `/trabajo/[slug]` become indexable and get a sitemap. The rest of the site stays `noindex`. Added as T4.
