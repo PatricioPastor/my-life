@@ -75,6 +75,31 @@ describe("layoutSkySparkles", () => {
     expect(layoutSkySparkles(11, ANCHORS)).not.toEqual(layoutSkySparkles(12, ANCHORS))
   })
 
+  describe("with anchors turned off", () => {
+    // The work galaxy: only the third star (Proyectos) is lit.
+    const OFF = ANCHORS.map((a, i) => (i === 2 ? a : { ...a, off: true }))
+
+    it("hangs an off anchor as a faint sparkle, in its place and its tint", () => {
+      const out = layoutSkySparkles(11, OFF)
+      for (const i of [0, 1, 3]) {
+        expect([out[i].x, out[i].y, out[i].tint]).toEqual([ANCHORS[i].x, ANCHORS[i].y, ANCHORS[i].tint])
+        // No bigger than the faintest seeded sparkle.
+        expect(out[i].reach).toBeLessThanOrEqual(0.022)
+        expect(out[i].core).toBeLessThanOrEqual(0.004)
+      }
+    })
+
+    it("keeps the lit anchor and the rest of the sky exactly as with every star lit", () => {
+      for (const seed of [11, 4, 23]) {
+        const lit = layoutSkySparkles(seed, ANCHORS)
+        const off = layoutSkySparkles(seed, OFF)
+        expect(off[2]).toEqual(lit[2])
+        expect(off.slice(ANCHORS.length)).toEqual(lit.slice(ANCHORS.length))
+        expect(off.map((s) => s.phase)).toEqual(lit.map((s) => s.phase))
+      }
+    })
+  })
+
   it("works without anchors", () => {
     expect(layoutSkySparkles(3, [])).toHaveLength(6)
   })

@@ -15,4 +15,10 @@ describe("content tracing", () => {
     expect(nextConfig.outputFileTracingIncludes?.["/"]).toContain("./content/**/*.md")
     expect(existsSync("content/projects/voltaicco.md")).toBe(true)
   })
+
+  it("ships the case studies with /trabajo and its deep links, which read them too", () => {
+    for (const route of ["/trabajo", "/trabajo/[slug]"]) {
+      expect(nextConfig.outputFileTracingIncludes?.[route]).toContain("./content/projects/**/*.md")
+    }
+  })
 })

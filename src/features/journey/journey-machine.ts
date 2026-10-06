@@ -4,6 +4,12 @@
  */
 export type Screen = "gate" | "sky" | "place" | "entry" | "orbWarp" | "memories" | "orbReturn"
 
+/**
+ * `story` is the whole journey behind the gate. `work` is the public galaxy at /trabajo: no gate, no memories, and only
+ * Proyectos lit.
+ */
+export type JourneyMode = "story" | "work"
+
 /** A point of the sky in 0..1 stage fractions, y up (the same space as the facet stars). */
 export interface SkyPoint {
   x: number
@@ -39,6 +45,16 @@ export const initialJourneyState: JourneyState = {
   entryIndex: 0,
   page: 0,
   hoveredFacet: null,
+}
+
+/**
+ * Where a journey starts. The story waits at the gate. The work opens on the sky, or, for a deep link, straight on that
+ * case study inside Proyectos, so Back walks out through the list to the sky. A negative index means no case study.
+ */
+export function initialJourneyStateFor(mode: JourneyMode, entryIndex?: number): JourneyState {
+  if (mode === "story") return initialJourneyState
+  if (entryIndex === undefined || entryIndex < 0) return { ...initialJourneyState, screen: "sky" }
+  return { ...initialJourneyState, screen: "entry", facetId: "projects", entryIndex, page: 0 }
 }
 
 export function journeyReducer(state: JourneyState, event: JourneyEvent): JourneyState {

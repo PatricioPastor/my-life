@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { FACETS } from "./content"
+import { FACETS, workFacets } from "./content"
 import { FacetStars } from "./facet-stars"
 
 afterEach(() => {
@@ -45,5 +45,56 @@ describe("FacetStars", () => {
     for (const f of FACETS) {
       expect(screen.getByRole("button", { name: f.name }).querySelector("span")?.className).toContain("left-11")
     }
+  })
+})
+
+describe("FacetStars with stars turned off", () => {
+  const OFF = ["Historias", "Escritos", "Ahora"]
+
+  function setupWork() {
+    const onHover = vi.fn()
+    const onOpen = vi.fn()
+    render(<FacetStars facets={workFacets(FACETS)} hovered={null} sky={{ current: null }} onHover={onHover} onOpen={onOpen} />)
+    return { onHover, onOpen }
+  }
+
+  it("offers only the lit star: the off ones are not buttons, and nothing else can take focus", () => {
+    setupWork()
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Proyectos"])
+    for (const name of OFF) expect(screen.queryByRole("button", { name })).toBeNull()
+    expect(document.querySelectorAll("[tabindex]")).toHaveLength(0)
+  })
+
+  it("still draws the off stars' names, faint, and keeps them out of the accessibility tree", () => {
+    setupWork()
+    for (const name of OFF) {
+      const label = screen.getByText(name)
+      expect(label.className).toContain("text-ink-faint")
+      expect(label.closest("[aria-hidden='true']")).not.toBeNull()
+      expect(document.getElementById(`facet-${FACETS.find((f) => f.name === name)!.id}-description`)).toBeNull()
+    }
+  })
+
+  it("gives the cursor nothing to capture on an off star, and ignores a press or a hover on it", () => {
+    const { onHover, onOpen } = setupWork()
+    for (const name of OFF) {
+      const star = screen.getByText(name).closest("[aria-hidden='true']") as HTMLElement
+      expect(star.closest("[data-magnetic]")).toBeNull()
+      expect(star.querySelector("[data-magnetic], [data-cursor-id]")).toBeNull()
+      expect(star.className).toContain("pointer-events-none")
+      fireEvent.click(star)
+      fireEvent.mouseEnter(star)
+    }
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(onHover).not.toHaveBeenCalled()
+  })
+
+  it("keeps the lit star exactly as in the story", () => {
+    const { onOpen } = setupWork()
+    const button = screen.getByRole("button", { name: "Proyectos" })
+    expect(button.dataset.magnetic).toBe("strong")
+    expect(button.dataset.cursorId).toBe("projects")
+    fireEvent.click(button)
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "projects" }))
   })
 })

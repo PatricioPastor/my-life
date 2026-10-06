@@ -1,4 +1,4 @@
-export { FACETS, FACET_ANCHORS, facetsWithProjects, findFacet } from "./content"
+export { FACETS, FACET_ANCHORS, facetAnchors, facetsWithProjects, findFacet, workFacets } from "./content"
 export type { Facet, FacetEntry, FacetEntryDetail } from "./content"
 export { FacetStars } from "./facet-stars"
 export { FacetPlace } from "./facet-place"

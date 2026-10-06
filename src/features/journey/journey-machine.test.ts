@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   initialJourneyState,
+  initialJourneyStateFor,
   journeyReducer,
   focusIndexFor,
   listSideFor,
@@ -81,6 +82,37 @@ describe("journeyReducer", () => {
   it("tracks the hovered facet", () => {
     expect(journeyReducer(s({ screen: "sky" }), { type: "hover", facetId: "now" }).hoveredFacet).toBe("now")
     expect(journeyReducer(s({ hoveredFacet: "now" }), { type: "hover", facetId: null }).hoveredFacet).toBeNull()
+  })
+})
+
+describe("initialJourneyStateFor", () => {
+  it("starts the story at the gate, exactly as before", () => {
+    expect(initialJourneyStateFor("story")).toBe(initialJourneyState)
+  })
+
+  it("starts the work on the sky: there is no gate", () => {
+    expect(initialJourneyStateFor("work")).toEqual({ ...initialJourneyState, screen: "sky" })
+  })
+
+  it("opens a case study straight away, inside Proyectos, on its first page", () => {
+    expect(initialJourneyStateFor("work", 1)).toEqual({
+      ...initialJourneyState,
+      screen: "entry",
+      facetId: "projects",
+      entryIndex: 1,
+      page: 0,
+    })
+  })
+
+  it("leaves a deep-linked case study for the Proyectos list, then for the sky", () => {
+    const place = journeyReducer(initialJourneyStateFor("work", 0), { type: "back" })
+    expect(place).toMatchObject({ screen: "place", facetId: "projects" })
+    expect(journeyReducer(place, { type: "back" }).screen).toBe("sky")
+  })
+
+  it("never opens a case study in the story, nor one that does not exist", () => {
+    expect(initialJourneyStateFor("story", 0)).toBe(initialJourneyState)
+    expect(initialJourneyStateFor("work", -1).screen).toBe("sky")
   })
 })
 

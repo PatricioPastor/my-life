@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { PROJECT } from "@/features/projects/project-fixture"
 import { STAR_HEX } from "@/shared/lib/palette"
-import { FACETS, FACET_ANCHORS, facetsWithProjects, findFacet } from "./content"
+import { FACETS, FACET_ANCHORS, facetAnchors, facetsWithProjects, findFacet, workFacets } from "./content"
 
 describe("facets content", () => {
   it("hangs the four facets in the design's positions", () => {
@@ -83,5 +83,44 @@ describe("facetsWithProjects", () => {
     expect(facets.map(({ id, name, x, y, color }) => [id, name, x, y, color])).toEqual(
       FACETS.map(({ id, name, x, y, color }) => [id, name, x, y, color]),
     )
+  })
+})
+
+describe("workFacets", () => {
+  it("keeps Proyectos lit, with its case studies, and turns every other facet off", () => {
+    const facets = workFacets(facetsWithProjects([PROJECT]))
+    expect(facets.map((f) => [f.id, f.off === true])).toEqual([
+      ["stories", true],
+      ["writing", true],
+      ["projects", false],
+      ["now", true],
+    ])
+    expect(findFacet("projects", facets)?.entries.map((e) => e.title)).toEqual(["Consola de prueba"])
+  })
+
+  it("hangs the off stars where they always hang: it is the same galaxy", () => {
+    expect(workFacets(FACETS).map(({ id, name, x, y, color }) => [id, name, x, y, color])).toEqual(
+      FACETS.map(({ id, name, x, y, color }) => [id, name, x, y, color]),
+    )
+  })
+
+  it("never lights anything in the story: no facet there is off", () => {
+    expect(FACETS.some((f) => f.off)).toBe(false)
+  })
+})
+
+describe("facetAnchors", () => {
+  it("hangs one anchor per facet, and marks the off ones", () => {
+    expect(facetAnchors(workFacets(FACETS))).toEqual([
+      { x: 0.21, y: 0.68, tint: 0, off: true },
+      { x: 0.57, y: 0.79, tint: 1, off: true },
+      { x: 0.75, y: 0.45, tint: 2 },
+      { x: 0.39, y: 0.29, tint: 3, off: true },
+    ])
+  })
+
+  it("is what the story hangs: every anchor lit", () => {
+    expect(facetAnchors(FACETS)).toStrictEqual(FACET_ANCHORS)
+    expect(FACET_ANCHORS.some((a) => "off" in a)).toBe(false)
   })
 })

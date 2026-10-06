@@ -1,4 +1,5 @@
 import type { Project } from "@/features/projects"
+import type { SparkleAnchor } from "@/features/sky"
 import type { FacetId } from "@/shared/analytics"
 import type { Block } from "@/shared/content"
 import { STAR_TINT, type StarColorKey } from "@/shared/lib/palette"
@@ -28,6 +29,8 @@ export interface Facet {
   /** Star color key (a portal ring color) for the star, its hover label and the place title. */
   color: StarColorKey
   entries: FacetEntry[]
+  /** Drawn off: a faint star and label that cannot be focused or opened. The work galaxy turns off all but Proyectos. */
+  off?: boolean
 }
 
 // Placeholder copy from the design canvas; real content comes later. Proyectos already has it: its entries are the case
@@ -63,8 +66,12 @@ export const FACETS: readonly Facet[] = [
   },
 ]
 
-/** The facets are the bright sparkles the sky hangs, each in its facet's star color. */
-export const FACET_ANCHORS = FACETS.map(({ x, y, color }) => ({ x, y, tint: STAR_TINT[color] }))
+/** The facets are the bright sparkles the sky hangs, each in its facet's star color; an off facet hangs an off one. */
+export function facetAnchors(facets: readonly Facet[]): SparkleAnchor[] {
+  return facets.map(({ x, y, color, off }) => (off ? { x, y, tint: STAR_TINT[color], off } : { x, y, tint: STAR_TINT[color] }))
+}
+
+export const FACET_ANCHORS = facetAnchors(FACETS)
 
 export function findFacet(id: string | undefined, facets: readonly Facet[] = FACETS): Facet | undefined {
   return facets.find((f) => f.id === id)
@@ -83,4 +90,9 @@ function projectEntry({ meta, blocks }: Project): FacetEntry {
 /** The facets with Proyectos fed from the case studies, in the order given; the other facets keep their placeholders. */
 export function facetsWithProjects(projects: readonly Project[]): readonly Facet[] {
   return FACETS.map((f) => (f.id === "projects" ? { ...f, entries: projects.map(projectEntry) } : f))
+}
+
+/** The work galaxy: the same stars in the same places, with every facet but Proyectos turned off. */
+export function workFacets(facets: readonly Facet[]): readonly Facet[] {
+  return facets.map((f) => (f.id === "projects" ? f : { ...f, off: true }))
 }

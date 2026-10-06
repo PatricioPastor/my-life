@@ -125,6 +125,15 @@ describe("Journey after the gate", () => {
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
   })
 
+  it("opens Proyectos with no case study at all: the place shows an empty list", async () => {
+    await toSky({ projects: [] })
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.getByRole("list").querySelectorAll("li")).toHaveLength(0)
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    expect(screen.getByRole("button", { name: "Proyectos" })).toBeTruthy()
+  })
+
   it("lists the case studies under Proyectos and reads one page by page", async () => {
     await toSky()
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
@@ -223,6 +232,101 @@ describe("Journey replay control", () => {
     await act(() => vi.advanceTimersByTimeAsync(1500))
     fireEvent.click(screen.getByRole("button", { name: "Ahora" }))
     expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+  })
+})
+
+describe("Journey work mode", () => {
+  const OFF = ["Historias", "Escritos", "Ahora"]
+
+  it("opens on the sky: no gate, and nothing is asked of the server", () => {
+    render(<Journey projects={PROJECTS} mode="work" />)
+    expect(screen.queryByLabelText("Ingresa con tu Instagram")).toBeNull()
+    expect(screen.getByRole("button", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.getByRole("heading", { name: "patriciopastor" })).toBeTruthy()
+    expect(checkHandle).not.toHaveBeenCalled()
+  })
+
+  it("lights only Proyectos: the other stars are drawn off, out of reach and out of the accessibility tree", () => {
+    render(<Journey projects={PROJECTS} mode="work" />)
+    for (const name of OFF) {
+      expect(screen.queryByRole("button", { name })).toBeNull()
+      expect(screen.getByText(name).closest("[aria-hidden='true']")).not.toBeNull()
+    }
+  })
+
+  it("hangs no memory orb, never summons it, and never asks for the memories", async () => {
+    render(<Journey projects={PROJECTS} mode="work" />)
+    expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
+    fireEvent.keyDown(window, { key: "r" })
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(screen.queryByRole("heading", { name: "Recuerdos" })).toBeNull()
+    expect(track.mock.calls.filter((c) => String(c[0]).startsWith("memory_"))).toEqual([])
+    expect(listMemories).not.toHaveBeenCalled()
+  })
+
+  it("offers a quiet way to Mi historia on the sky instead of the intro replay", () => {
+    render(<Journey projects={PROJECTS} mode="work" onReplayIntro={vi.fn()} />)
+    expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
+    const link = screen.getByRole("link", { name: "Mi historia" })
+    expect(link.getAttribute("href")).toBe("/")
+    expect(link.dataset.magnetic).toBe("light")
+  })
+
+  it("opens Proyectos, reads a case study and walks back out to the sky", () => {
+    render(<Journey projects={PROJECTS} mode="work" />)
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Mi historia" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
+    expect(screen.getByRole("heading", { level: 1, name: "Consola de prueba" })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    expect(screen.getByRole("link", { name: "Mi historia" })).toBeTruthy()
+    expect(track.mock.calls).toEqual([
+      ["facet_opened", { facet: "projects" }],
+      ["entry_opened", { facet: "projects", index: 0 }],
+    ])
+  })
+
+  it("opens a deep-linked case study straight away; Back goes to the Proyectos list, then to the sky", () => {
+    const second = { ...PROJECT, meta: { ...PROJECT.meta, slug: "otra", title: "Otra consola", order: 2 } }
+    render(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
+    expect(screen.getByRole("heading", { level: 1, name: "Otra consola" })).toBeTruthy()
+    expect(screen.getByText("1 de 2")).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.getAllByRole("listitem")).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole("button", { name: "Universo" }))
+    expect(screen.getByRole("button", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Mi historia" })).toBeTruthy()
+  })
+
+  it("opens on the sky for a case study it does not know", () => {
+    render(<Journey projects={PROJECTS} mode="work" openProject="nope" />)
+    expect(screen.queryByRole("heading", { level: 1, name: "Consola de prueba" })).toBeNull()
+    expect(screen.getByRole("button", { name: "Proyectos" })).toBeTruthy()
+  })
+
+  it("opens Proyectos with no case study at all: the place shows an empty list", () => {
+    render(<Journey projects={[]} mode="work" />)
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy()
+    expect(screen.getByRole("list").querySelectorAll("li")).toHaveLength(0)
+  })
+
+  it("keeps the story exactly as it was when no mode is given: the gate first", () => {
+    render(<Journey projects={PROJECTS} />)
+    expect(screen.getByLabelText("Ingresa con tu Instagram")).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Mi historia" })).toBeNull()
+  })
+
+  it("clears its timers on unmount", () => {
+    render(<Journey projects={PROJECTS} mode="work" openProject="consola" />)
+    cleanup()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

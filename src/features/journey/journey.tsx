@@ -1,7 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
-import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, facetsWithProjects, findFacet, type FacetEntry } from "@/features/facets"
+import {
+  FACETS,
+  FacetPlace,
+  FacetStars,
+  facetAnchors,
+  facetsWithProjects,
+  findFacet,
+  workFacets,
+  type FacetEntry,
+} from "@/features/facets"
 import { checkHandle } from "@/features/gate/actions"
 import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
 import { AsciiTunnel, GateScreen, gateReducer, initialGateState } from "@/features/gate"
@@ -14,15 +23,17 @@ import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetNa
 import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
 import { ReplayIntroButton } from "./replay-intro-button"
+import { StoryLink } from "./story-link"
 import {
   focusIndexFor,
-  initialJourneyState,
+  initialJourneyStateFor,
   journeyOriginFor,
   journeyReducer,
   listSideFor,
   skyPausedFor,
   veilFor,
   zoomFor,
+  type JourneyMode,
 } from "./journey-machine"
 import { PARALLAX_REST, stepParallax, type ParallaxState } from "./parallax"
 import {
@@ -48,16 +59,27 @@ const SHADOW = "[text-shadow:0_1px_10px_rgba(0,0,0,0.9)]"
 
 interface JourneyProps {
   preset?: SkyPresetName
-  /** Plays the onboarding again over this journey. The control only shows when given. */
+  /**
+   * `story` (the default) is the whole journey behind the gate. `work` is the public galaxy: it opens on the sky with
+   * no gate, lights only Proyectos, hangs no memory orb and offers "Mi historia" instead of the intro replay.
+   */
+  mode?: JourneyMode
+  /** Plays the onboarding again over this journey. The control only shows when given, and never in the work. */
   onReplayIntro?: () => void
   /** The case studies behind Proyectos, loaded on the server. */
   projects: readonly Project[]
+  /** Work only: the slug of a case study to open straight away (a deep link). An unknown one opens the sky. */
+  openProject?: string
 }
 
-export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyProps) {
+export function Journey({ preset = "ember", mode = "story", onReplayIntro, projects, openProject }: JourneyProps) {
+  const work = mode === "work"
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
-  const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
-  const [gateMounted, setGateMounted] = useState(true)
+  const [journey, dispatch] = useReducer(journeyReducer, undefined, () =>
+    initialJourneyStateFor(mode, projects.findIndex((p) => p.meta.slug === openProject)),
+  )
+  // The work has no gate, so its layer never mounts and nothing is ever asked of the server.
+  const [gateMounted, setGateMounted] = useState(!work)
   // The tunnel lingers over what it opened onto while it fades: the memories space on the way in, the sky on the way back.
   const [portalLinger, setPortalLinger] = useState<"out" | "back" | null>(null)
   const reduced = useReducedMotion()
@@ -79,7 +101,12 @@ export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyPr
     [params],
   )
   const { screen } = journey
-  const facets = facetsWithProjects(projects)
+  // Derived once per set of case studies, not on every render, so the stars and the place keep the same facets.
+  const facets = useMemo(() => {
+    const fed = facetsWithProjects(projects)
+    return work ? workFacets(fed) : fed
+  }, [projects, work])
+  const anchors = useMemo(() => facetAnchors(facets), [facets])
   const facet = findFacet(journey.facetId, facets)
   const gateActive = screen === "gate"
 
@@ -177,7 +204,8 @@ export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyPr
   }, [focusIndex])
 
   const origin = journeyOriginFor(journey, facet)
-  const orbShown = screen === "sky" || screen === "orbWarp" || screen === "memories" || screen === "orbReturn"
+  // The work hangs no orb, so its portal never opens and the memories are never mounted or asked for.
+  const orbShown = !work && (screen === "sky" || screen === "orbWarp" || screen === "memories" || screen === "orbReturn")
   const tunnelUp = screen === "orbWarp" || (screen === "orbReturn" && !reduced)
   const tunnelBack = screen === "orbReturn" || portalLinger === "back"
   const shown = facet ?? facets[0]
@@ -200,7 +228,7 @@ export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyPr
         <HalftoneSky
           ref={skyRef}
           preset={preset}
-          anchors={FACET_ANCHORS}
+          anchors={anchors}
           hidden={skyPausedFor(screen)}
           allowSparkles={screen === "sky"}
           onLayerShift={onLayerShift}
@@ -351,9 +379,10 @@ export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyPr
           />
         </div>
       )}
-      {onReplayIntro && (screen === "sky" || (screen === "gate" && gate.status !== "granted")) && (
+      {!work && onReplayIntro && (screen === "sky" || (screen === "gate" && gate.status !== "granted")) && (
         <ReplayIntroButton onClick={onReplayIntro} />
       )}
+      {work && screen === "sky" && <StoryLink />}
       <MagneticCursor stageRef={stageRef} onCapture={onCapture} />
       <ContextPanel target={cursorTarget} />
     </main>

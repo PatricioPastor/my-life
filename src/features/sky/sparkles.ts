@@ -17,7 +17,13 @@ export interface SparkleAnchor {
   y: number
   /** Star color index 0..3 (see STAR_COLORS), resolved by the preset's `starTints`. */
   tint: number
+  /** A star turned off: it hangs as faint as the faintest seeded sparkle instead of shining. */
+  off?: boolean
 }
+
+// An off anchor's size: the floor of the small seeded sparkles below.
+const OFF_REACH = 0.022
+const OFF_CORE = 0.004
 
 /** A unit random to an exact star color index; the clamp guards a degenerate 1. */
 export function pickTint(r: number): number {
@@ -44,19 +50,25 @@ const KEEP_CLEAR: Pick<SparkleAnchor, "x" | "y">[] = [
 
 const SMALL_COUNT = 6
 
-/** The anchors (facet stars) are the bright sparkles; a few small seeded ones fill the gaps. */
+/**
+ * The anchors (facet stars) are the bright sparkles; a few small seeded ones fill the gaps. An off anchor still draws
+ * its randoms, so turning stars off never moves anything else in the sky.
+ */
 export function layoutSkySparkles(seed: number, anchors: readonly SparkleAnchor[]): Sparkle[] {
   const rand = mulberry32(seed)
-  const out: Sparkle[] = anchors.map((a) => ({
-    x: a.x,
-    y: a.y,
-    reach: 0.085 + 0.025 * rand(),
-    core: 0.012,
-    tint: a.tint,
-    phase: rand() * 6.283,
-    born: -10,
-    user: false,
-  }))
+  const out: Sparkle[] = anchors.map((a) => {
+    const reach = 0.085 + 0.025 * rand()
+    return {
+      x: a.x,
+      y: a.y,
+      reach: a.off ? OFF_REACH : reach,
+      core: a.off ? OFF_CORE : 0.012,
+      tint: a.tint,
+      phase: rand() * 6.283,
+      born: -10,
+      user: false,
+    }
+  })
   const occupied: Pick<SparkleAnchor, "x" | "y">[] = [...anchors, ...KEEP_CLEAR]
   for (let i = 0; i < SMALL_COUNT; i++) {
     let x = 0.5
