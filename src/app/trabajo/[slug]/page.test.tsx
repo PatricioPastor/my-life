@@ -57,6 +57,12 @@ describe("/trabajo/[slug] metadata", () => {
     expect(meta.openGraph?.images).toEqual([expect.objectContaining({ url: "/opengraph-image" })])
   })
 
+  it("is open to search engines under the case study's own canonical URL", async () => {
+    const meta = await generateMetadata(params("otra"))
+    expect(meta.robots).toEqual({ index: true, follow: true })
+    expect(meta.alternates).toEqual({ canonical: "/trabajo/otra" })
+  })
+
   it("says nothing about a case study that does not exist", async () => {
     await expect(generateMetadata(params("nope"))).rejects.toBeInstanceOf(NotFound)
   })

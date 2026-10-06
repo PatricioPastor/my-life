@@ -304,6 +304,33 @@ describe("Journey work mode", () => {
     expect(screen.getByRole("link", { name: "Mi historia" })).toBeTruthy()
   })
 
+  it("reports a deep link once, as the two clicks it skipped: Proyectos, then that case study", () => {
+    const second = { ...PROJECT, meta: { ...PROJECT.meta, slug: "otra", title: "Otra consola", order: 2 } }
+    const { rerender } = render(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
+    const landing = [
+      ["facet_opened", { facet: "projects" }],
+      ["entry_opened", { facet: "projects", index: 1 }],
+    ]
+    expect(track.mock.calls).toEqual(landing)
+
+    // Re-rendering, paging and walking back out report nothing more; opening a case study again is a click like any other.
+    rerender(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(track.mock.calls).toEqual(landing)
+    fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
+    expect(track.mock.calls).toEqual([...landing, ["entry_opened", { facet: "projects", index: 0 }]])
+  })
+
+  it("reports nothing on its own when the journey opens on the sky or at the gate", () => {
+    render(<Journey projects={PROJECTS} mode="work" />)
+    cleanup()
+    render(<Journey projects={PROJECTS} mode="work" openProject="nope" />)
+    cleanup()
+    render(<Journey projects={PROJECTS} />)
+    expect(track).not.toHaveBeenCalled()
+  })
+
   it("opens on the sky for a case study it does not know", () => {
     render(<Journey projects={PROJECTS} mode="work" openProject="nope" />)
     expect(screen.queryByRole("heading", { level: 1, name: "Consola de prueba" })).toBeNull()

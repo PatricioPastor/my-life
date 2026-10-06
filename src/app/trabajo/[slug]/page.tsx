@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import type { Project } from "@/features/projects"
 import { loadProjects } from "@/features/projects/load-projects"
-import { WorkExperience, workMetadata } from "@/features/work"
+import { WorkExperience, workMetadata, workProjectPath } from "@/features/work"
 
 /**
  * A deep link to one case study: the work galaxy opened straight on it, with Back to the Proyectos list and the sky.
@@ -25,7 +25,7 @@ function projectFor(projects: readonly Project[], slug: string): Project {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const { meta } = projectFor(loadProjects(), slug)
-  return workMetadata(meta.title, meta.summary)
+  return workMetadata(meta.title, meta.summary, workProjectPath(meta.slug))
 }
 
 export default async function WorkProjectPage({ params }: Props) {

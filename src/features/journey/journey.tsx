@@ -75,9 +75,9 @@ interface JourneyProps {
 export function Journey({ preset = "ember", mode = "story", onReplayIntro, projects, openProject }: JourneyProps) {
   const work = mode === "work"
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
-  const [journey, dispatch] = useReducer(journeyReducer, undefined, () =>
-    initialJourneyStateFor(mode, projects.findIndex((p) => p.meta.slug === openProject)),
-  )
+  // Where the journey lands: the gate, the sky, or (a deep link) straight on one case study.
+  const [landing] = useState(() => initialJourneyStateFor(mode, projects.findIndex((p) => p.meta.slug === openProject)))
+  const [journey, dispatch] = useReducer(journeyReducer, landing)
   // The work has no gate, so its layer never mounts and nothing is ever asked of the server.
   const [gateMounted, setGateMounted] = useState(!work)
   // The tunnel lingers over what it opened onto while it fades: the memories space on the way in, the sky on the way back.
@@ -130,6 +130,14 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
     p.state = stepParallax(p.state, { x, y }, capturedRef.current, dt)
     if (layer) layer.style.transform = `translate(${p.state.x}px, ${p.state.y}px)`
   }, [])
+
+  // A deep link lands on a case study without the two clicks that report one, so it reports them itself, the same way,
+  // once per landing; later visits to an entry are clicks and report themselves.
+  useEffect(() => {
+    if (landing.screen !== "entry" || landing.facetId !== "projects") return
+    track("facet_opened", { facet: landing.facetId })
+    track("entry_opened", { facet: landing.facetId, index: landing.entryIndex })
+  }, [landing])
 
   // Checking: ask the server, and hold for the minimum beat. Failures deny (fail closed).
   useEffect(() => {

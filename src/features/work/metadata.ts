@@ -13,13 +13,16 @@ export const WORK_DESCRIPTION = "Proyectos de Patricio Pastor: qué construí, c
 /**
  * A page of the public work galaxy: its own title (under the site's name) and description, in the link preview too.
  * Metadata merges shallowly, so the preview is spelled out whole, card included; otherwise it would keep the home's
- * invitation-only line. The rest (robots, metadataBase) comes from the root layout.
+ * invitation-only line. The work is the one part of the site open to search engines: it overrides the root layout's
+ * noindex and names its canonical URL (`path`, resolved against the layout's metadataBase).
  */
-export function workMetadata(title: string, description: string): Metadata {
+export function workMetadata(title: string, description: string, path: string): Metadata {
   const full = `${title} · ${SITE}`
   return {
     title: full,
     description,
+    alternates: { canonical: path },
+    robots: { index: true, follow: true },
     openGraph: { title: full, description, type: "website", locale: "es_AR", siteName: SITE, images: [PREVIEW_CARD] },
     twitter: { card: "summary_large_image", title: full, description, images: [PREVIEW_CARD] },
   }

@@ -38,6 +38,11 @@ describe("/trabajo metadata", () => {
     expect(JSON.stringify(metadata)).not.toContain("invitación")
   })
 
+  it("is open to search engines, unlike the rest of the site, under its own canonical URL", () => {
+    expect(metadata.robots).toEqual({ index: true, follow: true })
+    expect(metadata.alternates).toEqual({ canonical: "/trabajo" })
+  })
+
   it("keeps the site's preview card: a page's own preview replaces the inherited one, image included", () => {
     const card = { url: "/opengraph-image", width: 1200, height: 630, alt: "patriciopastor", type: "image/png" }
     expect(metadata.openGraph?.images).toEqual([card])
