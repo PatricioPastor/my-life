@@ -69,7 +69,7 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
 
 ## Tasks
 
-- [ ] **T1 — Projects content and the Voltaicco case study.**
+- [x] **T1 — Projects content and the Voltaicco case study.** Done in `d523606`; review approved.
   - Write `content/projects/voltaicco.md` and a typed loader with tests.
   - Feed the Proyectos facet and `Reader` with real project entries.
   - Add `next.config.ts` tracing.
@@ -104,4 +104,27 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - **Frontmatter:** `slug`, `title`, `updated`, `role`, `period`, `summary`, `stack[]`, `order`. The build fails on any bad field, a repeated slug or order, or an unsupported body.
   - **Data flow:** `page.tsx` calls `loadProjects()` and the projects pass through `Experience`, `LazyJourney` and `Journey`. `facetsWithProjects()` builds the Proyectos entries, `FacetPlace` lists them and `Reader` shows them.
   - **Reader changes:** a new static `page-block.tsx`, because the intro's `ReaderBlock` is absolutely positioned for its animation. Pages break at `---`, and the page area is `min-h-[272px]`. `summary` is not shown yet; T2 uses it for metadata.
-  - **RDD:** assessed medium, `slice_budget_reached`, so a review is due. The review is pending.
+  - **RDD:** assessed medium, `slice_budget_reached`, so a review was due.
+  - **Review:** the user granted consent. One lens ran (reliability), on lineage `review-bb5bd9c3e5aa0fb7` over `33e6310..4f9fc3b`. The result was **approved and acknowledged**, and its authority is burned. The reviewed boundary is now `4f9fc3b`.
+  - **Advisory findings** (non-blocking; the first two are folded into T2):
+    - `R3-facets-identity` (warning): `facetsWithProjects(projects)` returns a new array on every Journey render. Fix: wrap it in `useMemo`.
+    - `R3-empty-projects-path` (suggestion): there is no Journey test for opening Proyectos with `projects=[]`.
+    - `R3-details-key` (suggestion): the detail rows are keyed by label. This is unreachable today and is left as is.
+- 2026-10-06, **T1 done.**
+- 2026-10-06, **T2 implemented** in `49d0eda` (`feat(work): public /trabajo galaxy with only Proyectos lit`). Route: delegated (writer trigger). 23 files, 701 lines added and 31 removed (~732 changed: about 471 in tests, 261 in source).
+  - **Checks reported by the writer:**
+    - `pnpm test`: 3,439 tests in 197 files, all passing.
+      - One full run had a single failure whose output was lost. It points at the untouched `memories-place.test.tsx:556`. Four more full runs passed, so it is probably a pre-existing flake, but that is not confirmed.
+    - `pnpm typecheck` and `pnpm lint`: both exit 0.
+    - `pnpm build`: exit 0, with `○ /trabajo` static and `● /trabajo/voltaicco` SSG.
+  - **Parent spot check:** journey, trabajo and work tests passed, 122 of 122.
+  - **Model:**
+    - `Journey` takes `mode?: "story" | "work"` (default `"story"`) and `openProject?: slug`.
+    - `initialJourneyStateFor(mode, entryIndex)` starts on `sky`, or on `entry` with `facetId: "projects"` for a deep link.
+    - Work mode never mounts the gate. `orbShown` is false, so it never reaches memories.
+    - `story-link.tsx` adds a "Mi historia" link where "Ver intro" sits.
+    - `src/features/work/` holds `WorkExperience` (dynamic, `ssr:false`) and `workMetadata()`.
+  - **Off stars:** `Facet.off` is set by `workFacets()`. An off star is an `aria-hidden` span with `pointer-events-none` and a faint label. Its sky anchor is as faint as the smallest sparkle, and the sky layout is otherwise unchanged.
+  - **Routes:** `generateStaticParams`, `generateMetadata` (from the project's title and summary), `dynamicParams = false` plus `notFound()`. The `og:image` is restored explicitly.
+  - **Folded in:** `R3-facets-identity` (`useMemo`, with an honest RED from temporarily removing it) and `R3-empty-projects-path` (tests in both modes).
+  - **Open for the user:** both work routes inherit `noindex, nofollow` from the root layout. Moving around inside `/trabajo` does not change the URL.
