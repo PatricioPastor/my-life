@@ -9,4 +9,10 @@ describe("content tracing", () => {
     expect(nextConfig.outputFileTracingIncludes?.["/"]).toContain("./content/**/*.md")
     expect(existsSync("content/intro/por-que-cree-esto.md")).toBe(true)
   })
+
+  it("ships the case studies with it too: Proyectos reads them on the same render", () => {
+    // ./content/**/*.md already covers content/projects; this pins that a narrower glob would not drop them.
+    expect(nextConfig.outputFileTracingIncludes?.["/"]).toContain("./content/**/*.md")
+    expect(existsSync("content/projects/voltaicco.md")).toBe(true)
+  })
 })

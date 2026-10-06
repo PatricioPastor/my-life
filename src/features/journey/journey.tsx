@@ -1,14 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
-import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, findFacet } from "@/features/facets"
+import { FACET_ANCHORS, FACETS, FacetPlace, FacetStars, facetsWithProjects, findFacet, type FacetEntry } from "@/features/facets"
 import { checkHandle } from "@/features/gate/actions"
 import { ContextPanel, MagneticCursor, type CursorTarget } from "@/features/cursor"
 import { AsciiTunnel, GateScreen, gateReducer, initialGateState } from "@/features/gate"
 import { MemoriesSpace } from "@/features/memories"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import { ORB_CURSOR_ID, ORB_PORTAL, Orb } from "@/features/orb"
-import { READER_PAGES, Reader } from "@/features/reader"
+import type { Project } from "@/features/projects"
+import { READER_PAGES, Reader, pagesOf } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
 import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
@@ -49,9 +50,11 @@ interface JourneyProps {
   preset?: SkyPresetName
   /** Plays the onboarding again over this journey. The control only shows when given. */
   onReplayIntro?: () => void
+  /** The case studies behind Proyectos, loaded on the server. */
+  projects: readonly Project[]
 }
 
-export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
+export function Journey({ preset = "ember", onReplayIntro, projects }: JourneyProps) {
   const [gate, dispatchGate] = useReducer(gateReducer, initialGateState)
   const [journey, dispatch] = useReducer(journeyReducer, initialJourneyState)
   const [gateMounted, setGateMounted] = useState(true)
@@ -76,7 +79,8 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
     [params],
   )
   const { screen } = journey
-  const facet = findFacet(journey.facetId)
+  const facets = facetsWithProjects(projects)
+  const facet = findFacet(journey.facetId, facets)
   const gateActive = screen === "gate"
 
   // A star the reticle has captured must not drift out from under the pointer, so the parallax
@@ -176,8 +180,12 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
   const orbShown = screen === "sky" || screen === "orbWarp" || screen === "memories" || screen === "orbReturn"
   const tunnelUp = screen === "orbWarp" || (screen === "orbReturn" && !reduced)
   const tunnelBack = screen === "orbReturn" || portalLinger === "back"
-  const listSide = listSideFor((facet ?? FACETS[0]).x)
-  const entry = (facet ?? FACETS[0]).entries[journey.entryIndex] ?? (facet ?? FACETS[0]).entries[0]
+  const shown = facet ?? facets[0]
+  const listSide = listSideFor(shown.x)
+  // Undefined only while a facet with no entries is open (Proyectos with no case study); then no entry can be.
+  const entry: FacetEntry | undefined = shown.entries[journey.entryIndex] ?? shown.entries[0]
+  const pages = entry?.blocks ? pagesOf(entry.blocks) : undefined
+  const pageCount = pages?.length ?? READER_PAGES.length
 
   return (
     <main
@@ -200,7 +208,7 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
         >
           {screen === "sky" && (
             <FacetStars
-              facets={FACETS}
+              facets={facets}
               hovered={journey.hoveredFacet}
               sky={skyRef}
               layerRef={layerRef}
@@ -257,16 +265,18 @@ export function Journey({ preset = "ember", onReplayIntro }: JourneyProps) {
         </div>
       )}
 
-      {screen === "entry" && facet && (
+      {screen === "entry" && facet && entry && (
         <div className="absolute inset-0">
           <BackButton label={facet.name} hint={`Volver a ${facet.name}`} onClick={() => dispatch({ type: "back" })} />
           <div className="pointer-events-none absolute inset-0 flex justify-center overflow-y-auto overscroll-contain px-6 [@media(max-height:520px)]:pt-[76px]">
             <Reader
               meta={entry.meta}
               title={entry.title}
+              details={entry.details}
+              pages={pages}
               page={journey.page}
               onPrev={() => dispatch({ type: "prevPage" })}
-              onNext={() => dispatch({ type: "nextPage", pageCount: READER_PAGES.length })}
+              onNext={() => dispatch({ type: "nextPage", pageCount })}
             />
           </div>
         </div>

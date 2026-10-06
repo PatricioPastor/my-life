@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
+import { PROJECT } from "@/features/projects/project-fixture"
 import { STAR_HEX } from "@/shared/lib/palette"
-import { FACETS, FACET_ANCHORS, findFacet } from "./content"
+import { FACETS, FACET_ANCHORS, facetsWithProjects, findFacet } from "./content"
 
 describe("facets content", () => {
   it("hangs the four facets in the design's positions", () => {
@@ -21,9 +22,9 @@ describe("facets content", () => {
     ])
   })
 
-  it("gives every facet three placeholder entries", () => {
-    for (const f of FACETS) expect(f.entries).toHaveLength(3)
-    expect(FACETS[2].entries[0]).toEqual({ meta: "[Rol, año]", title: "[Nombre del proyecto]" })
+  it("gives every facet but Proyectos three placeholder entries; Proyectos is fed from the case studies", () => {
+    for (const f of FACETS) expect(f.entries).toHaveLength(f.id === "projects" ? 0 : 3)
+    expect(FACETS[0].entries[0]).toEqual({ meta: "[Año]", title: "[Título de la historia]" })
   })
 
   it("gives each facet its own ring color", () => {
@@ -50,5 +51,37 @@ describe("facets content", () => {
     expect(findFacet("now")?.name).toBe("Ahora")
     expect(findFacet("nope")).toBeUndefined()
     expect(findFacet(undefined)).toBeUndefined()
+  })
+
+  it("finds a facet among the ones given", () => {
+    const facets = facetsWithProjects([PROJECT])
+    expect(findFacet("projects", facets)?.entries).toHaveLength(1)
+  })
+})
+
+describe("facetsWithProjects", () => {
+  const second = { ...PROJECT, meta: { ...PROJECT.meta, slug: "otra", title: "Otra consola", role: "Desarrollo", period: "2024–2025", order: 2 } }
+
+  it("feeds Proyectos with one entry per case study, in the order given", () => {
+    const projects = facetsWithProjects([PROJECT, second]).find((f) => f.id === "projects")!
+    expect(projects.entries.map((e) => e.title)).toEqual(["Consola de prueba", "Otra consola"])
+  })
+
+  it("reads a project's role and period as the entry meta, its stack as a detail and its text as the blocks", () => {
+    const [entry] = facetsWithProjects([PROJECT]).find((f) => f.id === "projects")!.entries
+    expect(entry).toEqual({
+      meta: "Diseño y desarrollo, 2026",
+      title: "Consola de prueba",
+      details: [{ label: "Stack", value: "Next.js 16 · React 19" }],
+      blocks: PROJECT.blocks,
+    })
+  })
+
+  it("leaves the other facets as they are, and every star where it hangs", () => {
+    const facets = facetsWithProjects([PROJECT])
+    expect(facets.filter((f) => f.id !== "projects")).toEqual(FACETS.filter((f) => f.id !== "projects"))
+    expect(facets.map(({ id, name, x, y, color }) => [id, name, x, y, color])).toEqual(
+      FACETS.map(({ id, name, x, y, color }) => [id, name, x, y, color]),
+    )
   })
 })

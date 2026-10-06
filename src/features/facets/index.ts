@@ -1,5 +1,5 @@
-export { FACETS, FACET_ANCHORS, findFacet } from "./content"
-export type { Facet, FacetEntry } from "./content"
+export { FACETS, FACET_ANCHORS, facetsWithProjects, findFacet } from "./content"
+export type { Facet, FacetEntry, FacetEntryDetail } from "./content"
 export { FacetStars } from "./facet-stars"
 export { FacetPlace } from "./facet-place"
 export { facetKeepOut } from "./facet-keep-out"

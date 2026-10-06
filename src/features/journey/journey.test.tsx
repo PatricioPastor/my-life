@@ -14,8 +14,11 @@ vi.mock("@/features/memories/actions", () => ({
 const track = vi.fn()
 vi.mock("@/shared/analytics", () => ({ track: (...a: unknown[]) => track(...a) }))
 
+import { PROJECT } from "@/features/projects/project-fixture"
 import { Journey } from "./journey"
 import { ORB_EXIT_MS, ORB_RETURN_EXIT_MS, ORB_RETURN_MS, ORB_RETURN_REDUCED_MS, ORB_WARP_MS } from "./portal-timing"
+
+const PROJECTS = [PROJECT]
 
 beforeEach(() => {
   listMemories.mockResolvedValue({ ok: true, memories: [] })
@@ -34,7 +37,7 @@ afterEach(() => {
 })
 
 async function enter(handle: string) {
-  render(<Journey />)
+  render(<Journey projects={PROJECTS} />)
   fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: handle } })
   fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 }
@@ -93,7 +96,7 @@ describe("Journey gate flow", () => {
 
 describe("Journey stage", () => {
   it("clips its overflow instead of hiding it: the zoomed sky and the portal reach past the screen, and a scrollable stage lets a focus scroll it sideways (the memories glass then sits off center)", () => {
-    const { container } = render(<Journey />)
+    const { container } = render(<Journey projects={PROJECTS} />)
     const main = container.querySelector("main")!
     expect(main.className).toContain("clip-overflow")
     expect(main.className).not.toContain("overflow-hidden")
@@ -121,6 +124,24 @@ describe("Journey after the gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Universo" }))
     expect(screen.getByRole("button", { name: "Historias" })).toBeTruthy()
   })
+
+  it("lists the case studies under Proyectos and reads one page by page", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    expect(screen.queryByText("[Nombre del proyecto]")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
+
+    expect(screen.getByRole("heading", { level: 1, name: "Consola de prueba" })).toBeTruthy()
+    expect(screen.getByText("Diseño y desarrollo, 2026")).toBeTruthy()
+    expect(screen.getByRole("definition").textContent).toBe("Next.js 16 · React 19")
+    expect(screen.getByText("Una cita.").closest(".turn")).not.toBeNull()
+    expect(screen.getByText("1 de 2")).toBeTruthy()
+
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
+    expect(screen.getByText("2 de 2")).toBeTruthy()
+    expect(screen.getByText("con fuerza").closest(".turn")).not.toBeNull()
+    expect((screen.getByRole("button", { name: "Página siguiente" }) as HTMLButtonElement).disabled).toBe(true)
+  })
 })
 
 describe("Journey analytics", () => {
@@ -138,7 +159,7 @@ describe("Journey analytics", () => {
 
   it("tracks gate_submitted once per submit, not for refused or repeated submits", async () => {
     checkHandle.mockResolvedValue({ status: "denied" })
-    render(<Journey />)
+    render(<Journey projects={PROJECTS} />)
     const input = screen.getByLabelText("Ingresa con tu Instagram")
     fireEvent.change(input, { target: { value: "bad handle!" } })
     fireEvent.submit(input.closest("form")!)
@@ -172,19 +193,19 @@ describe("Journey analytics", () => {
 describe("Journey replay control", () => {
   it("offers Ver intro on the gate and reports the press", () => {
     const onReplayIntro = vi.fn()
-    render(<Journey onReplayIntro={onReplayIntro} />)
+    render(<Journey projects={PROJECTS} onReplayIntro={onReplayIntro} />)
     fireEvent.click(screen.getByRole("button", { name: "Ver intro" }))
     expect(onReplayIntro).toHaveBeenCalledTimes(1)
   })
 
   it("is not rendered without a handler", () => {
-    render(<Journey />)
+    render(<Journey projects={PROJECTS} />)
     expect(screen.queryByRole("button", { name: "Ver intro" })).toBeNull()
   })
 
   it("hides during the warp and comes back on the sky", async () => {
     checkHandle.mockResolvedValue({ status: "granted" })
-    render(<Journey onReplayIntro={vi.fn()} />)
+    render(<Journey projects={PROJECTS} onReplayIntro={vi.fn()} />)
     fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
     await act(() => vi.advanceTimersByTimeAsync(1200))
@@ -195,7 +216,7 @@ describe("Journey replay control", () => {
 
   it("is not offered inside a facet", async () => {
     checkHandle.mockResolvedValue({ status: "granted" })
-    render(<Journey onReplayIntro={vi.fn()} />)
+    render(<Journey projects={PROJECTS} onReplayIntro={vi.fn()} />)
     fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
     fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
     await act(() => vi.advanceTimersByTimeAsync(1200))
@@ -205,9 +226,9 @@ describe("Journey replay control", () => {
   })
 })
 
-async function toSky(props: Parameters<typeof Journey>[0] = {}) {
+async function toSky(props: Partial<Parameters<typeof Journey>[0]> = {}) {
   checkHandle.mockResolvedValue({ status: "granted" })
-  render(<Journey {...props} />)
+  render(<Journey projects={PROJECTS} {...props} />)
   fireEvent.change(screen.getByLabelText("Ingresa con tu Instagram"), { target: { value: "ana" } })
   fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
   await act(() => vi.advanceTimersByTimeAsync(1200))
@@ -216,7 +237,7 @@ async function toSky(props: Parameters<typeof Journey>[0] = {}) {
 
 describe("Journey memory orb", () => {
   it("offers the orb on the sky only: not at the gate, not inside a facet", async () => {
-    render(<Journey />)
+    render(<Journey projects={PROJECTS} />)
     expect(screen.queryByRole("button", { name: "Agregar recuerdo" })).toBeNull()
     cleanup()
     await toSky()
@@ -344,7 +365,7 @@ describe("Journey memory orb", () => {
   })
 
   it("never summons at the gate, typing the handle, or inside a facet", async () => {
-    render(<Journey />)
+    render(<Journey projects={PROJECTS} />)
     const input = screen.getByLabelText("Ingresa con tu Instagram")
     fireEvent.keyDown(input, { key: "r" })
     fireEvent.keyDown(window, { key: "r" })

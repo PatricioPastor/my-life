@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { warmUpSky } from "@/features/sky/warm-up"
 import { probeRenderer } from "./gpu-probe"
 import { whenIdle } from "./idle"
+import type { Project } from "@/features/projects"
 import { track } from "@/shared/analytics"
 import type { Story } from "@/shared/content"
 import { Onboarding } from "./onboarding"
@@ -18,8 +19,14 @@ const LazyJourney = dynamic(() => loadJourney(), { ssr: false })
 // How long the layer takes to fade once the onboarding is done, before it leaves the DOM.
 const LEAVE_MS = 900
 
+interface ExperienceProps {
+  story: Story
+  /** The case studies behind Proyectos, loaded on the server and passed through to the journey. */
+  projects: readonly Project[]
+}
+
 /** The journey (gate first) with the onboarding layered above it until it is done. */
-export function Experience({ story }: { story: Story }) {
+export function Experience({ story, projects }: ExperienceProps) {
   const [state, dispatch, replay] = useOnboarding()
   const [gone, setGone] = useState(false)
   const { phase } = state
@@ -53,7 +60,7 @@ export function Experience({ story }: { story: Story }) {
 
   return (
     <>
-      {journeyWanted(state) && <LazyJourney onReplayIntro={done ? replayIntro : undefined} />}
+      {journeyWanted(state) && <LazyJourney projects={projects} onReplayIntro={done ? replayIntro : undefined} />}
       {!gone && <Onboarding story={story} state={state} dispatch={dispatch} />}
     </>
   )

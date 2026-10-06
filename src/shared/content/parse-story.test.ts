@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseStory, StoryParseError } from "./parse-story"
+import { parseContent, parseStory, StoryParseError } from "./parse-story"
 
 const FM = `---\ntitle: "¿por qué creé esto?"\nupdated: 2026-09-30\n---\n`
 const doc = (body: string) => `${FM}\n${body}\n`
@@ -153,6 +153,23 @@ describe("parseStory: frontmatter validation", () => {
 
   it("accepts a quoted date", () => {
     expect(parseStory('---\ntitle: Hola\nupdated: "2026-09-30"\n---\n').meta.updated).toBe("2026-09-30")
+  })
+})
+
+describe("parseContent: a story with more fields", () => {
+  it("returns the story plus every frontmatter field as written, for the caller to validate", () => {
+    const { meta, blocks, fields } = parseContent("---\ntitle: Hola\nupdated: 2026-09-30\nrole: Autor\nstack: [a, b]\n---\n\nHola.")
+    expect(meta).toEqual({ title: "Hola", updated: "2026-09-30" })
+    expect(blocks).toEqual([{ type: "paragraph", runs: [{ kind: "text", text: "Hola." }] }])
+    expect(fields).toEqual({ title: "Hola", updated: "2026-09-30", role: "Autor", stack: ["a", "b"] })
+  })
+
+  it("validates title and updated like a story", () => {
+    expect(() => parseContent("---\nrole: Autor\n---\n")).toThrow(/title/)
+  })
+
+  it("keeps parseStory to the story alone", () => {
+    expect(Object.keys(parseStory("---\ntitle: Hola\nupdated: 2026-09-30\nrole: Autor\n---\n"))).toEqual(["meta", "blocks"])
   })
 })
 

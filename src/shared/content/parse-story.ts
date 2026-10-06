@@ -32,7 +32,7 @@ function unsupported(construct: string, line: number): StoryParseError {
   return new StoryParseError(`Unsupported Markdown construct at line ${line}: ${construct}. Allowed: ${ALLOWED}.`, construct, line)
 }
 
-function frontmatterError(detail: string, line: number): StoryParseError {
+export function frontmatterError(detail: string, line: number): StoryParseError {
   return new StoryParseError(`Invalid frontmatter: ${detail}`, "frontmatter", line)
 }
 
@@ -125,7 +125,7 @@ function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value)
 }
 
-function readMeta(tree: Root): StoryMeta {
+function readFrontmatter(tree: Root): { meta: StoryMeta; fields: Record<string, unknown> } {
   const node = tree.children[0]
   if (!node || node.type !== "yaml") {
     throw new StoryParseError(
@@ -144,13 +144,14 @@ function readMeta(tree: Root): StoryMeta {
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
     throw frontmatterError('expected key/value fields ("title" and "updated").', line)
   }
-  const { title, updated } = data as Record<string, unknown>
+  const fields = data as Record<string, unknown>
+  const { title, updated } = fields
   if (typeof title !== "string" || title.trim() === "") throw frontmatterError('"title" is required and must be a non-empty string.', line)
   if (updated === undefined) throw frontmatterError('"updated" is required (an ISO date, YYYY-MM-DD).', line)
   if (typeof updated !== "string" || !isIsoDate(updated)) {
     throw frontmatterError(`"updated" must be an ISO date (YYYY-MM-DD), got ${JSON.stringify(updated)}.`, line)
   }
-  return { title: collapse(title).trim(), updated }
+  return { meta: { title: collapse(title).trim(), updated }, fields }
 }
 
 function toBlock(node: RootContent): Block | null {
@@ -184,17 +185,27 @@ function toBlock(node: RootContent): Block | null {
 }
 
 /**
- * Parse a story file: YAML frontmatter plus a strict Markdown subset, into typed blocks.
- * Anything outside the subset throws a {@link StoryParseError} naming the construct and its line.
+ * Parse a content file with more frontmatter than a story's: the story itself (title, updated and the blocks, held to the
+ * same rules) plus every frontmatter field as written, for the caller to validate its own fields. A failure in those is
+ * the caller's to report with {@link frontmatterError}; the frontmatter always opens the file, at line 1.
  */
-export function parseStory(markdown: string): Story {
+export function parseContent(markdown: string): Story & { fields: Readonly<Record<string, unknown>> } {
   const source = markdown.replace(/^﻿/, "").replace(/\r\n?/g, "\n")
   const tree = processor.parse(source)
-  const meta = readMeta(tree)
+  const { meta, fields } = readFrontmatter(tree)
   const blocks: Block[] = []
   for (const node of tree.children.slice(1)) {
     const block = toBlock(node)
     if (block) blocks.push(block)
   }
+  return { meta, blocks, fields }
+}
+
+/**
+ * Parse a story file: YAML frontmatter plus a strict Markdown subset, into typed blocks.
+ * Anything outside the subset throws a {@link StoryParseError} naming the construct and its line.
+ */
+export function parseStory(markdown: string): Story {
+  const { meta, blocks } = parseContent(markdown)
   return { meta, blocks }
 }

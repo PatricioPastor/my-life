@@ -1,9 +1,20 @@
+import type { Project } from "@/features/projects"
 import type { FacetId } from "@/shared/analytics"
+import type { Block } from "@/shared/content"
 import { STAR_TINT, type StarColorKey } from "@/shared/lib/palette"
+
+/** One of an entry's fields, set quietly under its title in the Reader. */
+export interface FacetEntryDetail {
+  label: string
+  value: string
+}
 
 export interface FacetEntry {
   meta: string
   title: string
+  details?: readonly FacetEntryDetail[]
+  /** The entry's text. Placeholder entries have none, and the Reader shows its placeholder pages. */
+  blocks?: readonly Block[]
 }
 
 export interface Facet {
@@ -19,7 +30,8 @@ export interface Facet {
   entries: FacetEntry[]
 }
 
-// Placeholder copy from the design canvas; real content comes later.
+// Placeholder copy from the design canvas; real content comes later. Proyectos already has it: its entries are the case
+// studies in content/projects, fed in by facetsWithProjects.
 export const FACETS: readonly Facet[] = [
   {
     id: "stories", name: "Historias", description: "Relatos de mi vida, en primera persona.", x: 0.21, y: 0.68, color: "gold",
@@ -39,11 +51,7 @@ export const FACETS: readonly Facet[] = [
   },
   {
     id: "projects", name: "Proyectos", description: "Cosas que construí y estoy construyendo.", x: 0.75, y: 0.45, color: "sandy",
-    entries: [
-      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
-      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
-      { meta: "[Rol, año]", title: "[Nombre del proyecto]" },
-    ],
+    entries: [],
   },
   {
     id: "now", name: "Ahora", description: "En qué estoy enfocado hoy.", x: 0.39, y: 0.29, color: "bronze",
@@ -58,6 +66,21 @@ export const FACETS: readonly Facet[] = [
 /** The facets are the bright sparkles the sky hangs, each in its facet's star color. */
 export const FACET_ANCHORS = FACETS.map(({ x, y, color }) => ({ x, y, tint: STAR_TINT[color] }))
 
-export function findFacet(id: string | undefined): Facet | undefined {
-  return FACETS.find((f) => f.id === id)
+export function findFacet(id: string | undefined, facets: readonly Facet[] = FACETS): Facet | undefined {
+  return facets.find((f) => f.id === id)
+}
+
+/** A case study as a Proyectos entry: role and period as its meta (the design's "Rol, año"), its stack as a detail. */
+function projectEntry({ meta, blocks }: Project): FacetEntry {
+  return {
+    meta: `${meta.role}, ${meta.period}`,
+    title: meta.title,
+    details: [{ label: "Stack", value: meta.stack.join(" · ") }],
+    blocks,
+  }
+}
+
+/** The facets with Proyectos fed from the case studies, in the order given; the other facets keep their placeholders. */
+export function facetsWithProjects(projects: readonly Project[]): readonly Facet[] {
+  return FACETS.map((f) => (f.id === "projects" ? { ...f, entries: projects.map(projectEntry) } : f))
 }
