@@ -1,7 +1,8 @@
 import type { Greeting } from "./greeting"
 import type { PhaseDurations } from "./phrases"
 
-export type OnboardingPhase = "idle" | "greeting" | "life" | "different" | "cta" | "story" | "hardware" | "done"
+/** `choice` follows the greeting: the visitor picks the work (another page) or the story (the rest of this intro). */
+export type OnboardingPhase = "idle" | "greeting" | "choice" | "life" | "different" | "cta" | "story" | "hardware" | "done"
 
 export interface OnboardingState {
   phase: OnboardingPhase
@@ -20,6 +21,7 @@ export type OnboardingEvent =
   | { type: "start"; now: number; returning: boolean; greeting: Greeting; durations: PhaseDurations }
   | { type: "replay"; now: number; greeting: Greeting; durations: PhaseDurations }
   | { type: "tick"; now: number }
+  | { type: "chooseStory"; now: number }
   | { type: "cta" }
   | { type: "continue" }
   | { type: "enter" }
@@ -49,6 +51,11 @@ function holdFor(s: OnboardingState): number {
   return s.phase === "greeting" || s.phase === "life" || s.phase === "different" ? s.durations[s.phase] : 0
 }
 
+/** The greeting leads to the choice, except in a replay: whoever asks to see the intro again already chose the story. */
+function beforeChoice(s: OnboardingState): boolean {
+  return s.phase === "greeting" && !s.replayed
+}
+
 export function onboardingReducer(state: OnboardingState, event: OnboardingEvent): OnboardingState {
   switch (event.type) {
     case "start":
@@ -76,10 +83,13 @@ export function onboardingReducer(state: OnboardingState, event: OnboardingEvent
       }
     case "tick": {
       if (!isTimed(state) || event.now - state.enteredAt < holdFor(state)) return state
-      // A returning visitor only sees the greeting, then the gate.
-      const next = state.phase === "greeting" && state.returning ? "done" : TIMED_NEXT[state.phase]!
+      const next = beforeChoice(state) ? "choice" : TIMED_NEXT[state.phase]!
       return { ...state, phase: next, enteredAt: event.now }
     }
+    case "chooseStory":
+      if (state.phase !== "choice") return state
+      // A returning visitor goes straight to the gate, as before the choice existed; a first visit plays the rest.
+      return { ...state, phase: state.returning ? "done" : "life", enteredAt: event.now }
     case "cta":
       return state.phase === "cta" ? { ...state, phase: "story" } : state
     case "continue":
@@ -87,7 +97,9 @@ export function onboardingReducer(state: OnboardingState, event: OnboardingEvent
     case "enter":
       return state.phase === "hardware" ? { ...state, phase: "done" } : state
     case "skip":
-      return state.phase === "idle" || state.phase === "done" ? state : { ...state, phase: "done", skipped: true }
+      // The choice is never skipped: before it, skipping only gets there sooner (the choice waits, so it needs no clock).
+      if (beforeChoice(state)) return { ...state, phase: "choice" }
+      return skipOffered(state) ? { ...state, phase: "done", skipped: true } : state
   }
 }
 
@@ -97,7 +109,16 @@ export function dueIn(state: OnboardingState, now: number): number | null {
   return Math.max(0, state.enteredAt + holdFor(state) - now)
 }
 
-/** The heavy journey (sky, tunnel) is mounted early enough to be ready when the layer leaves, but not while text animates. */
+/** "Saltar" belongs to the story path only: never before the choice, never on it, and not once the intro is done. */
+export function skipOffered(state: OnboardingState): boolean {
+  return state.phase !== "idle" && state.phase !== "choice" && state.phase !== "done" && !beforeChoice(state)
+}
+
+/**
+ * The heavy journey (gate, sky, tunnel) is mounted early enough to be ready when the layer leaves, but not while text
+ * animates, and never before the visitor chose the story: whoever picks the work leaves without it. A returning visitor
+ * goes from the choice straight to done, so theirs mounts while the layer fades (its chunk is already fetched).
+ */
 export function journeyWanted(state: OnboardingState): boolean {
-  return state.replayed || state.phase === "hardware" || state.phase === "done" || (state.returning && state.phase !== "idle")
+  return state.replayed || state.phase === "hardware" || state.phase === "done"
 }

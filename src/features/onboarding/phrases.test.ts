@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CYCLE_MS, DIFFERENT_PHRASE, LIFE_PHRASE, phaseDurations, phraseTimeline } from "./phrases"
+import { CHOICE_PHRASE, CYCLE_MS, DIFFERENT_PHRASE, LIFE_PHRASE, phaseDurations, phraseTimeline } from "./phrases"
 
 describe("phrase timings", () => {
   it("runs every first-visit phrase for exactly 3.2 seconds", () => {
@@ -35,11 +35,20 @@ describe("phrase timings", () => {
     }
   })
 
-  it("keeps a returning visitor's greeting short: no exit, brief hold", () => {
+  it("keeps a returning visitor's greeting short: a brief hold, then the same exit into the choice", () => {
     const t = phraseTimeline("greeting", "buenoniaa", true)
-    expect(t.exitMs).toBe(0)
     expect(t.holdMs).toBe(300)
-    expect(t.totalMs).toBe(t.enterMs + 300)
+    expect(t.exitMs).toBe(phraseTimeline("greeting", "buenoniaa", false).exitMs)
+    expect(t.exitMs).toBeGreaterThan(0)
+    expect(t.totalMs).toBe(t.enterMs + 300 + t.exitMs)
     expect(t.totalMs).toBeLessThan(phraseTimeline("greeting", "buenoniaa", false).totalMs)
+  })
+
+  it("asks what the visitor came to see in lowercase, like every phrase, and keeps the question up with no exit", () => {
+    expect(CHOICE_PHRASE).toBe("¿qué vienes a ver?")
+    const t = phraseTimeline("choice", CHOICE_PHRASE, false)
+    expect(t.enterMs).toBeLessThanOrEqual(1300)
+    expect(t.exitMs).toBe(0)
+    expect(phraseTimeline("choice", CHOICE_PHRASE, true)).toEqual(t)
   })
 })

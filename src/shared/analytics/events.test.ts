@@ -47,6 +47,19 @@ describe("sanitizeProps", () => {
   })
 })
 
+describe("path_chosen", () => {
+  it("records which path the visitor chose after the greeting, and nothing else", () => {
+    expect(sanitizeProps("path_chosen", { path: "work" })).toEqual({ path: "work" })
+    expect(sanitizeProps("path_chosen", { path: "story", handle: "ana", facet: "now" })).toEqual({ path: "story" })
+  })
+
+  it("never lets free text through the path slot", () => {
+    expect(sanitizeProps("path_chosen", { path: "ana" })).toEqual({})
+    expect(sanitizeProps("path_chosen", { path: "/trabajo" })).toEqual({})
+    expect(sanitizeProps("path_chosen", {})).toEqual({})
+  })
+})
+
 describe("memory_audio_recorded", () => {
   it("is recorded with no props: never the audio, its length or the handle", () => {
     expect(sanitizeProps("memory_audio_recorded", {})).toEqual({})

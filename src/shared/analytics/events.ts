@@ -2,6 +2,9 @@
 // or any free text can never be attached, even through a cast.
 export const FACET_IDS = ["stories", "writing", "projects", "now"] as const
 export type FacetId = (typeof FACET_IDS)[number]
+/** What the visitor came to see, answered right after the greeting. */
+export const VISIT_PATHS = ["work", "story"] as const
+export type VisitPath = (typeof VISIT_PATHS)[number]
 
 const MAX_ENTRY_INDEX = 99
 
@@ -23,6 +26,7 @@ export interface EventProps {
   shared_memory_opened: Record<never, never>
   facet_opened: { facet: FacetId }
   entry_opened: { facet: FacetId; index: number }
+  path_chosen: { path: VisitPath }
 }
 
 export type EventName = keyof EventProps
@@ -30,6 +34,7 @@ export type EventName = keyof EventProps
 type Accepts = (value: unknown) => boolean
 
 const isFacet: Accepts = (v) => typeof v === "string" && (FACET_IDS as readonly string[]).includes(v)
+const isPath: Accepts = (v) => typeof v === "string" && (VISIT_PATHS as readonly string[]).includes(v)
 const isIndex: Accepts = (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_ENTRY_INDEX
 
 const ALLOWED: Record<EventName, Record<string, Accepts>> = {
@@ -50,6 +55,7 @@ const ALLOWED: Record<EventName, Record<string, Accepts>> = {
   shared_memory_opened: {},
   facet_opened: { facet: isFacet },
   entry_opened: { facet: isFacet, index: isIndex },
+  path_chosen: { path: isPath },
 }
 
 /** Keeps only allow-listed keys whose values pass their check; everything else is dropped. */

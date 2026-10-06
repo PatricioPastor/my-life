@@ -8,13 +8,15 @@ interface PhraseLineProps {
   text: string
   active: boolean
   returning: boolean
+  /** Lets a control name itself after the phrase (the choice's question labels its options). */
+  id?: string
 }
 
 /**
  * One phrase, assembled letter by letter. Every letter is in its final place from the first frame (opacity 0), so nothing reflows;
  * the CSS keyframes only move transform, opacity and filter, driven by the per-letter custom properties.
  */
-export function PhraseLine({ kind, text, active, returning }: PhraseLineProps) {
+export function PhraseLine({ kind, text, active, returning, id }: PhraseLineProps) {
   const ref = useRef<HTMLParagraphElement>(null)
   const timeline = useMemo(() => phraseTimeline(kind, text, returning), [kind, text, returning])
 
@@ -44,6 +46,7 @@ export function PhraseLine({ kind, text, active, returning }: PhraseLineProps) {
   return (
     <p
       ref={ref}
+      id={id}
       className="ob-line t-title"
       data-on={active}
       data-exit={timeline.exitMs > 0 ? "true" : "false"}
