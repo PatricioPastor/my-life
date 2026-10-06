@@ -79,12 +79,12 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - The journey starts at `sky` with no gate, only Proyectos lit, and no orb.
   - Deep link to an entry, plus the "Mi historia" link.
   - Route: delegated (writer trigger).
-- [ ] **T3 — The fork after the greeting.**
+- [x] **T3 — The fork after the greeting.** Done in `601850d`. The review is pending, together with T4.
   - An onboarding `choice` phase after the greeting, for first-time and returning visitors.
   - "Mi trabajo" goes to `/trabajo`; "Mi historia" continues today's flow.
   - Tests.
   - Route: delegated (writer trigger).
-- [ ] **T4 — Make `/trabajo` indexable.**
+- [x] **T4 — Make `/trabajo` indexable.** Done in `ca71ae3`. The review is pending, together with T3.
   - `robots: index, follow` and a canonical URL on `/trabajo` and `/trabajo/[slug]`.
   - A `sitemap.ts` covering those routes, built from `site-url`.
   - Deep-link analytics events (`R3-deeplink-analytics`).
@@ -137,3 +137,32 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - **Advisory:** `R3-deeplink-analytics` (suggestion). A deep link starts directly on `entry`, so it skips the `facet_opened` and `entry_opened` events. This is folded into T4.
 - 2026-10-06, **T2 done.**
 - 2026-10-06, **User decision:** "Indexar solo /trabajo". `/trabajo` and `/trabajo/[slug]` become indexable and get a sitemap. The rest of the site stays `noindex`. Added as T4.
+- 2026-10-06, **T3 and T4 implemented.** Route: delegated, one writer, two commits.
+  - **T3, `601850d`** (`feat(onboarding): ask what the visitor came to see after the greeting`). 12 files, +392/−68.
+    - **Sequence for a first visit.** The greeting leads to the choice, "¿qué vienes a ver?", written in lowercase like every other title phrase.
+      - "Mi historia" continues as life → different → cta → story → hardware → done.
+      - "Mi trabajo" runs `router.push("/trabajo")` and does not mark the intro as seen.
+    - **Returning visitor.** A short greeting, then the choice. "Mi historia" leads to done, which is the gate.
+    - **Replay** skips the choice. `?intro` includes it.
+    - **"Saltar"** is hidden up to and including the choice; on the story path it still jumps to done.
+    - **`journeyWanted`** is now `replayed || hardware || done`, so nothing mounts the gate or the sky before the visitor chooses. The idle prefetch of the journey code is kept, and `router.prefetch("/trabajo")` runs while the choice is shown.
+    - **Accessibility.** Focus moves to the option group, which is named by the question, and the polite live region announces it. The group is `inert` in every other phase.
+    - **Analytics.** A `path_chosen` event with `{ path }`.
+  - **T4, `ca71ae3`** (`feat(work): index /trabajo with a sitemap and track deep links`). 13 files, +163/−9.
+    - `workMetadata` sets `robots: index, follow` plus a canonical URL.
+    - `sitemap.ts` lists only `/trabajo` and `/trabajo/<slug>`, with `lastModified` taken from `updated`.
+    - `robots.ts` sets `Allow: /` and points to the sitemap. Nothing is disallowed, because a crawler must fetch a page to read its `noindex`.
+    - Deep links emit `facet_opened` and then `entry_opened` once.
+  - **Checks reported by the writer:**
+    - `pnpm test`: 3,459 passing after T3 and 3,469 after T4. The known flake did not recur.
+    - `typecheck` and `lint`: exit 0 after each task.
+    - `pnpm build`: exit 0.
+      - Routes: `○ /`, `○ /robots.txt`, `○ /sitemap.xml`, `○ /trabajo`, `● /trabajo/voltaicco`.
+      - `index.html` has `noindex`. `trabajo.html` and `trabajo/voltaicco.html` have `index, follow` and a canonical link.
+  - **Parent spot check:** `pnpm vitest run src/features/onboarding src/app`, 279 of 279 passing.
+  - **Pending:**
+    - No visual check in a real browser yet: the phone layout and the timing of the options.
+    - Production canonicals need `NEXT_PUBLIC_SITE_URL` or `VERCEL_PROJECT_PRODUCTION_URL` at build time. A local build prints `localhost`.
+  - **Follow-ups not in scope:**
+    - The "Mi historia" link on `/trabajo` goes to `/`, which asks the question again.
+    - Optionally, add `/sitemap.xml` to the tracing config.
