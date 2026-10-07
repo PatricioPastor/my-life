@@ -168,10 +168,26 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
     - `R3-git-dependent-font-guard` (warning): the font guard shells out to `git ls-files`. It fails without git or a work tree, and it also flags untracked local files.
     - `R3-spy-line-not-rebuilt-on-panel-resize`: the scroll-spy line is rebuilt only on window resize. It needs a ResizeObserver on the panel.
     - `R3-global-section-ids`: `document.getElementById` uses unscoped slugs. Lookups should stay within the panel.
-- [ ] **T8 — Polish fixes:**
+- [x] **T8 — Polish fixes.** Done in `8828099`:
   - Make the desktop backdrop fade under the compact headline hide the line beneath it.
   - Rewrite the font guard as a filesystem walk with no git dependency.
   - Scope section lookups to the panel.
   - Rebuild the spy line with a ResizeObserver.
   - In `src/app/layout.tsx`, remove `crossOrigin` from the `api.fontshare.com` preconnect only, keeping it on the CDN host.
   - Route: delegated (writer F).
+- 2026-10-07, **T8 done** in `8828099` (`fix(reader): solid backdrop under the compact headline and sturdier index`). Writer F. 6 files, +244/−17.
+  - **Fixes:**
+    - **Backdrop:** a deeper layer sits over the text column. It is solid for 2rem under the compact line, then fades over 24px.
+    - **Landing point:** headings jumped to from the index now land at `--case-land` (172px desktop). The index stays at `--case-anchor` (132px). The stacking context created by `rise-late` stops the index from being lifted above the bar.
+    - **Font guard:** now a filesystem walk with no git dependency. It runs in about 6ms and skips build and cache folders plus the root `resources/` folder, which `.gitignore` reserves for licensed local fonts.
+    - **Heading lookups:** scoped with `root.querySelector('#'+CSS.escape(id))`. A test mounts two panels.
+    - **Scroll-spy:** a ResizeObserver on the panel rebuilds the spy margin.
+    - **Fontshare preconnects:** the `api.fontshare.com` preconnect no longer has `crossOrigin`; `cdn.fontshare.com` keeps it.
+  - **Checks:**
+    - `pnpm test`: 3,650 passed plus 1 expected fail.
+    - typecheck, lint and build all exit 0.
+    - Parent spot check: reader and layout tests, 87 of 87 passed.
+  - **Visual:** shots are in `shots-polish/t8-*`. The parent viewed the shot at 1440 wide scrolled 900px: there is a solid band under the compact line, and only the fading line is dimmed. Switzer and Gambarino both load.
+  - **Accepted small leftovers:**
+    - At xl, the edge of the band shows where it cuts the background particles.
+    - `cdn.fontshare.com` has two preconnects that are not deduped. This is harmless.
