@@ -163,3 +163,15 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - **Follow-ups:**
     - Strengthen or extend the desktop backdrop fade under the compact headline.
     - `src/app/layout.tsx` preconnects to `api.fontshare.com` with `crossOrigin`, so the connection is not reused for the stylesheet. Remove `crossOrigin` on the `api.` host only (outside this task's surfaces).
+- 2026-10-07, **RDD for T4–T7.** Assessed medium (`slice_budget_reached`, 1003 lines). Consent granted, one lens (reliability). Lineage `review-903439202f780379` over `e621909..a7ed826`: **approved and acknowledged**, authority burned. The reviewed boundary is now `a7ed826`.
+  - **Advisory findings, folded into T8:**
+    - `R3-git-dependent-font-guard` (warning): the font guard shells out to `git ls-files`. It fails without git or a work tree, and it also flags untracked local files.
+    - `R3-spy-line-not-rebuilt-on-panel-resize`: the scroll-spy line is rebuilt only on window resize. It needs a ResizeObserver on the panel.
+    - `R3-global-section-ids`: `document.getElementById` uses unscoped slugs. Lookups should stay within the panel.
+- [ ] **T8 — Polish fixes:**
+  - Make the desktop backdrop fade under the compact headline hide the line beneath it.
+  - Rewrite the font guard as a filesystem walk with no git dependency.
+  - Scope section lookups to the panel.
+  - Rebuild the spy line with a ResizeObserver.
+  - In `src/app/layout.tsx`, remove `crossOrigin` from the `api.fontshare.com` preconnect only, keeping it on the CDN host.
+  - Route: delegated (writer F).
