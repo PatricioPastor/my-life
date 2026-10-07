@@ -4,6 +4,8 @@ import { FACETS, FacetPlace } from "@/features/facets"
 import type { MemoryView } from "@/features/memories"
 import { ContributeButton } from "@/features/memories/ui/contribute-button"
 import { MemoriesPlace } from "@/features/memories/ui/memories-place"
+import { PROJECT } from "@/features/projects/project-fixture"
+import { CaseStudy } from "@/features/reader"
 import { BAR_LEFT, BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
 import { BackButton } from "./back-button"
 import { ReplayIntroButton } from "./replay-intro-button"
@@ -141,6 +143,21 @@ describe("facet entries on a phone", () => {
     const line = classesOf(row.querySelector(".shift"))
     expect(line.has("max-md:flex-col")).toBe(true)
     expect(line.has("md:grid-cols-6")).toBe(true)
+  })
+})
+
+describe("case study on a phone", () => {
+  it("reads in one column on the grid's left axis, with no fixed width that could overflow a 360 px screen", () => {
+    const { container } = render(
+      <CaseStudy meta="Diseño y desarrollo, 2026" title="Consola" stack={[{ name: "Next.js 16", icon: "/tech/nextjs.svg" }]} blocks={PROJECT.blocks} />,
+    )
+    const article = screen.getByRole("article")
+    expect(classesOf(article).has("flex-col")).toBe(true)
+    expect(classesOf(article).has("pl-(--grid-left)")).toBe(true)
+    expect(classesOf(article).has("pr-(--grid-right)")).toBe(true)
+    for (const el of container.querySelectorAll("[class]")) {
+      expect(el.getAttribute("class")).not.toMatch(/(^|\s)(min-)?w-\[\d+px\]/)
+    }
   })
 })
 

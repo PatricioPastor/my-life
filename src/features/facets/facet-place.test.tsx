@@ -11,7 +11,16 @@ afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  // Here rather than at the end of a test, so a test that fails before its end cannot leak the stub (R3-001).
+  delete (HTMLElement.prototype as { animate?: unknown }).animate
 })
+
+/** jsdom has no Web Animations: the title's FLIP calls this stub instead, which afterEach removes. */
+const stubAnimate = () => {
+  const animate = vi.fn()
+  Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate })
+  return animate
+}
 
 const PROYECTOS: Facet = {
   ...findFacet("projects", FACETS)!,
@@ -56,8 +65,7 @@ describe("FacetPlace title", () => {
 
   it("shrinks with a FLIP: the label starts where the large title was, at its size, on the interface's ease-out", () => {
     vi.useFakeTimers()
-    const animate = vi.fn()
-    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate })
+    const animate = stubAnimate()
     const boxes = { hero: new DOMRect(51, 700, 900, 130), label: new DOMRect(51, 76, 150, 25) }
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       const mode = this.getAttribute("data-title") as "hero" | "label" | null
@@ -70,14 +78,12 @@ describe("FacetPlace title", () => {
     expect(frames[0].transform).toBe("translate(0px, 624px) scale(6)")
     expect(frames.at(-1).transform).toBe("none")
     expect(options).toMatchObject({ duration: TITLE_SHRINK_MS, easing: TITLE_EASE })
-    delete (HTMLElement.prototype as { animate?: unknown }).animate
   })
 
   it("crossfades into the label under reduced motion: no travel, no transform", () => {
     vi.useFakeTimers()
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }))
-    const animate = vi.fn()
-    Object.defineProperty(HTMLElement.prototype, "animate", { configurable: true, value: animate })
+    const animate = stubAnimate()
     show()
     act(() => vi.advanceTimersByTime(TITLE_HOLD_MS + 10))
     expect(title().getAttribute("data-fading")).toBe("true")
@@ -85,7 +91,19 @@ describe("FacetPlace title", () => {
     act(() => vi.advanceTimersByTime(TITLE_FADE_OUT_MS + 10))
     expect(title().getAttribute("data-title")).toBe("label")
     expect(animate).not.toHaveBeenCalled()
-    delete (HTMLElement.prototype as { animate?: unknown }).animate
+  })
+})
+
+// R3-001: a FLIP test that fails half way must not leave its stub to the tests after it. The first test fails on
+// purpose (it.fails) after stubbing; the second must find no stub.
+describe("FacetPlace title's animate stub", () => {
+  it.fails("is stubbed by a test that then fails before its end", () => {
+    stubAnimate()
+    expect("a FLIP assertion").toBe("failing")
+  })
+
+  it("is gone by the next test", () => {
+    expect(Object.hasOwn(HTMLElement.prototype, "animate")).toBe(false)
   })
 })
 

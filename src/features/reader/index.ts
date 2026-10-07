@@ -1,3 +1,5 @@
+export { CaseStudy } from "./case-study"
+export type { CaseStudyTech } from "./case-study"
 export { Reader, READER_PAGES } from "./reader"
 export type { ReaderDetail } from "./reader"
 export { pagesOf } from "./pages"

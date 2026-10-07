@@ -18,7 +18,7 @@ import { MemoriesSpace } from "@/features/memories"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import { ORB_CURSOR_ID, ORB_PORTAL, Orb } from "@/features/orb"
 import type { Project } from "@/features/projects"
-import { READER_PAGES, Reader, pagesOf } from "@/features/reader"
+import { CaseStudy, READER_PAGES, Reader, pagesOf } from "@/features/reader"
 import { HalftoneSky, resolveSkyParams, type HalftoneSkyHandle, type SkyPresetName } from "@/features/sky"
 import { track } from "@/shared/analytics"
 import { BackButton } from "./back-button"
@@ -300,19 +300,27 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
 
       {screen === "entry" && facet && entry && (
         <div className="absolute inset-0">
-          <BackButton label={facet.name} hint={`Volver a ${facet.name}`} onClick={() => dispatch({ type: "back" })} />
-          <div className="pointer-events-none absolute inset-0 flex justify-center overflow-y-auto overscroll-contain px-6 [@media(max-height:520px)]:pt-[76px]">
-            <Reader
-              meta={entry.meta}
-              title={entry.title}
-              logo={entry.logo}
-              details={entry.details}
-              pages={pages}
-              page={journey.page}
-              onPrev={() => dispatch({ type: "prevPage" })}
-              onNext={() => dispatch({ type: "nextPage", pageCount })}
-            />
+          {/* Lifted over the case study's panel, which spans the screen and scrolls its text under the way back on a
+              phone; first in the DOM, so it stays first in the tab order. */}
+          <div className="relative z-10">
+            <BackButton label={facet.name} hint={`Volver a ${facet.name}`} onClick={() => dispatch({ type: "back" })} />
           </div>
+          {/* A case study reads as one text with its stack beside it; the placeholder entries keep the paged reader. */}
+          {facet.id === "projects" ? (
+            <CaseStudy meta={entry.meta} title={entry.title} logo={entry.logo} stack={entry.stack ?? []} blocks={entry.blocks ?? []} />
+          ) : (
+            <div className="pointer-events-none absolute inset-0 flex justify-center overflow-y-auto overscroll-contain px-6 [@media(max-height:520px)]:pt-[76px]">
+              <Reader
+                meta={entry.meta}
+                title={entry.title}
+                logo={entry.logo}
+                pages={pages}
+                page={journey.page}
+                onPrev={() => dispatch({ type: "prevPage" })}
+                onNext={() => dispatch({ type: "nextPage", pageCount })}
+              />
+            </div>
+          )}
         </div>
       )}
 

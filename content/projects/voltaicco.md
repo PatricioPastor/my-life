@@ -41,7 +41,7 @@ mark: /projects/voltaicco/mark.svg
     mark:     solo el símbolo, junto al nombre en la lista de Proyectos (también un SVG dentro de public/projects)
 
   Abajo va el texto, con las mismas reglas que la historia de la intro: párrafos, *énfasis*, **fuerte**,
-  > una cita y ## un subtítulo. Una línea con tres guiones (---) da vuelta la página.
+  > una cita y ## un subtítulo. Una línea con tres guiones (---) cierra una sección: deja un espacio y una línea fina.
   En el texto no se permite: listas, enlaces, imágenes, código, tablas, HTML, tachado ni otros títulos.
   Este comentario no se muestra en el sitio.
 -->

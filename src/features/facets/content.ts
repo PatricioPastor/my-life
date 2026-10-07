@@ -1,13 +1,15 @@
 import type { Project } from "@/features/projects"
+import { techFor } from "@/features/projects/tech"
 import type { SparkleAnchor } from "@/features/sky"
 import type { FacetId } from "@/shared/analytics"
 import type { Block } from "@/shared/content"
 import { STAR_TINT, type StarColorKey } from "@/shared/lib/palette"
 
-/** One of an entry's fields, set quietly under its title in the Reader. */
-export interface FacetEntryDetail {
-  label: string
-  value: string
+/** One technology of a case study's stack: its name as written, and its isotype when the registry has one. */
+export interface FacetEntryTech {
+  name: string
+  /** A site path to the technology's official mark (public/tech). A name the registry does not know has none. */
+  icon?: string
 }
 
 export interface FacetEntry {
@@ -15,10 +17,11 @@ export interface FacetEntry {
   title: string
   /** One line on what it is, set beside the title in the place list. Placeholder entries have none. */
   summary?: string
-  details?: readonly FacetEntryDetail[]
+  /** A case study's stack, in the order it lists it. Placeholder entries have none. */
+  stack?: readonly FacetEntryTech[]
   /** The entry's text. Placeholder entries have none, and the Reader shows its placeholder pages. */
   blocks?: readonly Block[]
-  /** A logo (a site path to an SVG) the Reader shows in place of the title, which stays the heading's accessible name. */
+  /** A logo (a site path to an SVG) the case study shows in place of the title, which stays the heading's accessible name. */
   logo?: string
   /** A small mark (a site path to an SVG) set beside the title in the place list, as decoration: the title names it. */
   mark?: string
@@ -83,16 +86,22 @@ export function findFacet(id: string | undefined, facets: readonly Facet[] = FAC
   return facets.find((f) => f.id === id)
 }
 
+/** A stack name with its official mark, when the registry knows it by exactly that name. */
+function stackItem(name: string): FacetEntryTech {
+  const tech = techFor(name)
+  return tech ? { name, icon: tech.icon } : { name }
+}
+
 /**
- * A case study as a Proyectos entry: role and period as its meta (the design's "Rol, año"), its summary, its stack as a
- * detail, and its logo and mark when it has them.
+ * A case study as a Proyectos entry: role and period as its meta (the design's "Rol, año"), its summary, its stack with
+ * each technology's mark, and its logo and mark when it has them.
  */
 function projectEntry({ meta, blocks }: Project): FacetEntry {
   return {
     meta: `${meta.role}, ${meta.period}`,
     title: meta.title,
     summary: meta.summary,
-    details: [{ label: "Stack", value: meta.stack.join(" · ") }],
+    stack: meta.stack.map(stackItem),
     blocks,
     ...(meta.logo !== undefined && { logo: meta.logo }),
     ...(meta.mark !== undefined && { mark: meta.mark }),

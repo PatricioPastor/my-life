@@ -116,6 +116,8 @@ describe("Journey after the gate", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /\[Foco actual\]/ }))
     expect(screen.getByRole("heading", { name: "[Foco actual]" })).toBeTruthy()
+    // A placeholder entry keeps the paged reader: only a case study reads as one text with its stack.
+    expect(screen.queryByRole("list", { name: "Stack" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
     expect(screen.getByText("2 de 3")).toBeTruthy()
 
@@ -134,7 +136,7 @@ describe("Journey after the gate", () => {
     expect(screen.getByRole("button", { name: "Proyectos" })).toBeTruthy()
   })
 
-  it("lists the case studies under Proyectos and reads one page by page", async () => {
+  it("lists the case studies under Proyectos and reads one as a single text, its stack beside it", async () => {
     await toSky()
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
     expect(screen.queryByText("[Nombre del proyecto]")).toBeNull()
@@ -142,14 +144,32 @@ describe("Journey after the gate", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Consola de prueba" })).toBeTruthy()
     expect(screen.getByText("Diseño y desarrollo, 2026")).toBeTruthy()
-    expect(screen.getByRole("definition").textContent).toBe("Next.js 16 · React 19")
-    expect(screen.getByText("Una cita.").closest(".turn")).not.toBeNull()
-    expect(screen.getByText("1 de 2")).toBeTruthy()
+    // The whole text at once, both sides of its break, and nothing to page with.
+    const text = screen.getByRole("region", { name: "Consola de prueba" })
+    expect(text.textContent).toContain("Una cita.")
+    expect(text.textContent).toContain("con fuerza")
+    expect(screen.queryByRole("button", { name: "Página siguiente" })).toBeNull()
+    expect(screen.queryByText(/^\d+ de \d+$/)).toBeNull()
 
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
-    expect(screen.getByText("2 de 2")).toBeTruthy()
-    expect(screen.getByText("con fuerza").closest(".turn")).not.toBeNull()
-    expect((screen.getByRole("button", { name: "Página siguiente" }) as HTMLButtonElement).disabled).toBe(true)
+    const [next] = screen.getAllByRole("button", { name: "Next.js 16" })
+    fireEvent.click(next!)
+    expect(next!.getAttribute("aria-expanded")).toBe("true")
+    expect(document.getElementById(next!.getAttribute("aria-controls")!)?.querySelector("img")?.getAttribute("src")).toBe(
+      "/tech/nextjs.svg",
+    )
+  })
+
+  it("keeps the way back first, ahead of the stack, and above the panel the case study scrolls in", async () => {
+    await toSky()
+    fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
+    fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
+    const back = screen.getByRole("button", { name: "Proyectos" })
+    const [firstItem] = screen.getAllByRole("button", { name: "Next.js 16" })
+    expect(back.compareDocumentPosition(firstItem!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const panel = screen.getByRole("region", { name: "Consola de prueba" }).closest(`[class~="overflow-y-auto"]`)!
+    expect(panel.contains(back)).toBe(false)
+    // The way back's layer is lifted over the panel, which would otherwise paint over it and take its clicks.
+    expect(back.closest(`[class~="z-10"]`)).not.toBeNull()
   })
 })
 
@@ -293,7 +313,7 @@ describe("Journey work mode", () => {
     const second = { ...PROJECT, meta: { ...PROJECT.meta, slug: "otra", title: "Otra consola", order: 2 } }
     render(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
     expect(screen.getByRole("heading", { level: 1, name: "Otra consola" })).toBeTruthy()
-    expect(screen.getByText("1 de 2")).toBeTruthy()
+    expect(screen.getByRole("region", { name: "Otra consola" }).textContent).toContain("con fuerza")
 
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
     expect(screen.getByRole("heading", { name: "Proyectos" })).toBeTruthy()
@@ -324,9 +344,10 @@ describe("Journey work mode", () => {
     ]
     expect(track.mock.calls).toEqual(landing)
 
-    // Re-rendering, paging and walking back out report nothing more; opening a case study again is a click like any other.
+    // Re-rendering, opening a stack item and walking back out report nothing more; opening a case study again is a
+    // click like any other.
     rerender(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
-    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }))
+    fireEvent.click(screen.getAllByRole("button", { name: "React 19" })[0]!)
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
     expect(track.mock.calls).toEqual(landing)
     fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
