@@ -90,6 +90,15 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - Deep-link analytics events (`R3-deeplink-analytics`).
   - Route: delegated. The same writer does T3 and T4, one commit each, and both are reviewed as one slice.
 
+- [ ] **T5 — The Voltaicco logo.**
+  - **Request** (2026-10-06): "Tenes el vector que es un logo, en Figma y en el proyecto /dev/work/desa/ecoflow". The user chose "Encabezado del caso + lista".
+  - **Source:** the vectors come from `ecoflow/public/brand/`, exported from Figma. The dark variant is a `#49D2AA` mark with a `#F2F4F5` wordmark; the light variant uses `#0B6859` and `#1B444F`. Neither names the parent company.
+  - **Where it shows:**
+    - The full logo (mark and wordmark) heads the Voltaicco case study in `Reader`, and the title stays available to assistive technology.
+    - The mark sits next to the name in the Proyectos list.
+    - Both are driven by optional frontmatter fields.
+  - **Route:** delegated (writer trigger: parser, facets, place list and reader).
+
 ## Checks
 
 - `pnpm test`
@@ -172,3 +181,5 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
     - `R3-choice-repeat-click` (suggestion): a repeated click on "Mi trabajo" before navigation finishes sends `path_chosen` and pushes again.
     - `R3-deeplink-effect-strictmode` (suggestion): the deep-link analytics fire twice in development under StrictMode. Production fires once.
 - 2026-10-06, **T3 and T4 done.** All tasks are complete. Next: the user's visual check, then their approval to fast-forward `main` and push.
+- 2026-10-06, **Delivered.** The user said: "si, mandalo a main". `main` was fast-forwarded from `33e6310` to `6fbb3d3` and pushed.
+- 2026-10-06, **T5 added** (the Voltaicco logo). It is on `feat/work-path`, continuing from `6fbb3d3`.
