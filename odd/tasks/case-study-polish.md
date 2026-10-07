@@ -119,3 +119,9 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - **Checks.** `pnpm test` 3,601 passing plus 1 expected fail; typecheck, lint and build clean.
   - **Visual.** Shots in scratchpad `shots-polish/`. The parent viewed the 1440 open shot: Dependencias and Testing open with their chips, and no guides.
   - **Parent spot check.** reader, projects and shared/ui: 158 of 158 passed.
+- 2026-10-07, **RDD for T2 and T3.**
+  - Assessment: medium, `slice_budget_reached` (699 lines).
+  - Consent granted. One lens ran (reliability).
+  - Lineage `review-2464d81585674510` over `c29015e..e621909`: **approved and acknowledged**, with no findings. Authority is burned.
+  - The reviewed boundary is now `e621909`.
+  - Next: writer E (T6, T5, T4, T1).
