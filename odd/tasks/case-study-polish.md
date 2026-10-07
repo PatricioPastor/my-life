@@ -191,3 +191,18 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - **Accepted small leftovers:**
     - At xl, the edge of the band shows where it cuts the background particles.
     - `cdn.fontshare.com` has two preconnects that are not deduped. This is harmless.
+- 2026-10-07, **Delivered.** The user said "si". `main` was fast-forwarded from `c29015e` to `13343f2` and pushed.
+- 2026-10-07, **User feedback after the deploy, with two screenshots:**
+  - **Image #6:** the hover/focus bracket frame around the "INFRAESTRUCTURA" stack category spans the whole aside column. The user's words: "No me gusta que ocupe todo el ancho, siendo que es mas chico el texto. Me parece impreciso."
+  - **Image #7:** the Proyectos list row puts the meta on guide 1, the logo on guide 3 and the summary on guide 5, near the right edge. The user crossed out the meta and wrote: "Considero que la visualización así, lo deja MUY desequilibrado".
+  - **The user's choice:** "Logo y resumen en línea". Drop the meta from the list. One line from the column-1 axis: logo, a fixed gap, then the summary. Across rows, the summaries start at the same x.
+- [ ] **T9 — Balanced list row.**
+  - Remove the meta from the list row. It still shows in the case study.
+  - Put the logo and the summary on one line, starting at the column-1 axis, with a fixed gap.
+  - The list is a `max-content 1fr` grid, so every summary starts at the same x.
+  - The hover and focus frame hugs the row's content.
+  - Phones stack the logo above the summary.
+  - Route: delegated (writer G).
+- [ ] **T10 — Precise interactive boxes in the case study.**
+  - Stack category buttons, index entries and any other control with the bracket frame size to their content, using padding for the hit area instead of full width.
+  - Route: delegated (writer G).
