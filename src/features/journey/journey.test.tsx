@@ -144,6 +144,8 @@ describe("Journey after the gate", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Consola de prueba" })).toBeTruthy()
     expect(screen.getByText("Diseño y desarrollo, 2026")).toBeTruthy()
+    // Its summary heads the text.
+    expect(screen.getByRole("heading", { level: 2, name: PROJECT.meta.summary })).toBeTruthy()
     // The whole text at once, both sides of its break, and nothing to page with.
     const text = screen.getByRole("region", { name: "Consola de prueba" })
     expect(text.textContent).toContain("Una cita.")

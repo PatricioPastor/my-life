@@ -352,6 +352,24 @@
       transition: none;
     }
   }
+  /* A case study's headline gives way to a compact line as its panel scrolls past it: the panel writes how far, 0 to 1,
+     as --headline (src/features/reader/use-headline-progress.ts), at scroll pace, so nothing here transitions. In turn:
+     the headline shrinks toward its top-left corner as it rises, and is gone by 0.6; the bar's backdrop comes in from
+     0.4 and is opaque by 0.7, before the text reaches it; the compact line comes in from 0.6, settling its last few
+     pixels, so the two never show at once. Only transforms and opacities change: the headline keeps its place, nothing
+     reflows. Reduced motion only ever gets 0 or 1. */
+  .case-headline {
+    transform-origin: 0 0;
+    transform: scale(calc(1 - 0.3 * var(--headline, 0)));
+    opacity: clamp(0, calc(1 - var(--headline, 0) / 0.6), 1);
+  }
+  .case-bar {
+    opacity: clamp(0, calc((var(--headline, 0) - 0.4) / 0.3), 1);
+  }
+  .case-line {
+    opacity: clamp(0, calc((var(--headline, 0) - 0.6) / 0.4), 1);
+    transform: translateY(calc((1 - var(--headline, 0)) * 6px));
+  }
 
   .gate {
     transition:

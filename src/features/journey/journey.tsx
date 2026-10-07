@@ -307,7 +307,14 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
           </div>
           {/* A case study reads as one text with its stack beside it; the placeholder entries keep the paged reader. */}
           {facet.id === "projects" ? (
-            <CaseStudy meta={entry.meta} title={entry.title} logo={entry.logo} stack={entry.stack ?? []} blocks={entry.blocks ?? []} />
+            <CaseStudy
+              meta={entry.meta}
+              title={entry.title}
+              summary={entry.summary}
+              logo={entry.logo}
+              stack={entry.stack ?? []}
+              blocks={entry.blocks ?? []}
+            />
           ) : (
             <div className="pointer-events-none absolute inset-0 flex justify-center overflow-y-auto overscroll-contain px-6 [@media(max-height:520px)]:pt-[76px]">
               <Reader

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { StackGroup } from "@/features/projects"
 import { PROJECT } from "@/features/projects/project-fixture"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
@@ -23,8 +23,10 @@ const STACK: readonly StackGroup[] = [
   { name: "Testing", items: [{ name: "Vitest", icon: "/tech/vitest.svg" }] },
 ]
 
-const show = (logo?: string) =>
-  render(<CaseStudy meta="Diseño y desarrollo, 2026" title="Consola de prueba" logo={logo} stack={STACK} blocks={PROJECT.blocks} />)
+const SUMMARY = "Una consola para probar."
+
+const show = (logo?: string, summary?: string) =>
+  render(<CaseStudy meta="Diseño y desarrollo, 2026" title="Consola de prueba" summary={summary} logo={logo} stack={STACK} blocks={PROJECT.blocks} />)
 
 const classesOf = (el: Element | null) => (el?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean)
 const hasAll = (el: Element | null, classes: string) => classes.split(" ").every((c) => classesOf(el).includes(c))
@@ -113,6 +115,143 @@ describe("CaseStudy text", () => {
   })
 })
 
+describe("CaseStudy headline", () => {
+  let reduced = false
+  beforeEach(() => {
+    reduced = false
+    // A frame runs at once; the reduced-motion preference is whatever the test sets.
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 1
+    })
+    vi.stubGlobal("cancelAnimationFrame", () => {})
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduced && query.includes("prefers-reduced-motion"),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const panel = () => body().closest<HTMLElement>(`[class~="overflow-y-auto"]`)!
+  const headline = () => screen.getByRole("heading", { level: 2, name: SUMMARY })
+  /** The compact line: the headline's words again, hidden from assistive tech. */
+  const compactLine = () => [...document.querySelectorAll<HTMLElement>("p[aria-hidden='true']")].find((p) => p.textContent === SUMMARY)!
+  const rect = (top: number) => ({ top, bottom: top + 10, left: 0, right: 0, width: 0, height: 10, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+  /**
+   * Lays the panel out as a browser would once it has scrolled `scrolled` px: the compact line holds still at 76 px, and
+   * the headline, which starts `from` px down (76 on a desktop, under the logo and meta on a phone), rises with the text.
+   */
+  const scrollTo = (scrolled: number, from = 76) => {
+    vi.spyOn(compactLine(), "getBoundingClientRect").mockReturnValue(rect(76))
+    vi.spyOn(headline(), "getBoundingClientRect").mockReturnValue(rect(from - scrolled))
+    panel().scrollTop = scrolled
+    fireEvent.scroll(panel())
+  }
+  const progress = () => panel().style.getPropertyValue("--headline")
+
+  it("heads the text with the summary, an h2 under the logo's h1, large and in the narrative face", () => {
+    show(LOGO, SUMMARY)
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1)
+    expect(follows(screen.getByRole("heading", { level: 1 }), headline())).toBe(true)
+    expect(follows(headline(), within(body()).getByText("Primera página,", { exact: false }))).toBe(true)
+    expect(classesOf(headline())).toContain("font-narrative")
+    expect(classesOf(headline()).some((c) => /^text-\[clamp\(/.test(c))).toBe(true)
+  })
+
+  it("has no headline when the case study has no summary", () => {
+    show()
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).not.toContain(SUMMARY)
+  })
+
+  it("starts large, with the compact line out of sight", () => {
+    show(LOGO, SUMMARY)
+    expect(panel().dataset.headline).toBe("large")
+    expect(progress()).toBe("0")
+  })
+
+  it("shrinks it smoothly as the panel scrolls past it", () => {
+    show(LOGO, SUMMARY)
+    scrollTo(80)
+    expect(Number(progress())).toBeCloseTo(0.5)
+    expect(panel().dataset.headline).toBe("large")
+  })
+
+  it("holds the compact line once the headline has scrolled past, and gives it back at the top", () => {
+    show(LOGO, SUMMARY)
+    scrollTo(400)
+    expect(progress()).toBe("1")
+    expect(panel().dataset.headline).toBe("compact")
+    scrollTo(0)
+    expect(progress()).toBe("0")
+    expect(panel().dataset.headline).toBe("large")
+  })
+
+  it("only starts once the headline reaches the bar, wherever it starts (a phone sets it under the logo)", () => {
+    show(LOGO, SUMMARY)
+    scrollTo(90, 176)
+    expect(progress()).toBe("0")
+    scrollTo(180, 176)
+    expect(Number(progress())).toBeCloseTo(0.5)
+  })
+
+  it("under reduced motion, switches between the two at once, with nothing in between", () => {
+    reduced = true
+    show(LOGO, SUMMARY)
+    scrollTo(40)
+    expect(progress()).toBe("0")
+    scrollTo(100)
+    expect(progress()).toBe("1")
+    expect(panel().dataset.headline).toBe("compact")
+  })
+
+  it("keeps the compact line out of the outline: the headline stays the one heading with its words", () => {
+    show(LOGO, SUMMARY)
+    expect(screen.getAllByRole("heading", { name: SUMMARY })).toHaveLength(1)
+    expect(compactLine()).toBeDefined()
+    expect(classesOf(compactLine())).toContain("truncate")
+  })
+
+  it("covers the way back's row across the panel, so the text never shows under it", () => {
+    show(LOGO, SUMMARY)
+    const bar = compactLine().closest<HTMLElement>(`[class~="sticky"]`)!
+    expect(hasAll(bar, "sticky top-0")).toBe(true)
+    expect(panel().contains(bar)).toBe(true)
+    const cap = [...bar.querySelectorAll("div")].find((el) => hasAll(el, "inset-x-0 top-0 h-(--case-top)"))
+    expect(classesOf(cap!).some((c) => c.includes("var(--void)"))).toBe(true)
+  })
+
+  describe("its motion", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8")
+    const rule = (name: string) => new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? ""
+    /** The opacity a rule gives at progress p, evaluating its `clamp(0, calc((var(--headline, 0) - a) / b), 1)` form. */
+    const opacityAt = (name: string, p: number) => {
+      const expr = /opacity: clamp\(0, calc\((.+)\), 1\);/.exec(rule(name))?.[1] ?? "NaN"
+      const value = Number(Function(`"use strict"; return (${expr.replaceAll("var(--headline, 0)", String(p))})`)())
+      return Math.min(1, Math.max(0, value))
+    }
+
+    it("reserves the headline's place: only its transform and opacity follow the scroll", () => {
+      expect(rule("case-headline")).toMatch(/transform: scale\(calc\(1 - [\d.]+ \* var\(--headline, 0\)\)\)/)
+      expect(rule("case-headline")).not.toMatch(/(^|\s)(height|font-size|margin|padding)/)
+    })
+
+    it("lets the headline go before its compact line comes in, so the two never show at once", () => {
+      expect(opacityAt("case-headline", 0)).toBe(1)
+      expect(opacityAt("case-line", 0)).toBe(0)
+      const gone = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].find((p) => opacityAt("case-headline", p) === 0)!
+      expect(opacityAt("case-line", gone)).toBe(0)
+      expect(opacityAt("case-line", 1)).toBe(1)
+    })
+
+    it("has the backdrop opaque before the compact line shows on it", () => {
+      expect(opacityAt("case-bar", 0)).toBe(0)
+      const shows = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].find((p) => opacityAt("case-line", p) >= 0.5)!
+      expect(opacityAt("case-bar", shows)).toBe(1)
+    })
+  })
+})
+
 describe("CaseStudy narrative font", () => {
   const SWITZER = "https://api.fontshare.com/v2/css?f[]=switzer@1,2&display=swap"
   const headLink = (selector: string) => document.head.querySelector<HTMLLinkElement>(selector)
@@ -156,7 +295,7 @@ describe("CaseStudy grid", () => {
     expect(hasAll(left, `${GRID_ASIDE} md:sticky`)).toBe(true)
     expect(left?.contains(screen.getByText("Diseño y desarrollo, 2026"))).toBe(true)
     expect(left?.contains(aside())).toBe(true)
-    expect(hasAll(body(), GRID_CONTENT)).toBe(true)
+    expect(hasAll(body().parentElement, GRID_CONTENT)).toBe(true)
     expect(hasAll(left?.parentElement ?? null, GRID)).toBe(true)
   })
 })
