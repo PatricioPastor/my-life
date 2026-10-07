@@ -12,9 +12,10 @@ function Runs({ runs }: { runs: readonly InlineRun[] }) {
 
 /**
  * One block of an entry's page, at rest: the intro reader's ReaderBlock paints word by word on an animated stack, which
- * a page that turns has no use for. React text nodes only: nothing is parsed as HTML.
+ * a page that turns has no use for. React text nodes only: nothing is parsed as HTML. A subheading given an `id` is a
+ * section an index can jump to: focusable from a script (never a tab stop), so the jump can move focus there.
  */
-export function PageBlock({ block }: { block: Block }) {
+export function PageBlock({ block, id }: { block: Block; id?: string }) {
   switch (block.type) {
     case "paragraph":
       return (
@@ -29,7 +30,11 @@ export function PageBlock({ block }: { block: Block }) {
         </blockquote>
       )
     case "subheading":
-      return <h2 className="m-0 font-sans text-xs font-normal tracking-[0.06em] text-ink-muted">{block.text}</h2>
+      return (
+        <h2 id={id} tabIndex={id ? -1 : undefined} className="m-0 font-sans text-xs font-normal tracking-[0.06em] text-ink-muted">
+          {block.text}
+        </h2>
+      )
     case "break":
       // Breaks are where pages turn (pagesOf), so a page never holds one.
       return null

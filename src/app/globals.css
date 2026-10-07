@@ -327,6 +327,10 @@
   .row[aria-expanded="true"] .mark {
     opacity: 1;
   }
+  /* A case study's index (src/features/reader/section-index.tsx) keeps the mark on the section being read. */
+  .row[aria-current="location"] .mark {
+    opacity: 1;
+  }
   .tech-reveal {
     display: grid;
     grid-template-rows: 0fr;

@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { StackGroup } from "@/features/projects"
 import { PROJECT } from "@/features/projects/project-fixture"
+import type { Block } from "@/shared/content"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
 import { TITLE_EASE, TITLE_FADE_IN_MS, TITLE_FADE_OUT_MS } from "@/shared/ui/place-title"
 import { CaseStudy } from "./case-study"
@@ -252,6 +253,177 @@ describe("CaseStudy headline", () => {
   })
 })
 
+describe("CaseStudy index", () => {
+  /** An intro, then three sections, one title used twice. */
+  const BLOCKS: readonly Block[] = [
+    { type: "paragraph", runs: [{ kind: "text", text: "La intro." }] },
+    { type: "break" },
+    { type: "subheading", text: "El problema" },
+    { type: "paragraph", runs: [{ kind: "text", text: "Uno." }] },
+    { type: "break" },
+    { type: "subheading", text: "Dónde está hoy" },
+    { type: "paragraph", runs: [{ kind: "text", text: "Dos." }] },
+    { type: "break" },
+    { type: "subheading", text: "El problema" },
+    { type: "paragraph", runs: [{ kind: "text", text: "Tres." }] },
+  ]
+  const IDS = ["el-problema", "donde-esta-hoy", "el-problema-2"]
+
+  /** A stand-in for the browser's observer: it records what is observed, and reports what a test says has scrolled by. */
+  class FakeObserver {
+    static last: FakeObserver
+    observed: Element[] = []
+    constructor(
+      readonly callback: IntersectionObserverCallback,
+      readonly options?: IntersectionObserverInit,
+    ) {
+      FakeObserver.last = this
+    }
+    observe(el: Element) {
+      this.observed.push(el)
+    }
+    unobserve() {}
+    disconnect() {
+      this.observed = []
+    }
+    takeRecords() {
+      return []
+    }
+    /**
+     * Reports the headings in `passed` as risen above the line under the bar, and the rest as below it. The watched area
+     * is everything above that line, however far: a heading in it has risen past the line.
+     */
+    report(passed: string[]) {
+      const entries = this.observed.map((target) => ({ target, isIntersecting: passed.includes(target.id) }))
+      act(() => this.callback(entries as unknown as IntersectionObserverEntry[], this as unknown as IntersectionObserver))
+    }
+  }
+
+  let reduced = false
+  beforeEach(() => {
+    reduced = false
+    vi.stubGlobal("IntersectionObserver", FakeObserver)
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: reduced && query.includes("prefers-reduced-motion"),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const showSections = () =>
+    render(<CaseStudy meta="Diseño y desarrollo, 2026" title="Consola de prueba" summary={SUMMARY} stack={STACK} blocks={BLOCKS} />)
+  const index = () => screen.getByRole("navigation", { name: "Índice" })
+  const entries = () => within(index()).getAllByRole("link")
+  const current = () => entries().filter((a) => a.getAttribute("aria-current") === "location").map((a) => a.textContent)
+  const headings = () => within(body()).getAllByRole("heading", { level: 2 })
+  const panel = () => body().closest<HTMLElement>(`[class~="overflow-y-auto"]`)!
+
+  it("lists every section of the text, in order, by its own title", () => {
+    showSections()
+    expect(entries().map((a) => a.textContent)).toEqual(["El problema", "Dónde está hoy", "El problema"])
+    expect(headings().map((h) => h.textContent)).toEqual(["El problema", "Dónde está hoy", "El problema"])
+  })
+
+  it("links each entry to its heading, by an id that is readable, unique and the same on every render", () => {
+    const { rerender } = showSections()
+    expect(headings().map((h) => h.id)).toEqual(IDS)
+    expect(entries().map((a) => a.getAttribute("href"))).toEqual(IDS.map((id) => `#${id}`))
+    rerender(<CaseStudy meta="Diseño y desarrollo, 2026" title="Consola de prueba" summary={SUMMARY} stack={STACK} blocks={BLOCKS} />)
+    expect(headings().map((h) => h.id)).toEqual(IDS)
+    // Focusable from a script only, so a jump can move focus there; never a tab stop.
+    for (const h of headings()) expect(h.tabIndex).toBe(-1)
+  })
+
+  it("jumps to a section: scrolls the panel smoothly to it, under the bar, and moves focus to its heading without a second scroll", () => {
+    showSections()
+    const scrollTo = vi.fn()
+    panel().scrollTo = scrollTo
+    panel().scrollTop = 100
+    const heading = document.getElementById("donde-esta-hoy")!
+    heading.style.scrollMarginTop = "132px"
+    vi.spyOn(heading, "getBoundingClientRect").mockReturnValue({ top: 700 } as DOMRect)
+    vi.spyOn(panel(), "getBoundingClientRect").mockReturnValue({ top: 0 } as DOMRect)
+    const focus = vi.spyOn(heading, "focus")
+    const click = fireEvent.click(entries()[1]!)
+    expect(click).toBe(false) // the jump is the panel's, not the document's
+    expect(scrollTo).toHaveBeenCalledWith({ top: 700 + 100 - 132, behavior: "smooth" })
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(document.activeElement).toBe(heading)
+  })
+
+  it("jumps at once under reduced motion", () => {
+    reduced = true
+    showSections()
+    const scrollTo = vi.fn()
+    panel().scrollTo = scrollTo
+    fireEvent.click(entries()[0]!)
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: "auto" }))
+  })
+
+  it("watches the headings within the panel, over everything above a line under the bar", () => {
+    showSections()
+    expect(FakeObserver.last.options?.root).toBe(panel())
+    expect(FakeObserver.last.observed.map((el) => el.id)).toEqual(IDS)
+    // Reaching far above the panel, so a heading that leaps past the line in one jump still counts as risen.
+    const [top, , bottom] = (FakeObserver.last.options?.rootMargin ?? "").split(" ").map((m) => parseFloat(m))
+    expect(top).toBeGreaterThanOrEqual(10000)
+    expect(bottom).toBeLessThanOrEqual(48)
+  })
+
+  it("marks nothing while the intro is read, before the first section", () => {
+    showSections()
+    FakeObserver.last.report([])
+    expect(current()).toEqual([])
+  })
+
+  it("marks the section being read, one at a time, as the text scrolls both ways", () => {
+    showSections()
+    FakeObserver.last.report(["el-problema"])
+    expect(current()).toEqual(["El problema"])
+    expect(entries()[0]!.getAttribute("aria-current")).toBe("location")
+    FakeObserver.last.report(["el-problema", "donde-esta-hoy"])
+    expect(current()).toEqual(["Dónde está hoy"])
+    FakeObserver.last.report(["el-problema"])
+    expect(current()).toEqual(["El problema"])
+  })
+
+  it("marks the last section once the panel reaches its end, though its heading cannot rise that far", () => {
+    showSections()
+    FakeObserver.last.report(["el-problema", "donde-esta-hoy"])
+    Object.defineProperty(panel(), "scrollHeight", { configurable: true, value: 2000 })
+    Object.defineProperty(panel(), "clientHeight", { configurable: true, value: 900 })
+    panel().scrollTop = 1100
+    fireEvent.scroll(panel())
+    expect(current()).toEqual(["El problema"])
+    expect(entries()[2]!.getAttribute("aria-current")).toBe("location")
+  })
+
+  it("keeps the chosen entry marked while the panel travels to it, until the reader scrolls on their own", () => {
+    showSections()
+    panel().scrollTo = vi.fn()
+    fireEvent.click(entries()[1]!)
+    expect(current()).toEqual(["Dónde está hoy"])
+    FakeObserver.last.report(["el-problema"])
+    expect(current()).toEqual(["Dónde está hoy"])
+    fireEvent.wheel(panel())
+    expect(current()).toEqual(["El problema"])
+  })
+
+  it("sits in the sixth column from xl, the text in the three before it; below that, and on a phone, it is hidden", () => {
+    showSections()
+    expect(hasAll(index(), "hidden xl:block xl:sticky xl:self-start")).toBe(true)
+    expect(hasAll(body().parentElement, "xl:col-span-3")).toBe(true)
+    expect(hasAll(body().parentElement!.parentElement, `${GRID_CONTENT} xl:grid xl:grid-cols-4`)).toBe(true)
+    expect(classesOf(index()).some((c) => c.startsWith("xl:col-start-"))).toBe(true)
+  })
+
+  it("has no index when the text has no sections", () => {
+    render(<CaseStudy meta="m" title="Consola de prueba" stack={STACK} blocks={[{ type: "paragraph", runs: [{ kind: "text", text: "Solo." }] }]} />)
+    expect(screen.queryByRole("navigation", { name: "Índice" })).toBeNull()
+  })
+})
+
 describe("CaseStudy narrative font", () => {
   const SWITZER = "https://api.fontshare.com/v2/css?f[]=switzer@1,2&display=swap"
   const headLink = (selector: string) => document.head.querySelector<HTMLLinkElement>(selector)
@@ -295,7 +467,8 @@ describe("CaseStudy grid", () => {
     expect(hasAll(left, `${GRID_ASIDE} md:sticky`)).toBe(true)
     expect(left?.contains(screen.getByText("Diseño y desarrollo, 2026"))).toBe(true)
     expect(left?.contains(aside())).toBe(true)
-    expect(hasAll(body().parentElement, GRID_CONTENT)).toBe(true)
+    // The content zone holds the text's column (the headline and the text) and, from xl, the index.
+    expect(hasAll(body().parentElement!.parentElement, GRID_CONTENT)).toBe(true)
     expect(hasAll(left?.parentElement ?? null, GRID)).toBe(true)
   })
 })

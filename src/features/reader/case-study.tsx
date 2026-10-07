@@ -7,6 +7,8 @@ import { cn } from "@/shared/lib/utils"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
 import { NarrativeFont } from "./narrative-font"
 import { PageBlock } from "./page-block"
+import { PANEL_ATTRIBUTE, SectionIndex } from "./section-index"
+import { sectionsOf } from "./sections"
 import { useHeadlineProgress } from "./use-headline-progress"
 
 /** The bar's backdrop: the place's void, ending in a short fade, so what scrolls beneath it fades out instead of being cut. */
@@ -28,13 +30,16 @@ interface CaseStudyProps {
  * the logo (the page's heading), the meta and the stack, whose categories open onto their technologies. The content
  * zone (columns 3–6) opens on the summary as a large headline, then holds the whole text, every block in order, a
  * break drawn as a faint hairline: no pages, so nothing is ever laid on top of anything else. As the text scrolls, the
- * headline gives way to a compact line held at the top, beside the logo. A phone reads one column: the logo, the meta,
- * the headline, the text, then the stack.
+ * headline gives way to a compact line held at the top, beside the logo. From xl, the text takes columns 3–5 and the
+ * index of its sections holds still in column 6. A phone reads one column: the logo, the meta, the headline, the text,
+ * then the stack.
  */
 export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStudyProps) {
   const id = useId()
   const titleId = `${id}-title`
   const { panel, headline, line } = useHeadlineProgress()
+  const sections = sectionsOf(blocks)
+  const anchors = new Map(sections.map((s) => [s.block, s.id]))
   // Indices of the open categories, and of every one opened so far: a category's isotypes are fetched when it first
   // opens, then stay, so that closing it can animate. Both copies of the stack (the left zone's, the phone's) read them.
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
@@ -51,8 +56,13 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
 
   return (
     // --case-top: where the content starts, right under the way back's row; the compact line holds there too.
+    // --case-anchor: where a section's heading lands after a jump, and where the index holds: under the compact line.
     // Isolated, so the bar over the text stays under the way back, which is drawn above the panel.
-    <div ref={panel} className="absolute inset-0 isolate overflow-y-auto overscroll-contain [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]">
+    <div
+      ref={panel}
+      {...{ [PANEL_ATTRIBUTE]: "" }}
+      className="absolute inset-0 isolate overflow-y-auto overscroll-contain [--case-anchor:calc(var(--case-top)+2rem+var(--space-3))] [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]"
+    >
       <NarrativeFont />
       {/* One cell holds the text and the bar it scrolls beneath. */}
       <div className="grid min-h-full">
@@ -85,33 +95,41 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
             <p className="m-0 mt-3 text-xs leading-[1.6] tracking-[0.06em] text-ink-muted">{meta}</p>
             <StackList {...list} idPrefix={`${id}-side`} className="mt-10 max-md:hidden" />
           </header>
-          <div className={cn(GRID_CONTENT, "rise-late flex flex-col")}>
-            {/* The summary, as the text's headline (the logo stays the page's heading). It keeps its place in the text
-                as it gives way to the compact line: only its transform and opacity change (globals.css). */}
-            {summary && (
-              <h2
-                ref={headline}
-                className="case-headline m-0 mb-10 font-narrative text-[clamp(36px,calc(36px+(100vw-390px)*0.019),56px)] leading-[1.04] font-medium tracking-[-0.025em] text-balance text-ink"
-              >
-                {summary}
-              </h2>
-            )}
-            {/* The text scrolls with the panel; focusable and named, so the keyboard can scroll it too. */}
-            <div
-              role="region"
-              aria-labelledby={titleId}
-              tabIndex={0}
-              className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1"
-            >
-              {blocks.map((block, i) =>
-                block.type === "break" ? (
-                  // A section ends: space, and a faint hairline across the text's measure.
-                  <hr key={i} className="my-5 h-px border-0 bg-ink-faint/40" />
-                ) : (
-                  <PageBlock key={i} block={block} />
-                ),
+          {/* The content zone: from xl, its own four columns, lined up with the grid's 3–6. */}
+          <div className={cn(GRID_CONTENT, "rise-late flex flex-col xl:grid xl:grid-cols-4 xl:gap-x-(--grid-gap)")}>
+            <div className="flex flex-col xl:col-span-3">
+              {/* The summary, as the text's headline (the logo stays the page's heading). It keeps its place in the
+                  text as it gives way to the compact line: only its transform and opacity change (globals.css). */}
+              {summary && (
+                <h2
+                  ref={headline}
+                  className="case-headline m-0 mb-10 font-narrative text-[clamp(36px,calc(36px+(100vw-390px)*0.019),56px)] leading-[1.04] font-medium tracking-[-0.025em] text-balance text-ink"
+                >
+                  {summary}
+                </h2>
               )}
+              {/* The text scrolls with the panel; focusable and named, so the keyboard can scroll it too. A jump from the
+                  index lands a section's heading under the bar, and focuses it. */}
+              <div
+                role="region"
+                aria-labelledby={titleId}
+                tabIndex={0}
+                className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1 [&>h2]:scroll-mt-(--case-anchor) [&>h2]:focus-visible:outline-1 [&>h2]:focus-visible:outline-offset-8 [&>h2]:focus-visible:outline-ink-faint"
+              >
+                {blocks.map((block, i) =>
+                  block.type === "break" ? (
+                    // A section ends: space, and a faint hairline across the text's measure.
+                    <hr key={i} className="my-5 h-px border-0 bg-ink-faint/40" />
+                  ) : (
+                    <PageBlock key={i} block={block} id={anchors.get(i)} />
+                  ),
+                )}
+              </div>
             </div>
+            {/* Only where the sixth column is wide enough to hold a title on a line or two. */}
+            {sections.length > 0 && (
+              <SectionIndex sections={sections} className="hidden xl:sticky xl:top-(--case-anchor) xl:col-start-4 xl:block xl:self-start" />
+            )}
           </div>
           <StackList {...list} idPrefix={`${id}-end`} className="rise-late md:hidden" />
         </article>
