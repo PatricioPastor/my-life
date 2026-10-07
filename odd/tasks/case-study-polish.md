@@ -74,12 +74,12 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
 
 ## Tasks
 
-- [ ] **T1 — Prisma ORM isotype, plus a check of all 12 isotypes.** Research runs as a parallel worker; the change is done by writer E.
-- [ ] **T2 — Stack grouped by category.** Frontmatter, parser, registry and a `CaseStudy` UI with chips that load lazily. Writer D.
-- [ ] **T3 — Hide the guides.** Writer D.
+- [ ] **T1 — Contact sheet of the 12 isotypes, checked by eye.** Prisma stays as the 2026 mark at the user's request, so no swap is needed. Writer E.
+- [x] **T2 — Stack grouped by category.** Done in `b3a34dd`. Frontmatter, parser, registry and a `CaseStudy` UI with chips that load lazily. Writer D.
+- [x] **T3 — Hide the guides.** Done in `5fca1c1`. Writer D.
 - [ ] **T4 — Section index with scroll-spy.** Writer E.
 - [ ] **T5 — Headline that shrinks on scroll.** Writer E.
-- [ ] **T6 — Switzer for the narrative.** Research runs as a parallel worker; the change is done by writer E.
+- [ ] **T6 — Switzer for the narrative, loaded through the Fontshare CSS API on `/trabajo` only.** No font files go in the repo. Writer E.
 
 ## Checks
 
@@ -94,3 +94,28 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
 ## Progress
 
 - 2026-10-07: the interpretation was confirmed and the branch created. Next: the research worker (Switzer, the Prisma ORM symbol) runs in parallel with writer D (T3, T2).
+- 2026-10-07, **Research done.**
+  - **Prisma.**
+    - The cyan, red and yellow mark from `prisma.io/icon.svg` is **Prisma ORM's own current mark**, introduced in the 2026 rebrand. Evidence: `prisma/presskit` commit `4cfdd24942` (2026-08-18), "Update brandkit with the new Prisma logo and assets". It removed the "old indigo-era" files, and `prisma.io/orm` uses this mark as its favicon.
+    - The classic white triangle (`Prisma-LightSymbol.svg` at `13ee1c557d`) is retired.
+    - **User decision:** "Logo actual 2026", so `public/tech/prisma.svg` stays as it is. T1 shrinks to a contact sheet of all 12 isotypes, checked by eye.
+  - **Switzer.**
+    - Fontshare's official zip ships `Switzer-Variable.woff2` (43,220 B) and `Switzer-VariableItalic.woff2` (33,408 B), with a `wght` axis from 100 to 900.
+    - The license is the ITF Free Font License v2.0. Self-hosting on your own site is allowed (§ line 36). Subsetting or converting the files is forbidden. Distribution through any "repository" or "publicly accessible servers" is forbidden (line 53).
+    - my-life is a **public** GitHub repo, so committing the `.woff2` files would conflict with that clause.
+    - **User decision:** "API de Fontshare". Load Switzer through Fontshare's CSS API (`api.fontshare.com`), only on the `/trabajo` routes. No font files are committed. The cost is one third-party request and a small font swap.
+- 2026-10-07, **T3 done** in `5fca1c1` (`refactor(ui): drop the visible grid guides`). Writer D. 9 files, +32/−81.
+  - `GridGuides` was removed: the component, its export and its tests. The grid tokens and zones stay.
+  - RED: both screens rendered the guides layer.
+  - Checks: `pnpm test` 3,587 passing plus 1 expected fail; typecheck and lint clean.
+- 2026-10-07, **T2 done** in `b3a34dd` (`feat(reader): group the case-study stack by category with lazy isotypes`). 16 files, +327/−138.
+  - **Frontmatter.** `stack` is now an ordered YAML map from category to list.
+    - Verified with `yaml@2.9.1`: insertion order is kept, except for integer-like keys, so a category named only by a number is rejected.
+    - The parser also rejects empty or nameless categories, a technology repeated within or across categories, and a category listed twice (YAML's own error).
+  - **Shared types.** `StackItem` and `StackGroup<Item>` live in `projects/tech.ts`, which resolves R2-001.
+  - **UI.** Each category is a disclosure. Collapsed shows the label only; open shows chips (a 20px isotype plus the name, 32px high) in a wrapping row. Everything starts collapsed, and several categories can be open at once.
+  - **Lazy images.** An `<img>` is not mounted until its category opens, and it stays mounted afterwards so the close can animate. This resolves R4-001; verified that no `/tech/` request happens before a category opens.
+  - **RED.** Before the change, the parser failed 20 tests, the facets mapping 3 and `CaseStudy` 11.
+  - **Checks.** `pnpm test` 3,601 passing plus 1 expected fail; typecheck, lint and build clean.
+  - **Visual.** Shots in scratchpad `shots-polish/`. The parent viewed the 1440 open shot: Dependencias and Testing open with their chips, and no guides.
+  - **Parent spot check.** reader, projects and shared/ui: 158 of 158 passed.
