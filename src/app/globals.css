@@ -179,6 +179,16 @@
   --bar-gap: 0px;
   --title-bearing: 0.02em;
 
+  /*
+   * The place grid (src/shared/ui/grid): six equal columns from md, with --grid-gap between them. Its first column
+   * starts on the back chevron's ink, the axis a title under the bar hangs from, so a place's label, its content and
+   * its guides share one left edge; the right inset mirrors it against its own notch. Built on the bar's tokens, it
+   * follows them to a desktop.
+   */
+  --grid-left: calc(var(--bar-left) + var(--bar-pad) + var(--bar-ink));
+  --grid-right: calc(var(--bar-right) + var(--bar-pad) + var(--bar-ink));
+  --grid-gap: var(--space-3);
+
   @variant md {
     --bar-y: 1.75rem;
     --bar-x: 2.25rem;
@@ -504,19 +514,20 @@
   .mem-stage:focus-visible {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink-muted) 40%, transparent);
   }
-  /* The title: large on arrival, then a quiet label under the way back; hidden while the camera is on a memory. */
-  .mem-title {
+  /* A place's title (src/shared/ui/place-title): large on arrival, then a quiet label under the way back; the memories
+     also hide it while the camera is on a memory. */
+  .place-title {
     transition: opacity 240ms ease-out;
   }
-  .mem-title[data-title="label"] {
+  .place-title[data-title="label"] {
     opacity: 0.88;
   }
-  .mem-title[data-hidden="true"],
-  .mem-title[data-fading="true"] {
+  .place-title[data-hidden="true"],
+  .place-title[data-fading="true"] {
     opacity: 0;
   }
-  .mem-title[data-fading="true"],
-  .mem-title[data-hidden="true"] {
+  .place-title[data-fading="true"],
+  .place-title[data-hidden="true"] {
     transition-duration: 160ms;
   }
   /* Reduced motion cuts the camera: the world fades out around the swap. */

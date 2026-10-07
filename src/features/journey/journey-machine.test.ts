@@ -4,7 +4,6 @@ import {
   initialJourneyStateFor,
   journeyReducer,
   focusIndexFor,
-  listSideFor,
   originFor,
   journeyOriginFor,
   skyPausedFor,
@@ -260,12 +259,6 @@ describe("derived values", () => {
     expect(focusIndexFor("sky", "nope", null, ids)).toBe(-1)
     expect(focusIndexFor("place", "projects", "now", ids)).toBe(-1)
     expect(focusIndexFor("gate", "projects", null, ids)).toBe(-1)
-  })
-
-  it("puts the list on the side opposite the star", () => {
-    expect(listSideFor(0.75)).toBe("left")
-    expect(listSideFor(0.5)).toBe("right")
-    expect(listSideFor(0.21)).toBe("right")
   })
 })
 

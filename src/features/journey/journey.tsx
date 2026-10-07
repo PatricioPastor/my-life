@@ -29,7 +29,6 @@ import {
   initialJourneyStateFor,
   journeyOriginFor,
   journeyReducer,
-  listSideFor,
   skyPausedFor,
   veilFor,
   zoomFor,
@@ -217,7 +216,6 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
   const tunnelUp = screen === "orbWarp" || (screen === "orbReturn" && !reduced)
   const tunnelBack = screen === "orbReturn" || portalLinger === "back"
   const shown = facet ?? facets[0]
-  const listSide = listSideFor(shown.x)
   // Undefined only while a facet with no entries is open (Proyectos with no case study); then no entry can be.
   const entry: FacetEntry | undefined = shown.entries[journey.entryIndex] ?? shown.entries[0]
   const pages = entry?.blocks ? pagesOf(entry.blocks) : undefined
@@ -292,7 +290,6 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
           <BackButton label="Universo" hint="Volver al universo" onClick={() => dispatch({ type: "back" })} />
           <FacetPlace
             facet={facet}
-            listSide={listSide}
             onOpenEntry={(index) => {
               track("entry_opened", { facet: facet.id, index })
               dispatch({ type: "entryOpened", index })

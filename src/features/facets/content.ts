@@ -13,6 +13,8 @@ export interface FacetEntryDetail {
 export interface FacetEntry {
   meta: string
   title: string
+  /** One line on what it is, set beside the title in the place list. Placeholder entries have none. */
+  summary?: string
   details?: readonly FacetEntryDetail[]
   /** The entry's text. Placeholder entries have none, and the Reader shows its placeholder pages. */
   blocks?: readonly Block[]
@@ -82,13 +84,14 @@ export function findFacet(id: string | undefined, facets: readonly Facet[] = FAC
 }
 
 /**
- * A case study as a Proyectos entry: role and period as its meta (the design's "Rol, año"), its stack as a detail, and
- * its logo and mark when it has them.
+ * A case study as a Proyectos entry: role and period as its meta (the design's "Rol, año"), its summary, its stack as a
+ * detail, and its logo and mark when it has them.
  */
 function projectEntry({ meta, blocks }: Project): FacetEntry {
   return {
     meta: `${meta.role}, ${meta.period}`,
     title: meta.title,
+    summary: meta.summary,
     details: [{ label: "Stack", value: meta.stack.join(" · ") }],
     blocks,
     ...(meta.logo !== undefined && { logo: meta.logo }),

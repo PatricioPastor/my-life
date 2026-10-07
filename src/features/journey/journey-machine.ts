@@ -132,8 +132,3 @@ export function focusIndexFor(
   if (screen !== "sky") return -1
   return facetIds.indexOf(capturedId ?? hoveredId ?? "")
 }
-
-/** The list opens on the side of the sky away from the star you dove into. */
-export function listSideFor(facetX: number): "left" | "right" {
-  return facetX > 0.5 ? "left" : "right"
-}

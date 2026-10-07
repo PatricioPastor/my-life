@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react"
-import { BAR_RIGHT, BAR_TITLE, BAR_TOP } from "@/shared/lib/top-bar"
+import { BAR_RIGHT, BAR_TOP } from "@/shared/lib/top-bar"
+import { TITLE_LABEL } from "@/shared/ui/place-title"
 import { ensureGambarinoStylesheet } from "@/features/onboarding/font"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import type { MemoriesFailure, MemoryView } from "../memory-view"
@@ -66,12 +67,11 @@ const SPACE_LABEL = "Recuerdos. Arrastra para moverte y usa la rueda para acerca
 /** What the first fit leaves clear for the HUD: the way back and the title's label on top, the large title and the add control below. */
 const FIT_PAD = { top: 112, right: 28, bottom: 168, left: 28 }
 /**
- * The large title at the bottom left, and the label it becomes: under the top bar, its first letter lined up with the
- * ink of the way back's chevron ("‹ Universo"), placed by the bar's own tokens.
+ * The large title at the bottom left; the label it becomes is the shared place title's (TITLE_LABEL): under the top
+ * bar, its first letter lined up with the ink of the way back's chevron ("‹ Universo").
  */
 const TITLE_HERO =
   "bottom-[calc(72px+env(safe-area-inset-bottom))] left-[max(1.5rem,calc(env(safe-area-inset-left)+0.5rem))] text-[length:var(--type-display)] leading-[0.9] md:left-[max(5rem,calc(env(safe-area-inset-left)+0.5rem))]"
-const TITLE_LABEL = `${BAR_TITLE} text-[length:var(--type-2)] leading-[1.1]`
 /** Under reduced motion a camera move is a cut: the world fades out for this long, swaps, and fades back. */
 const CUT_OUT_MS = 110
 const CUT_IN_MS = 140
@@ -276,7 +276,7 @@ export function MemoriesPlace({ state, accent, action, guest, share, onView, onC
         data-title={title.mode}
         data-fading={title.fading}
         data-hidden={title.hidden}
-        className={`mem-title t-title pointer-events-none absolute m-0 ${title.mode === "hero" ? TITLE_HERO : TITLE_LABEL}`}
+        className={`place-title t-title pointer-events-none absolute m-0 ${title.mode === "hero" ? TITLE_HERO : TITLE_LABEL}`}
         style={{
           color: PORCELAIN,
           textShadow: `0 0 ${title.mode === "hero" ? 36 : 14}px color-mix(in oklab, ${accent ?? "#a8c8ff"} 22%, transparent)`,

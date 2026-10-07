@@ -67,11 +67,12 @@ describe("facetsWithProjects", () => {
     expect(projects.entries.map((e) => e.title)).toEqual(["Consola de prueba", "Otra consola"])
   })
 
-  it("reads a project's role and period as the entry meta, its stack as a detail and its text as the blocks", () => {
+  it("reads a project's role and period as the entry meta, its summary, its stack as a detail and its text as the blocks", () => {
     const [entry] = facetsWithProjects([PROJECT]).find((f) => f.id === "projects")!.entries
     expect(entry).toEqual({
       meta: "Diseño y desarrollo, 2026",
       title: "Consola de prueba",
+      summary: "Una consola de prueba.",
       details: [{ label: "Stack", value: "Next.js 16 · React 19" }],
       blocks: PROJECT.blocks,
     })

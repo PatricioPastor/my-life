@@ -63,7 +63,7 @@ describe("safe areas", () => {
   })
 
   it("keeps a facet's title above the home indicator and its list below the status bar", () => {
-    render(<FacetPlace facet={FACETS[0]!} listSide="left" onOpenEntry={() => {}} />)
+    render(<FacetPlace facet={FACETS[0]!} onOpenEntry={() => {}} />)
     expect(hasInset(screen.getByRole("heading", { level: 1 }), "bottom")).toBe(true)
     expect(hasInset(screen.getByRole("list"), "top")).toBe(true)
   })
@@ -135,24 +135,27 @@ describe("one top bar", () => {
 })
 
 describe("facet entries on a phone", () => {
-  it("stacks the meta over the title instead of spending a third of the width on a side column", () => {
-    render(<FacetPlace facet={FACETS[0]!} listSide="left" onOpenEntry={() => {}} />)
+  it("stacks a row in one column on a phone, and lays it on the six-column grid from md", () => {
+    render(<FacetPlace facet={FACETS[0]!} onOpenEntry={() => {}} />)
     const row = screen.getAllByRole("button")[0]!
-    const line = row.querySelector(".shift") as HTMLElement
-    expect(line.className).toContain("max-md:flex-col")
-    expect(line.firstElementChild?.className).toContain("max-md:w-auto")
+    const line = classesOf(row.querySelector(".shift"))
+    expect(line.has("max-md:flex-col")).toBe(true)
+    expect(line.has("md:grid-cols-6")).toBe(true)
   })
 })
 
 describe("facet place in a short landscape viewport", () => {
   const short = "[@media(max-height:520px)]"
 
-  it("shrinks the title and tightens the list so the two never overlap", () => {
-    render(<FacetPlace facet={FACETS[0]!} listSide="right" onOpenEntry={() => {}} />)
-    expect(screen.getByRole("heading", { level: 1 }).className).toContain(`${short}:text-[32px]`)
-    const list = screen.getByRole("list")
-    expect(list.className).toContain(`${short}:top-[76px]`)
-    expect(list.className).toContain(`${short}:w-[440px]`)
+  it("shrinks and lowers the large title, and starts the list below the small label, so none of them overlap", () => {
+    render(<FacetPlace facet={FACETS[0]!} onOpenEntry={() => {}} />)
+    const title = screen.getByRole("heading", { level: 1 }).className
+    expect(title).toContain(`${short}:text-[32px]`)
+    expect(title).toContain(`${short}:bottom-[calc(32px+env(safe-area-inset-bottom))]`)
+    // The label sits under the bar's row (76 px down on a desktop width); the list keeps clear of it, across the grid.
+    const list = screen.getByRole("list").className
+    expect(list).toContain(`${short}:top-[112px]`)
+    expect(list).not.toMatch(/(^|\s)\S*w-\[\d+px\]/)
     expect(screen.getAllByRole("button")[0]!.className).toContain(`${short}:min-h-[56px]`)
   })
 })

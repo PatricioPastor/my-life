@@ -304,16 +304,15 @@ describe("Journey work mode", () => {
     expect(screen.getByRole("link", { name: "Mi historia" })).toBeTruthy()
   })
 
-  it("heads a case study that has a logo with it, the title still naming the heading, and marks it in the list", () => {
+  it("heads a case study that has a logo with it, the title still naming the heading, and lists it by its full logo", () => {
     const branded = { ...PROJECT, meta: { ...PROJECT.meta, logo: "/projects/consola/logo.svg", mark: "/projects/consola/mark.svg" } }
     render(<Journey projects={[branded]} mode="work" openProject="consola" />)
     const heading = screen.getByRole("heading", { level: 1, name: "Consola de prueba" })
     expect(heading.querySelector("img")?.getAttribute("src")).toBe("/projects/consola/logo.svg")
 
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
-    expect(screen.getByRole("button", { name: /Consola de prueba/ }).querySelector("img")?.getAttribute("src")).toBe(
-      "/projects/consola/mark.svg",
-    )
+    const row = screen.getByRole("button", { name: "Consola de prueba Una consola de prueba." })
+    expect(row.querySelector("img")?.getAttribute("src")).toBe("/projects/consola/logo.svg")
   })
 
   it("reports a deep link once, as the two clicks it skipped: Proyectos, then that case study", () => {
