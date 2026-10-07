@@ -13,6 +13,8 @@
   --font-serif: var(--font-spectral), Georgia, serif;
   /* Gambarino comes from the Fontshare API stylesheet (see layout.tsx); the files are never self-hosted. */
   --font-gambarino: "Gambarino", "Iowan Old Style", Georgia, serif;
+  /* The case studies' narrative face, also from the Fontshare API (src/features/reader/narrative-font.tsx). */
+  --font-narrative: "Switzer", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-heading: var(--font-display);
   /* Landing palette: the vars are set on the journey root from the active sky preset. */
   --color-void: var(--void);

@@ -113,6 +113,33 @@ describe("CaseStudy text", () => {
   })
 })
 
+describe("CaseStudy narrative font", () => {
+  const SWITZER = "https://api.fontshare.com/v2/css?f[]=switzer@1,2&display=swap"
+  const headLink = (selector: string) => document.head.querySelector<HTMLLinkElement>(selector)
+
+  it("loads Switzer from Fontshare's stylesheet, hoisted into the head, never from a file of its own", () => {
+    show()
+    const sheet = headLink(`link[rel="stylesheet"][href="${SWITZER}"]`)
+    expect(sheet).not.toBeNull()
+    expect(sheet?.getAttribute("data-precedence")).toBeTruthy()
+  })
+
+  it("opens the connections to Fontshare early: the stylesheet's host plain, the font host for CORS", () => {
+    show()
+    expect(headLink(`link[rel="preconnect"][href="https://api.fontshare.com"]:not([crossorigin])`)).not.toBeNull()
+    expect(headLink(`link[rel="preconnect"][href="https://cdn.fontshare.com"][crossorigin]`)).not.toBeNull()
+  })
+
+  it("sets the text in the narrative face, and keeps the pixel face for its labels", () => {
+    show()
+    expect(classesOf(body())).toContain("font-narrative")
+    expect(classesOf(body())).not.toContain("font-serif")
+    // The quote inherits the narrative face; the subheading stays a small label.
+    expect(classesOf(within(body()).getByText("Una cita.")).some((c) => c.startsWith("font-"))).toBe(false)
+    expect(classesOf(within(body()).getByRole("heading", { level: 2 }))).toContain("font-sans")
+  })
+})
+
 describe("CaseStudy grid", () => {
   it("draws no guides: the grid is an invisible reference the text lines up on", () => {
     const { container } = show()

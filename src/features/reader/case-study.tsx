@@ -5,6 +5,7 @@ import type { StackGroup } from "@/features/projects"
 import type { Block } from "@/shared/content"
 import { cn } from "@/shared/lib/utils"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
+import { NarrativeFont } from "./narrative-font"
 import { PageBlock } from "./page-block"
 
 interface CaseStudyProps {
@@ -41,6 +42,7 @@ export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) 
 
   return (
     <div className="absolute inset-0 overflow-y-auto overscroll-contain">
+      <NarrativeFont />
       {/* One cell holds the text and, on a phone, the fade under the way back that it scrolls beneath. */}
       <div className="grid min-h-full">
         <article
@@ -79,7 +81,7 @@ export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) 
             tabIndex={0}
             className={cn(
               GRID_CONTENT,
-              "rise-late flex max-w-[68ch] flex-col gap-5 font-serif text-[21px] leading-[1.62] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint [@media(max-height:520px)]:text-[18px] [&>h2]:mt-1",
+              "rise-late flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1",
             )}
           >
             {blocks.map((block, i) =>
