@@ -90,7 +90,7 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - Deep-link analytics events (`R3-deeplink-analytics`).
   - Route: delegated. The same writer does T3 and T4, one commit each, and both are reviewed as one slice.
 
-- [ ] **T5 — The Voltaicco logo.**
+- [x] **T5 — The Voltaicco logo.** Done in `2f0cccc`. RDD: under budget, so no review is due.
   - **Request** (2026-10-06): "Tenes el vector que es un logo, en Figma y en el proyecto /dev/work/desa/ecoflow". The user chose "Encabezado del caso + lista".
   - **Source:** the vectors come from `ecoflow/public/brand/`, exported from Figma. The dark variant is a `#49D2AA` mark with a `#F2F4F5` wordmark; the light variant uses `#0B6859` and `#1B444F`. Neither names the parent company.
   - **Where it shows:**
@@ -183,3 +183,15 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
 - 2026-10-06, **T3 and T4 done.** All tasks are complete. Next: the user's visual check, then their approval to fast-forward `main` and push.
 - 2026-10-06, **Delivered.** The user said: "si, mandalo a main". `main` was fast-forwarded from `33e6310` to `6fbb3d3` and pushed.
 - 2026-10-06, **T5 added** (the Voltaicco logo). It is on `feat/work-path`, continuing from `6fbb3d3`.
+- 2026-10-06, **T5 done** in `2f0cccc` (`feat(projects): show the Voltaicco logo in the case study and list`). 14 files, +234/−5. Route: delegated.
+  - **Edit surfaces.** The writer was blocked at first because `journey.tsx` was outside its surfaces. `Journey` passes explicit props to `Reader`. The user approved adding `journey.tsx` and `journey.test.tsx`.
+  - **Assets.** Dark variants only, because the site is dark-only. They live in `public/projects/voltaicco/logo.svg` and `mark.svg`. The Figma attributes and ids were removed; the paths and fills are byte-identical to the source.
+  - **Frontmatter.** New optional `logo` and `mark` fields. The parser requires a lowercase `/projects/…/*.svg` path and rejects URLs, `..`, capitals and queries.
+  - **Display.**
+    - The list shows the mark as a decorative `img`, `h-[0.7em]`.
+    - The `Reader` shows the logo inside the `h1`, `h-[0.6em]`, with `alt` set to the title so the heading keeps its name.
+  - **Guard test.** The referenced assets must exist under `public/` and must contain no `<script`, `<foreignObject`, `on*=` or `javascript:`.
+  - **Writer's checks.** `pnpm test`: 3,486 passed. Typecheck, lint and build all exit 0.
+  - **Parent spot check.** Projects, reader and facets tests: 86 of 86 passed. A scan of the shipped SVGs found no Figma attributes and no scripts.
+  - **RDD.** Assessed medium, `review_due: false`, `under_budget` (260 lines since `d2d162b`). No review is due; the slice stays pending until a later commit reaches the budget.
+  - **Pending.** Nobody has checked the logo and mark sizes visually in a browser.
