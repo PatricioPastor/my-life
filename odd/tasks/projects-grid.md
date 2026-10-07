@@ -68,8 +68,8 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
 
 ## Tasks
 
-- [ ] **T1 — Prompt copy.** `CHOICE_PHRASE` becomes "¿qué te trae por acá?", with its tests. Route: delegated, together with T2 (writer A).
-- [ ] **T2 — Case study rewrite.** IoT, electro-dependent users, technology and architecture, with the new summary and meta. Route: delegated (writer A, which reads the ecoflow docs).
+- [x] **T1 — Prompt copy.** Done in `2d1f08f`. `CHOICE_PHRASE` becomes "¿qué te trae por acá?", with its tests. Route: delegated, together with T2 (writer A).
+- [x] **T2 — Case study rewrite.** Done in `3b7f9e5`. IoT, electro-dependent users, technology and architecture, with the new summary and meta. Route: delegated (writer A, which reads the ecoflow docs).
 - [ ] **T3 — Proyectos list on the 6-column grid.** Title transition, guides, the full logo row and the summary. Route: delegated (writer B).
 - [ ] **T4 — Case-study layout.** Sticky left column, the stack disclosure list, continuous text and no pagination. Projects only. Route: delegated (writer C).
 - [ ] **T5 — Official tech isotypes.** Research the official SVGs (a read-only worker that downloads into the scratchpad), then add the assets, the manifest, the registry and the guard. Route: research is delegated in parallel; the integration goes with writer C.
@@ -85,3 +85,27 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
 ## Progress
 
 - 2026-10-07: interpretation confirmed by the user. Branch created. Next: writer A (T1 and T2), with the isotype research in parallel.
+- 2026-10-07, **T1 done** in `2d1f08f` (`feat(onboarding): ask what brings the visitor here`).
+  - Change: `CHOICE_PHRASE` is now "¿qué te trae por acá?".
+  - Test evidence: RED was `expected '¿qué vienes a ver?' to be '¿qué te trae por acá?'` (3 failed); GREEN followed.
+  - Length: `letterTimeline` shrinks the letter step to fit the 1300 ms cap, so the longer phrase still fits.
+- 2026-10-07, **T2 done** in `3b7f9e5` (`docs(content): rewrite the Voltaicco case study as an IoT UPS monitor`).
+  - Summary: "Monitor de UPS para electrodependientes."
+  - Role: "Proyecto IoT · diseño y desarrollo".
+  - Sections: El problema, La integración IoT, Arquitectura, Apagar a distancia, Acceso y roles, Calidad, accesibilidad y costo, Dónde está hoy. Length is about 645 words.
+  - Platform name: the ecoflow docs never give the official name. `docs/ecoflow-api.md:128` shows "Open Platform" only as a table label, so the text says "la plataforma abierta IoT de EcoFlow".
+  - Removed claim: "~1,400 tests / 94%", because the allowed docs can't confirm it.
+  - Privacy self-check: clean.
+- **Checks for T1 and T2:**
+  - `typecheck` and `lint`: exit 0.
+  - `pnpm vitest run src/features/projects`: 32 of 32 passed.
+  - Full `pnpm test` on this branch (parent runs, machine idle except for the user's IDE and MCP servers): one run had 2 failures, the next had 1. Each failure was "Test timed out in 5000ms", in `src/features/orb/orb-path.test.ts:92` or `src/shared/db/migrations.pglite.test.ts:82`. Both files pass when run alone (26/26).
+  - The same full run on `main` @ `58444bf` passed 3,486 of 3,486.
+  - **Classification:** a timing flake at the 5 s edge. The diff only touches `phrases.ts`, two onboarding tests and the case-study Markdown, and none of these can reach either suite. This is recorded as a known environmental failure.
+- **RDD:** medium, `review_due: false`, under budget (151 lines since `58444bf`).
+- 2026-10-07, **T5 research done.** 12 SVGs are in the scratchpad `tech-icons/`, with a `SOURCES.md` listing them.
+  - 10 are official: Next.js and Vercel from the Vercel press kit, plus React, TypeScript, Tailwind, Prisma (`prisma.io/icon.svg`, transparent), Neon, Better Auth, Zod and Vitest.
+  - 2 are Simple Icons fallbacks, because neither project publishes an official SVG: Testing Library (#E33332) and GitHub Actions (#2088FF).
+  - Zod's official SVG embeds two base64 PNGs and weighs 45 KB.
+  - No file contains script, foreignObject, `on*` or `javascript:`.
+- Next: writer B (T3).
