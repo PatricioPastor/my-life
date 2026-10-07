@@ -70,7 +70,7 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
 
 - [x] **T1 — Prompt copy.** Done in `2d1f08f`. `CHOICE_PHRASE` becomes "¿qué te trae por acá?", with its tests. Route: delegated, together with T2 (writer A).
 - [x] **T2 — Case study rewrite.** Done in `3b7f9e5`. IoT, electro-dependent users, technology and architecture, with the new summary and meta. Route: delegated (writer A, which reads the ecoflow docs).
-- [ ] **T3 — Proyectos list on the 6-column grid.** Title transition, guides, the full logo row and the summary. Route: delegated (writer B).
+- [x] **T3 — Proyectos list on the 6-column grid.** Done in `1f4c783`. Title transition, guides, the full logo row and the summary. Route: delegated (writer B).
 - [ ] **T4 — Case-study layout.** Sticky left column, the stack disclosure list, continuous text and no pagination. Projects only. Route: delegated (writer C).
 - [ ] **T5 — Official tech isotypes.** Research the official SVGs (a read-only worker that downloads into the scratchpad), then add the assets, the manifest, the registry and the guard. Route: research is delegated in parallel; the integration goes with writer C.
 
@@ -109,3 +109,27 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
   - Zod's official SVG embeds two base64 PNGs and weighs 45 KB.
   - No file contains script, foreignObject, `on*` or `javascript:`.
 - Next: writer B (T3).
+- 2026-10-07, **T3 blocked on edit surfaces.** `mobile-layout.test.tsx` pins classes from the old FacetPlace layout. Removing `listSide` leaves `listSideFor` dead, along with its test.
+  - The user approved adding `src/features/journey/mobile-layout.test.tsx`, `journey-machine.ts` and `journey-machine.test.ts`.
+  - **Grid clarification from the user:** "no es necesario que el texto se muestre en 6 columnas, pero si, que sirva como referencia como guias de como posicionar, por ahi, vas a usar dos columnas para el side izq y el resto para el texto". The 6 columns are a positioning reference, shown as faint guides with edges that elements snap to. There is one split, shared by the list and the case study: a **left zone of columns 1–2** and a **content zone of columns 3–6**.
+  - **Title font:** Doto in both states, so the FLIP scales the same glyphs. The small label copies the placement, size and opacity of "Recuerdos".
+- 2026-10-07, **T3 done** in `1f4c783` (`feat(facets): lay the Proyectos list on a 6-column grid with the title transition`). Route: delegated. 22 files, +640/−279. About 190 of those lines are the memories title code moving to a shared module.
+  - **Shared code:**
+    - **`@/shared/ui/place-title`:** `usePlaceTitle(ref, { reduced, settled? })`, `TITLE_LABEL`, the timing constants, `reduceTitle` and `flipTransform`. The CSS class `.mem-title` is now `.place-title`. Memories re-exports the constants for its test.
+    - **`@/shared/ui/grid`:**
+      - `GRID`: `md:grid-cols-6`.
+      - `GRID_X`: the left and right insets.
+      - `GRID_ASIDE`: columns 1–2.
+      - `GRID_CONTENT`: columns 3–6.
+      - `<GridGuides>`: 7 hairlines, `aria-hidden`, hidden on mobile.
+      - Tokens `--grid-left`, `--grid-right` and `--grid-gap`. The column-1 axis is the same as the back chevron's axis.
+  - **List row:** meta on guide 1, the full logo on guide 3, the summary on guide 5. The accessible name is the title plus the summary, and the meta is the description. Without a logo, the row falls back to the title and the mark.
+  - **Title:** every facet place gets the "Recuerdos" FLIP. In Doto, the small label sits at x 51 / y 76, on the column-1 axis.
+  - **Removed:** `listSide` and `listSideFor`.
+  - **Mobile:** stacked on one axis with no guides. Short landscape puts the list at 112px.
+  - **Checks:**
+    - `pnpm test`: 3,505 of 3,505 passed.
+      - An earlier run failed `memories-place.test.tsx:554`. The writer reproduced that test's failure on the base memories code (2 failures in 30 runs), so it is an existing flake that T3 did not cause.
+    - `typecheck`, `lint` and `build`: exit 0.
+    - Parent spot check: facets, shared UI and mobile layout passed 78 of 78.
+  - **Visual check by the writer** (headless Edge over CDP, at 1280, 1440 and 1920 wide, plus 390, 360 and 844×390): alignment measured exactly on the guides, and there is no horizontal overflow.
