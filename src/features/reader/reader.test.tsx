@@ -118,6 +118,37 @@ describe("Reader with a real entry", () => {
   })
 })
 
+describe("Reader with a logo", () => {
+  const LOGO = "/projects/consola/logo.svg"
+  const show = (logo?: string) =>
+    render(<Reader meta="Diseño y desarrollo, 2026" title="Consola" logo={logo} page={0} onPrev={() => {}} onNext={() => {}} />)
+
+  it("heads the entry with its logo in place of the title, which stays the heading's accessible name", () => {
+    show(LOGO)
+    const heading = screen.getByRole("heading", { level: 1, name: "Consola" })
+    const logo = heading.querySelector("img")
+    expect(logo?.getAttribute("src")).toBe(LOGO)
+    expect(logo?.getAttribute("alt")).toBe("Consola")
+    expect(heading.textContent).toBe("")
+  })
+
+  it("sizes the logo to the title's type, inside the same heading, so the details, the pages and the controls keep their places", () => {
+    show()
+    const textTitle = screen.getByRole("heading", { level: 1 }).className
+    cleanup()
+    show(LOGO)
+    const heading = screen.getByRole("heading", { level: 1 })
+    expect(heading.className).toBe(textTitle)
+    expect(heading.querySelector("img")?.className).toMatch(/\bh-\[[\d.]+em\]/)
+  })
+
+  it("keeps a text title for an entry without a logo", () => {
+    show()
+    expect(screen.getByRole("heading", { level: 1 }).querySelector("img")).toBeNull()
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Consola")
+  })
+})
+
 describe("Reader in a short landscape viewport", () => {
   const short = "[@media(max-height:520px)]"
 

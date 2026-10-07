@@ -24,6 +24,8 @@ export interface ReaderDetail {
 interface ReaderProps {
   meta: string
   title: string
+  /** A logo (a site path to an SVG) shown in place of the title; the title stays the heading's name, as the logo's alt. */
+  logo?: string
   details?: readonly ReaderDetail[]
   /** The entry's text cut into pages (pagesOf). Without it, the placeholder pages. */
   pages?: readonly ReaderPage[]
@@ -43,7 +45,7 @@ function Chevron({ d }: { d: string }) {
   )
 }
 
-export function Reader({ meta, title, details, pages, page, onPrev, onNext }: ReaderProps) {
+export function Reader({ meta, title, logo, details, pages, page, onPrev, onNext }: ReaderProps) {
   const contents: ReactNode[] = pages
     ? pages.map((blocks) => blocks.map((block, i) => <PageBlock key={i} block={block} />))
     : READER_PAGES.map((paragraphs) =>
@@ -60,7 +62,15 @@ export function Reader({ meta, title, details, pages, page, onPrev, onNext }: Re
     <article className="rise-late pointer-events-auto flex my-auto w-[640px] max-w-full flex-col gap-7 [@media(max-height:520px)]:gap-4">
       <p className="m-0 text-xs tracking-[0.06em] text-ink-muted">{meta}</p>
       <h1 className="m-0 font-display text-[40px] leading-[0.95] font-black tracking-[-0.01em] text-ink md:text-[64px] [@media(max-height:520px)]:text-[28px]">
-        {title}
+        {logo ? (
+          // A vector from public/, sized in em so it follows the title's type at every breakpoint. It sits on the
+          // title's baseline, inside the line a text title would fill, so nothing under the heading moves; next/image
+          // would serve it as is.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={title} draggable={false} className="inline-block h-[0.6em] w-auto" />
+        ) : (
+          title
+        )}
       </h1>
       {details && details.length > 0 && (
         <dl className="m-0 -mt-2 grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5 text-xs leading-[1.6] tracking-[0.06em] [@media(max-height:520px)]:mt-0">

@@ -77,6 +77,19 @@ describe("facetsWithProjects", () => {
     })
   })
 
+  it("carries a project's logo and mark, as the site paths it gives", () => {
+    const branded = { ...PROJECT, meta: { ...PROJECT.meta, logo: "/projects/consola/logo.svg", mark: "/projects/consola/mark.svg" } }
+    const [entry] = facetsWithProjects([branded]).find((f) => f.id === "projects")!.entries
+    expect(entry.logo).toBe("/projects/consola/logo.svg")
+    expect(entry.mark).toBe("/projects/consola/mark.svg")
+  })
+
+  it("gives a project with neither no logo and no mark: its name stays text", () => {
+    const [entry] = facetsWithProjects([PROJECT]).find((f) => f.id === "projects")!.entries
+    expect("logo" in entry).toBe(false)
+    expect("mark" in entry).toBe(false)
+  })
+
   it("leaves the other facets as they are, and every star where it hangs", () => {
     const facets = facetsWithProjects([PROJECT])
     expect(facets.filter((f) => f.id !== "projects")).toEqual(FACETS.filter((f) => f.id !== "projects"))

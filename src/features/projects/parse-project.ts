@@ -14,6 +14,10 @@ export interface ProjectMeta extends StoryMeta {
   stack: string[]
   /** Place in the Proyectos list, lowest first. */
   order: number
+  /** The full logo, mark and name, heading the case study in place of its title: a site path to an SVG in public/projects. */
+  logo?: string
+  /** The logo's mark alone, set beside the name in the Proyectos list: a site path to an SVG in public/projects. */
+  mark?: string
 }
 
 /** A case study: its fields and its text, in the story subset. Plain data, so it crosses from the server to the client. */
@@ -30,6 +34,9 @@ export interface ProjectFile {
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+// A file in public/projects, by its site path: folders and a name in slug words, so nothing can climb out of it.
+const SVG_PATH = /^\/projects\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*[a-z0-9]+(?:-[a-z0-9]+)*\.svg$/
+
 // The frontmatter always opens the file, so its failures point at line 1.
 const invalid = (detail: string) => frontmatterError(detail, 1)
 
@@ -37,6 +44,18 @@ function text(fields: Readonly<Record<string, unknown>>, name: string): string {
   const value = fields[name]
   if (typeof value !== "string" || value.trim() === "") throw invalid(`"${name}" is required and must be a non-empty string.`)
   return value.trim()
+}
+
+/** An optional picture: absent stays absent; anything written must be the site path to an SVG in public/projects. */
+function svgPath(fields: Readonly<Record<string, unknown>>, name: "logo" | "mark"): Partial<Record<"logo" | "mark", string>> {
+  const value = fields[name]
+  if (value === undefined) return {}
+  if (typeof value !== "string" || !SVG_PATH.test(value)) {
+    throw invalid(
+      `"${name}" must be the path to an SVG in public/projects, in lowercase words joined by hyphens, e.g. /projects/voltaicco/${name}.svg; got ${JSON.stringify(value)}.`,
+    )
+  }
+  return { [name]: value }
 }
 
 /**
@@ -62,13 +81,14 @@ export function parseProject(markdown: string): Project {
   if (typeof order !== "number" || !Number.isInteger(order)) {
     throw invalid(`"order" is required and must be a whole number, got ${JSON.stringify(order)}.`)
   }
+  const pictures = { ...svgPath(fields, "logo"), ...svgPath(fields, "mark") }
 
   if (!blocks.some((b) => b.type !== "break")) {
     throw new StoryParseError("Empty body: a project needs its text below the frontmatter.", "body", 1)
   }
 
   return {
-    meta: { ...meta, slug, role, period, summary, stack: stack.map((s: string) => s.trim()), order },
+    meta: { ...meta, slug, role, period, summary, stack: stack.map((s: string) => s.trim()), order, ...pictures },
     blocks,
   }
 }

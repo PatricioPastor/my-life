@@ -19,6 +19,8 @@ stack:
   - GitHub Actions
   - Vercel
 order: 1
+logo: /projects/voltaicco/logo.svg
+mark: /projects/voltaicco/mark.svg
 ---
 
 <!--
@@ -33,6 +35,10 @@ order: 1
     summary:  una oración sobre el proyecto
     stack:    las herramientas principales, una por línea, con un guion delante
     order:    el lugar en la lista de Proyectos (1 va primero)
+
+  Estos dos son opcionales; sin ellos, el nombre se muestra como texto:
+    logo:     el logo completo, en lugar del título del caso (una ruta a un SVG dentro de public/projects)
+    mark:     solo el símbolo, junto al nombre en la lista de Proyectos (también un SVG dentro de public/projects)
 
   Abajo va el texto, con las mismas reglas que la historia de la intro: párrafos, *énfasis*, **fuerte**,
   > una cita y ## un subtítulo. Una línea con tres guiones (---) da vuelta la página.

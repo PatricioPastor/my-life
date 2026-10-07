@@ -308,6 +308,7 @@ export function Journey({ preset = "ember", mode = "story", onReplayIntro, proje
             <Reader
               meta={entry.meta}
               title={entry.title}
+              logo={entry.logo}
               details={entry.details}
               pages={pages}
               page={journey.page}

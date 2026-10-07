@@ -35,7 +35,15 @@ export function FacetPlace({ facet, listSide, onOpenEntry }: FacetPlaceProps) {
               <span className="mark size-2 shrink-0 bg-signal" />
               <span className="shift flex grow items-baseline gap-6 max-md:flex-col max-md:gap-1.5">
                 <span className="w-28 shrink-0 max-md:w-auto text-xs tracking-[0.06em] text-ink-muted">{entry.meta}</span>
-                <span className="font-serif text-[30px] leading-[1.2] text-ink">{entry.title}</span>
+                <span className="font-serif text-[30px] leading-[1.2] text-ink">
+                  {entry.mark && (
+                    // A vector from public/, sized in em to the name: next/image would serve it as is. Decoration only,
+                    // since the name beside it says the same; its tip dips a hair under the baseline to sit optically on it.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={entry.mark} alt="" draggable={false} className="mr-3 inline-block h-[0.7em] w-auto align-[-0.06em]" />
+                  )}
+                  {entry.title}
+                </span>
               </span>
             </button>
           </li>

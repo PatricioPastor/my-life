@@ -91,6 +91,42 @@ describe("parseProject", () => {
   })
 })
 
+describe("parseProject: the logo and the mark", () => {
+  it("reads an optional logo and mark, each a path to an SVG under /projects/", () => {
+    const { meta } = parseProject(project({ logo: "logo: /projects/consola/logo.svg", mark: "mark: /projects/consola/mark.svg" }))
+    expect(meta.logo).toBe("/projects/consola/logo.svg")
+    expect(meta.mark).toBe("/projects/consola/mark.svg")
+  })
+
+  it("leaves both out of a project that has neither, which keeps its name as text", () => {
+    const { meta } = parseProject(project())
+    expect("logo" in meta).toBe(false)
+    expect("mark" in meta).toBe(false)
+  })
+
+  it.each(["logo", "mark"])("rejects a %s that is not a path to an SVG under /projects/", (field) => {
+    const bad = [
+      `${field}:`,
+      `${field}: ""`,
+      `${field}: 42`,
+      `${field}: [/projects/consola/a.svg]`,
+      `${field}: /projects/consola/logo.png`,
+      `${field}: projects/consola/logo.svg`,
+      `${field}: /brand/logo.svg`,
+      `${field}: https://example.com/projects/logo.svg`,
+      `${field}: /projects/../secret.svg`,
+      `${field}: /projects/consola//logo.svg`,
+      `${field}: /projects/consola/Logo.svg`,
+      `${field}: /projects/consola/logo.svg?v=2`,
+    ]
+    for (const line of bad) {
+      const error = failure(project({ [field]: line }))
+      expect(error.construct).toBe("frontmatter")
+      expect(error.message).toContain(`"${field}"`)
+    }
+  })
+})
+
 describe("collectProjects", () => {
   const file = (path: string, patch: Record<string, string | null>) => ({ path, markdown: project(patch) })
 
