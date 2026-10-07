@@ -44,8 +44,8 @@ describe("phrase timings", () => {
     expect(t.totalMs).toBeLessThan(phraseTimeline("greeting", "buenoniaa", false).totalMs)
   })
 
-  it("asks what the visitor came to see in lowercase, like every phrase, and keeps the question up with no exit", () => {
-    expect(CHOICE_PHRASE).toBe("¿qué vienes a ver?")
+  it("asks what brings the visitor here in lowercase, like every phrase, and keeps the question up with no exit", () => {
+    expect(CHOICE_PHRASE).toBe("¿qué te trae por acá?")
     const t = phraseTimeline("choice", CHOICE_PHRASE, false)
     expect(t.enterMs).toBeLessThanOrEqual(1300)
     expect(t.exitMs).toBe(0)

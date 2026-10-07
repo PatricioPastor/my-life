@@ -37,7 +37,7 @@ const at = (phase: OnboardingState["phase"], replayed = false): OnboardingState 
   replayed,
 })
 
-const QUESTION = "¿qué vienes a ver?"
+const QUESTION = "¿qué te trae por acá?"
 const choiceGroup = () => screen.getByRole("group", { name: QUESTION })
 
 describe("Onboarding", () => {
@@ -80,7 +80,7 @@ describe("Onboarding", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "cta" })
   })
 
-  it("asks what the visitor came to see on the line the greeting left, with exactly two real buttons", () => {
+  it("asks what brings the visitor here on the line the greeting left, with exactly two real buttons", () => {
     render(<Onboarding story={STORY} state={at("choice")} dispatch={vi.fn()} />)
     expect(screen.getByText(QUESTION).closest(".ob-line")!.getAttribute("data-on")).toBe("true")
     expect(screen.getByText("buenanochee").closest(".ob-line")!.getAttribute("data-on")).toBe("false")

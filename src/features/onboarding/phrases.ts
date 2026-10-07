@@ -8,7 +8,7 @@ export type PhaseDurations = Record<TimedPhraseKind, number>
 export const LIFE_PHRASE = "esta, es mi vida"
 export const DIFFERENT_PHRASE = "pero narrada de una forma diferente"
 /** Asked right after the greeting. Lowercase, like every phrase set in Gambarino. */
-export const CHOICE_PHRASE = "¿qué vienes a ver?"
+export const CHOICE_PHRASE = "¿qué te trae por acá?"
 
 /** Every first-visit phrase lasts exactly this long: enter + hold + exit (the last one has no exit, then the CTA). The hold is derived from it. */
 export const CYCLE_MS = 3200
