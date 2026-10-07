@@ -71,8 +71,8 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
 - [x] **T1 — Prompt copy.** Done in `2d1f08f`. `CHOICE_PHRASE` becomes "¿qué te trae por acá?", with its tests. Route: delegated, together with T2 (writer A).
 - [x] **T2 — Case study rewrite.** Done in `3b7f9e5`. IoT, electro-dependent users, technology and architecture, with the new summary and meta. Route: delegated (writer A, which reads the ecoflow docs).
 - [x] **T3 — Proyectos list on the 6-column grid.** Done in `1f4c783`. Title transition, guides, the full logo row and the summary. Route: delegated (writer B).
-- [ ] **T4 — Case-study layout.** Sticky left column, the stack disclosure list, continuous text and no pagination. Projects only. Route: delegated (writer C).
-- [ ] **T5 — Official tech isotypes.** Research the official SVGs (a read-only worker that downloads into the scratchpad), then add the assets, the manifest, the registry and the guard. Route: research is delegated in parallel; the integration goes with writer C.
+- [x] **T4 — Case-study layout.** Done in `5b88756`. Sticky left column, the stack disclosure list, continuous text and no pagination. Projects only. Route: delegated (writer C).
+- [x] **T5 — Official tech isotypes.** Done in `cc94515`. Research the official SVGs (a read-only worker that downloads into the scratchpad), then add the assets, the manifest, the registry and the guard. Route: research is delegated in parallel; the integration goes with writer C.
 
 ## Checks
 
@@ -136,3 +136,24 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
 - 2026-10-07, **RDD for T1–T3.** Assessed medium (`slice_budget_reached`, 1,118 lines). Consent granted, one lens (reliability).
   - Lineage `review-9d9c8ebd6c3ef385` over `58444bf..9380904`: **approved and acknowledged**, authority burned. The reviewed boundary is now `9380904`.
   - Advisory `R3-001` (suggestion): the `facet-place.test.tsx` FLIP tests stub `HTMLElement.prototype.animate` and remove it only at the end of each test, so a failing assertion leaks the stub into later tests. Folded into T4.
+- 2026-10-07, **T5 done** in `cc94515` (`feat(projects): add official technology isotypes with their sources`). Writer C. 17 files, +449/−1.
+  - **Files:** 12 SVGs in `public/tech/`.
+    - 10 are byte-identical to the official downloads.
+    - Only the two Simple Icons fallbacks got a root `fill` (testing-library #E33332, github-actions #2088FF).
+  - **Registry:** `src/features/projects/tech.ts` holds `{ key, name, icon, source, documentedAt, official }` for each technology, plus an explicit `techFor()` mapping.
+  - **Guard:** `svg-guard.ts` is shared by the logos and the tech icons. It rejects script, foreignObject, `on*`, `javascript:` and any href that is not a `#fragment` or a `data:image/(png|jpeg|webp)` URI.
+  - **Checks:** test 3,566 passing; typecheck and lint exit 0.
+- 2026-10-07, **T4 done** in `5b88756` (`feat(reader): case-study layout with the stack aside and continuous text`). 12 files, +562/−44.
+  - **New component:** `src/features/reader/case-study.tsx`, used when `facet.id === "projects"`. The placeholder facets keep the paged Reader.
+  - **Desktop:** the aside is sticky in columns 1–2: back, logo, meta, then "Stack" with disclosure items (`aria-expanded`/`aria-controls`, a 40px isotype, reduced motion respected). Columns 3–6 hold the continuous text. `---` is now a hairline between sections, and the subheadings use the 12px label style. There is no pagination.
+  - **Phone:** a single column, with the stack after the text. Rendered twice (the aside copy plus a phone copy) with one shared open state, so focus order follows visual order.
+  - **Data:** `FacetEntry.details` is replaced by `stack: {name, icon?}[]`.
+  - **R3-001:** the stub cleanup moved to `afterEach`, proven by an `it.fails` canary.
+  - **Checks:** `pnpm test` 3,590 passing plus 1 expected fail; typecheck, lint and build exit 0. Parent spot check: typecheck exit 0.
+  - **Visual check** (writer screenshots in scratchpad `shots/`; the parent looked at the d1440 and m390 shots):
+    - At 1440, the aside sits on guide 1 at x 51 and the text on guide 3 at x 500. Isotypes open at 40×40.
+    - At 390 and 360 there is no overflow.
+    - **Parent observation:** on a phone the text scrolls underneath the fixed "‹ Proyectos" control with no fade, so a line shows behind it.
+  - **Follow-ups:**
+    - `reader.tsx`'s `details`, `logo` and `pages` props are now unused by projects (clean up later).
+    - With a classic scrollbar, the case-study guides are slightly narrower than the list's guides.
