@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { STAR_HEX } from "@/shared/lib/palette"
-import { GRID, GRID_ASIDE, GRID_CONTENT, GRID_X } from "@/shared/ui/grid"
+import { GRID, GRID_X } from "@/shared/ui/grid"
 import { TITLE_EASE, TITLE_FADE_OUT_MS, TITLE_HOLD_MS, TITLE_LABEL, TITLE_SHRINK_MS } from "@/shared/ui/place-title"
 import { FACETS, findFacet, type Facet } from "./content"
 import { FacetPlace } from "./facet-place"
@@ -41,6 +41,7 @@ const title = () => screen.getByRole("heading", { level: 1 })
 const classesOf = (el: Element | null) => (el?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean)
 const hasAll = (el: Element | null, classes: string) => classes.split(" ").every((c) => classesOf(el).includes(c))
 const row = (name: RegExp) => screen.getByRole("button", { name })
+const follows = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
 
 describe("FacetPlace title", () => {
   it("arrives large, in the facet's pixel face and star color, then shrinks into the label under the way back", () => {
@@ -124,25 +125,55 @@ describe("FacetPlace grid", () => {
 })
 
 describe("FacetPlace rows", () => {
-  it("puts the meta in the left zone, and the full logo then the summary in the content zone", () => {
+  /** What a row lays on the list's columns: its name (the logo, or the title), then its summary. */
+  const cellsOf = (button: HTMLElement) => [...button.querySelector(".shift")!.children]
+
+  // The owner's screenshot: the meta on the first guide, the logo on the third, the summary on the fifth, "MUY
+  // desequilibrado". The meta goes; the logo and the summary read as one line from the axis.
+  it("leaves the meta out of the list: the case study still gives it", () => {
     show()
-    const button = row(/^Consola/)
-    expect(hasAll(button.querySelector(".shift"), GRID)).toBe(true)
-    expect(hasAll(screen.getByText("Diseño y desarrollo, 2026"), GRID_ASIDE)).toBe(true)
-    const logo = button.querySelector("img")!
-    expect(logo.getAttribute("src")).toBe("/projects/consola/logo.svg")
-    expect(logo.getAttribute("alt")).toBe("Consola")
-    const content = logo.closest(`[class~="md:col-start-3"]`)
-    expect(hasAll(content, GRID_CONTENT)).toBe(true)
-    // Two halves of the content zone with the shared gutter: the logo on the third guide, the summary on the fifth.
-    expect(hasAll(content, "md:grid md:grid-cols-2 md:gap-x-(--grid-gap)")).toBe(true)
-    expect(content?.contains(screen.getByText("Una consola para vigilar una flota."))).toBe(true)
+    expect(screen.queryByText("Diseño y desarrollo, 2026")).toBeNull()
+    expect(screen.queryByText("Desarrollo, 2025")).toBeNull()
   })
 
-  it("names a row by the project and its summary, and describes it with its meta", () => {
+  it("names a row by the project and its summary, and describes it with nothing more", () => {
     show()
     const button = row(/^Consola Una consola para vigilar una flota\.$/)
-    expect(document.getElementById(button.getAttribute("aria-describedby")!)?.textContent).toBe("Diseño y desarrollo, 2026")
+    expect(button.hasAttribute("aria-describedby")).toBe(false)
+  })
+
+  it("puts the full logo first and the summary after it, a fixed gap between them", () => {
+    show()
+    const [name, summary] = cellsOf(row(/^Consola/))
+    const logo = name!.querySelector("img")!
+    expect(logo.getAttribute("src")).toBe("/projects/consola/logo.svg")
+    expect(logo.getAttribute("alt")).toBe("Consola")
+    expect(summary!.textContent).toBe("Una consola para vigilar una flota.")
+    expect(classesOf(summary!)).toContain("md:pl-(--space-4)")
+    // On one line from md, as one line of type: the summary sits on the logo's baseline (an image's is its foot).
+    expect(classesOf(row(/^Consola/).querySelector(".shift"))).toContain("md:items-baseline")
+  })
+
+  it("starts every summary at one x from md: the list's first column is its widest logo, every row on the list's columns", () => {
+    show()
+    const list = screen.getByRole("list")
+    expect(hasAll(list, "md:grid md:grid-cols-[max-content_minmax(0,max-content)]")).toBe(true)
+    // The item, the button and the line that shifts on hover each pass the list's two columns down to the next.
+    const button = row(/^Consola/)
+    for (const el of [button.closest("li"), button, button.querySelector(".shift")]) {
+      expect(hasAll(el, "md:col-span-2 md:grid md:grid-cols-subgrid")).toBe(true)
+    }
+    // The gap is the summary's own, so a list with no summary has no empty column after its names.
+    expect(classesOf(list).some((c) => /^(?:md:)?gap-(?!y-)/.test(c))).toBe(false)
+  })
+
+  // The cursor's frame and the focus ring follow the button's box: it must end where the row's content does.
+  it("hugs a row's content: neither the list's columns nor the button stretch across the list's width", () => {
+    show()
+    expect(classesOf(screen.getByRole("list")).some((c) => c.includes("fr"))).toBe(false)
+    const button = row(/^Consola/)
+    expect(classesOf(button)).not.toContain("w-full")
+    expect(hasAll(button.querySelector(".shift"), GRID)).toBe(false)
   })
 
   it("sizes the logo with restraint and never wider than its column", () => {
@@ -160,29 +191,32 @@ describe("FacetPlace rows", () => {
     expect(screen.getByText("Otra consola").contains(mark)).toBe(true)
   })
 
-  it("lets a title with no summary run across the content zone", () => {
+  it("keeps a title with no logo in the first column, where the logos go", () => {
     show()
-    expect(classesOf(screen.getByText("Otra consola").parentElement)).toContain("md:col-span-2")
+    const [name, ...rest] = cellsOf(row(/^Otra consola$/))
+    expect(name!.textContent).toBe("Otra consola")
+    expect(rest).toEqual([])
+    expect(classesOf(name!).some((c) => c.includes("col-span"))).toBe(false)
   })
 
-  it("keeps a placeholder facet's entries on the same grid, each named by its title", () => {
+  it("keeps a placeholder facet's entries on the same columns, each named by its title", () => {
     show(FACETS[0]!)
     const buttons = screen.getAllByRole("button", { name: "[Título de la historia]" })
     expect(buttons).toHaveLength(3)
-    expect(hasAll(buttons[0]!.querySelector(".shift"), GRID)).toBe(true)
+    expect(hasAll(buttons[0]!.querySelector(".shift"), "md:grid md:grid-cols-subgrid")).toBe(true)
     expect(buttons[0]!.querySelector("img")).toBeNull()
   })
 
-  it("stacks a row on a phone: the meta, then the logo over the summary, in one column", () => {
+  it("stacks a row on a phone: the logo over the summary, both on the axis, the row across the column", () => {
     show()
-    const line = row(/^Consola/).querySelector(".shift")!
-    expect(classesOf(line)).toContain("max-md:flex-col")
-    const content = line.querySelector(`[class~="md:col-start-3"]`)
-    expect(classesOf(content)).toContain("flex-col")
-    const order = [screen.getByText("Diseño y desarrollo, 2026"), line.querySelector("img")!, screen.getByText(/^Una consola/)]
-    for (let i = 1; i < order.length; i++) {
-      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    }
+    const button = row(/^Consola/)
+    expect(classesOf(button)).toContain("max-md:w-full")
+    const line = button.querySelector(".shift")!
+    expect(hasAll(line, "max-md:flex-col")).toBe(true)
+    const [name, summary] = cellsOf(button)
+    expect(follows(name!, summary!)).toBe(true)
+    // The gap before the summary is a desktop one: on a phone it starts on the axis, under the logo.
+    expect(classesOf(summary!).some((c) => /^(?:max-md:)?-?[pm][xlsre]?-/.test(c))).toBe(false)
   })
 })
 

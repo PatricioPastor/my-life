@@ -137,12 +137,12 @@ describe("one top bar", () => {
 })
 
 describe("facet entries on a phone", () => {
-  it("stacks a row in one column on a phone, and lays it on the six-column grid from md", () => {
+  it("stacks a row in one column on a phone, and lines it up on the list's shared columns from md", () => {
     render(<FacetPlace facet={FACETS[0]!} onOpenEntry={() => {}} />)
     const row = screen.getAllByRole("button")[0]!
     const line = classesOf(row.querySelector(".shift"))
     expect(line.has("max-md:flex-col")).toBe(true)
-    expect(line.has("md:grid-cols-6")).toBe(true)
+    expect(line.has("md:grid-cols-subgrid")).toBe(true)
   })
 })
 
