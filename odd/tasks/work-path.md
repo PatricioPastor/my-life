@@ -79,12 +79,12 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - The journey starts at `sky` with no gate, only Proyectos lit, and no orb.
   - Deep link to an entry, plus the "Mi historia" link.
   - Route: delegated (writer trigger).
-- [x] **T3 — The fork after the greeting.** Done in `601850d`. The review is pending, together with T4.
+- [x] **T3 — The fork after the greeting.** Done in `601850d`. The review, together with T4, was approved.
   - An onboarding `choice` phase after the greeting, for first-time and returning visitors.
   - "Mi trabajo" goes to `/trabajo`; "Mi historia" continues today's flow.
   - Tests.
   - Route: delegated (writer trigger).
-- [x] **T4 — Make `/trabajo` indexable.** Done in `ca71ae3`. The review is pending, together with T3.
+- [x] **T4 — Make `/trabajo` indexable.** Done in `ca71ae3`. The review, together with T3, was approved.
   - `robots: index, follow` and a canonical URL on `/trabajo` and `/trabajo/[slug]`.
   - A `sitemap.ts` covering those routes, built from `site-url`.
   - Deep-link analytics events (`R3-deeplink-analytics`).
@@ -166,3 +166,9 @@ About 950 authored changed lines: T1 ~350, T2 ~350, T3 ~250.
   - **Follow-ups not in scope:**
     - The "Mi historia" link on `/trabajo` goes to `/`, which asks the question again.
     - Optionally, add `/sitemap.xml` to the tracing config.
+  - **RDD:** assessed medium (`slice_budget_reached`), consent granted, one lens (reliability). Lineage `review-37526fe69a8e6376` over `b7a1db8..d2d162b` was **approved and acknowledged**, and its authority is burned. The reviewed boundary is now `d2d162b`.
+  - **Advisory findings** (non-blocking, follow-ups):
+    - `R3-indexable-canonical-origin` (warning): if a production build lacks `NEXT_PUBLIC_SITE_URL` and `VERCEL_PROJECT_PRODUCTION_URL`, the indexable pages publish `localhost` canonicals and sitemap entries. Check `/sitemap.xml` after the deploy, or add a build-time guard.
+    - `R3-choice-repeat-click` (suggestion): a repeated click on "Mi trabajo" before navigation finishes sends `path_chosen` and pushes again.
+    - `R3-deeplink-effect-strictmode` (suggestion): the deep-link analytics fire twice in development under StrictMode. Production fires once.
+- 2026-10-06, **T3 and T4 done.** All tasks are complete. Next: the user's visual check, then their approval to fast-forward `main` and push.
