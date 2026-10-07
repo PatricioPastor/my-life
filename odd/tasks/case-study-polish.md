@@ -64,8 +64,17 @@ La fuente que quiero usar para el narrado de los proyectos, es esa."
   - A scroll-spy marks the current section with `aria-current`.
   - The index is hidden on phones.
 - **Headline.** The `summary` ("Monitor de UPS para electrodependientes") sits at the top of the content, large and set in Switzer. On scroll it shrinks to a compact sticky line next to the mark. Under reduced motion the change is instant. The compact bar also gives the back control a proper backdrop on phones.
-- **Font.** Switzer comes from Fontshare's official download and is self-hosted with `next/font/local`, using the variable font in roman and italic. It is free under the ITF Free Font License. It applies to the case-study narrative: the headline, the body and the index. The other stories keep their current serif.
-- **Prisma.** Replace the current file with the official Prisma ORM symbol from `github.com/prisma/presskit`, in the light variant for dark backgrounds. The current file's cyan, red and yellow colors look like the payment network's logo. Render a contact sheet of all 12 isotypes and check each brand by eye.
+- **Font** (revised 2026-10-07 by the user's choice "API de Fontshare").
+  - Switzer loads through Fontshare's CSS API, only where a case study renders.
+  - No font files go in the public repo, because the ITF FFL v2.0 forbids redistributing them through repositories.
+  - It applies to the case-study narrative: the headline, the body and the index. The other stories keep their current serif.
+- **Prisma** (revised 2026-10-07 by the user's choice "Logo actual 2026").
+  - The cyan, red and yellow mark is Prisma ORM's current official logo since the 2026 rebrand, and it stays.
+  - Render a contact sheet of all 12 isotypes and check each brand by eye.
+- **Scrollbars** (added 2026-10-07). The user said: "El scroll, se ve horrible sin estilos, hacelo con un estilo qeu sea respetable en función al tipo de diseño que estamos armando".
+  - One site-wide rule: a thin, transparent track and a narrow square thumb in a low-opacity ink token, brighter on hover.
+  - Use `scrollbar-width`/`scrollbar-color` first, plus `::-webkit-scrollbar` for older WebKit.
+  - Respect forced colors.
 - **Delivery.** The same as before: work-unit commits on this branch, then fast-forward `main` and push after the user approves. RDD runs per commit from `c29015e`.
 
 ## Forecast
@@ -74,12 +83,13 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
 
 ## Tasks
 
-- [ ] **T1 — Contact sheet of the 12 isotypes, checked by eye.** Prisma stays as the 2026 mark at the user's request, so no swap is needed. Writer E.
+- [x] **T7 — Scrollbars that match the design.** Done in `40a6846`.
+- [x] **T1 — Contact sheet of the 12 isotypes, checked by eye.** All 12 OK. Prisma stays as the 2026 mark at the user's request, so no swap is needed. Writer E.
 - [x] **T2 — Stack grouped by category.** Done in `b3a34dd`. Frontmatter, parser, registry and a `CaseStudy` UI with chips that load lazily. Writer D.
 - [x] **T3 — Hide the guides.** Done in `5fca1c1`. Writer D.
-- [ ] **T4 — Section index with scroll-spy.** Writer E.
-- [ ] **T5 — Headline that shrinks on scroll.** Writer E.
-- [ ] **T6 — Switzer for the narrative, loaded through the Fontshare CSS API on `/trabajo` only.** No font files go in the repo. Writer E.
+- [x] **T4 — Section index with scroll-spy.** Done in `d635607`. Writer E.
+- [x] **T5 — Headline that shrinks on scroll.** Done in `91c49b9`. Writer E.
+- [x] **T6 — Switzer for the narrative.** Done in `901babe`. Loaded through the Fontshare CSS API wherever a case study renders. No font files go in the repo. Writer E.
 
 ## Checks
 
@@ -125,3 +135,31 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - Lineage `review-2464d81585674510` over `c29015e..e621909`: **approved and acknowledged**, with no findings. Authority is burned.
   - The reviewed boundary is now `e621909`.
   - Next: writer E (T6, T5, T4, T1).
+- 2026-10-07, **T6, T5, T4 and T7 done; T1 checked.** All by writer E.
+  - **T6 — `901babe`** (+77/−1): Switzer via `https://api.fontshare.com/v2/css?f[]=switzer@1,2&display=swap`.
+    - Loaded with a React 19 `<link rel="stylesheet" precedence="font">` plus `ReactDOM.preconnect`, only where a case study renders.
+    - A guard test (`git ls-files`) blocks any font file from being committed.
+    - There is no CSP today.
+  - **T5 — `91c49b9`** (+306/−34): the summary becomes the headline.
+    - It is an `h2` at 36–56px, weight 500. The logo stays the only `h1`.
+    - Over the first 160px of scroll it compacts into a sticky line with an opaque backdrop. With reduced motion it switches at 80px.
+    - On phones a solid strip sits behind "‹ Proyectos".
+  - **T4 — `d635607`** (+443/−33): `<nav aria-label="Índice">` in column 6, from xl (1280px) up; the text sits in columns 3–5.
+    - Every section heading gets a stable, unique slug id.
+    - Clicking an entry scrolls so the heading lands at 132px, then focuses it.
+    - **Scroll-spy:** an IntersectionObserver whose rootMargin extends upward. It also caught a real bug: jumping straight down the page marked the wrong section.
+    - **Marking rules:** nothing is marked during the intro, the last section is marked at the end of the page, and a clicked entry stays marked until the user scrolls.
+  - **T7 — `40a6846`** (+115/−2): `::-webkit-scrollbar` rules give a 4px square thumb in `--ink-faint`, brighter on hover.
+    - In Chromium 121+ the standard `scrollbar-width` and `scrollbar-color` disable the webkit rules, so they are guarded with `@supports not selector(::-webkit-scrollbar)` and apply only in Firefox.
+    - Forced colors are left alone. Checked in a headed Edge, because headless screenshots never paint scrollbars.
+  - **T1 — no change:** all 12 isotypes match their brands at 48px on #0A0600. Prisma keeps its 2026 mark.
+  - **Checks:**
+    - `pnpm test` after each task; the last run had 3,641 passing plus 1 expected fail.
+    - typecheck and lint clean.
+    - `pnpm build` exit 0.
+    - Parent spot check: reader and shared/ui, 97 of 97.
+  - **Visual check:** shots are in scratchpad `shots-polish/`; the parent viewed the 1440 and 390 shots scrolled to 400px.
+    - **Parent observation:** on desktop the line of body text directly under the compact headline stays legible as it scrolls beneath it. The backdrop fade ends too close to the line.
+  - **Follow-ups:**
+    - Strengthen or extend the desktop backdrop fade under the compact headline.
+    - `src/app/layout.tsx` preconnects to `api.fontshare.com` with `crossOrigin`, so the connection is not reused for the stylesheet. Remove `crossOrigin` on the `api.` host only (outside this task's surfaces).
