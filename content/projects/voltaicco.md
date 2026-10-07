@@ -1,10 +1,10 @@
 ---
 slug: voltaicco
 title: Voltaicco
-updated: 2026-10-06
-role: Diseño y desarrollo
+updated: 2026-10-07
+role: Proyecto IoT · diseño y desarrollo
 period: "2026"
-summary: Una consola para vigilar una flota de estaciones de energía portátiles que trabajan como UPS.
+summary: Monitor de UPS para electrodependientes.
 stack:
   - Next.js 16
   - React 19
@@ -30,7 +30,7 @@ mark: /projects/voltaicco/mark.svg
     slug:     el nombre del proyecto en la dirección, en minúsculas y con guiones entre palabras (voltaicco)
     title:    el nombre del proyecto
     updated:  la fecha de la última edición, como AAAA-MM-DD
-    role:     qué hice, en pocas palabras (se muestra junto al período)
+    role:     qué clase de proyecto es y qué hice, en pocas palabras (se muestra junto al período)
     period:   cuándo, como se lee ("2026", "2024–2026")
     summary:  una oración sobre el proyecto
     stack:    las herramientas principales, una por línea, con un guion delante
@@ -46,30 +46,56 @@ mark: /projects/voltaicco/mark.svg
   Este comentario no se muestra en el sitio.
 -->
 
-Voltaicco es una consola para vigilar una flota de estaciones de energía portátiles EcoFlow que trabajan como UPS. La usan los operadores de la mesa de ayuda de una empresa con un centro de soporte: siguen cientos de equipos a la vez y escalan cuando la batería baja al 80, al 50 y al 20 %.
-
-Lo diseñé y lo construí de punta a punta, solo, entre septiembre y octubre de 2026. Hoy es un MVP en una prueba piloto.
+Voltaicco es un monitor de UPS para personas electrodependientes, las que viven conectadas en su casa a un equipo médico eléctrico. Es un proyecto IoT que diseñé y construí de punta a punta, solo, en 2026.
 
 ---
 
-## Cómo está hecho
+## El problema
 
-El código está organizado por módulos de negocio, y cada uno separa dominio, aplicación e infraestructura con puertos y adaptadores. Las reglas de importación son estrictas: el dominio no conoce React, Next, Zod ni el código del proveedor.
+En cada casa, una estación de energía portátil trabaja como UPS: carga mientras hay red y sostiene el equipo médico cuando se corta. El riesgo es que la batería se agote sin que nadie lo note.
 
-La telemetría se lee en el servidor, desde la API para desarrolladores de EcoFlow, con pedidos firmados con HMAC-SHA256: las credenciales nunca llegan al navegador. La URL de cada equipo es opaca, un HMAC de su número de serie, que así nunca aparece en una dirección.
+Los operadores de un centro de atención siguen muchos equipos a la vez y escalan por niveles: un primer contacto cuando un equipo en batería baja al 80 %, un segundo al 50 %, y el nivel crítico al 20 %, por debajo del cual deja de alimentar sus tomas. Voltaicco es la consola donde hacen ese trabajo. Cada alerta dice qué hacer, no solo qué lectura la disparó, y un equipo que no reporta muestra *sin datos* en lugar de adivinar.
+
+---
+
+## La integración IoT
+
+Los equipos se leen desde la plataforma abierta IoT de EcoFlow, siempre en el servidor. Cada pedido va firmado con HMAC-SHA256 y la clave secreta nunca llega al navegador. Toda respuesta se valida con Zod en el borde y se convierte en un tipo del dominio: nada crudo del proveedor llega a la interfaz.
+
+La plataforma acepta órdenes por REST o por MQTT. Elegí REST porque la aplicación corre en funciones que viven lo que dura un pedido, y MQTT pide una conexión que quede abierta. En las direcciones, un equipo aparece con un identificador opaco, nunca con su número de serie.
+
+---
+
+## Arquitectura
+
+Las carpetas dicen lo que hace el negocio, al estilo de *Screaming Architecture*: equipos, telemetría, controles. Cada módulo separa dominio, aplicación e infraestructura con puertos y adaptadores, y un archivo de composición los conecta y es su única puerta hacia afuera.
+
+Las reglas de importación son estrictas. El dominio no conoce React, Next.js, Zod ni al proveedor; un módulo nunca entra en otro, y un componente de cliente nunca toca la infraestructura. Se lee en Server Components y se escribe solo en Server Actions, que validan la entrada y revisan sesión y permiso en su propio cuerpo. Hasta el cliente de la plataforma está partido en dos: los adaptadores de lectura reciben uno que solo sabe leer, y ESLint impide importar el que escribe fuera del módulo de controles.
 
 ---
 
 ## Apagar a distancia
 
-Encender o apagar a distancia las salidas de corriente alterna de un equipo es la parte delicada, así que el control falla cerrado. Hay un interruptor que lo desactiva todo y una lista de equipos habilitados; cada intento se escribe en una tabla de auditoría antes de enviarse, hay una espera entre intentos y el resultado se confirma leyendo otra vez el estado de la salida.
+Encender o apagar a distancia las salidas de un equipo es la parte delicada: apagarlas corta la energía de lo que esté conectado. Por eso el control falla cerrado. Un interruptor general lo desactiva todo, y un valor mal escrito cuenta como apagado; una lista de equipos habilitados deja afuera a cualquier otro.
 
-El acceso es por roles: Administrador, Operador y Lector. Se ingresa con Google, solo con cuentas de la empresa.
+Cada intento se escribe en una tabla de auditoría antes de enviarse, y un equipo recibe a lo sumo una orden cada diez segundos. Que la plataforma acepte la orden no prueba que el equipo la aplicó, así que el resultado se confirma leyendo otra vez el estado de la salida.
 
 ---
 
-## Pruebas, accesibilidad y costo
+## Acceso y roles
 
-Trabajé con las pruebas primero. La integración continua exige un 80 % de cobertura; hoy son unas 1400 pruebas, con cerca del 94 % de las líneas cubiertas. El objetivo de accesibilidad es WCAG 2.2 AA, y el modo oscuro está a la par del claro.
+Se ingresa con Google, solo con cuentas de la organización, y el servidor las verifica en cada ingreso. Hay tres roles, Administrador, Operador y Lector; el código revisa permisos, nunca nombres de rol, y siempre queda al menos un administrador.
 
-Los datos se sincronizan una vez por hora, a propósito: así la base de datos puede escalar a cero entre una sincronización y la siguiente. El costo también fue parte del diseño.
+---
+
+## Calidad, accesibilidad y costo
+
+Trabajé con las pruebas primero, con Vitest y Testing Library, un umbral de cobertura del 80 % y una integración continua que revisa cada cambio. El objetivo de accesibilidad es WCAG 2.2 AA: un estado nunca se comunica solo con color, y el modo oscuro está a la par del claro.
+
+El costo también fue parte del diseño. La sincronización está pensada para correr una vez por hora, a propósito, así la base de datos puede escalar a cero entre una y otra.
+
+---
+
+## Dónde está hoy
+
+Voltaicco es un MVP en un piloto. La lista de equipos, el detalle, el ingreso y los roles funcionan. El control de las salidas está construido, pero apagado hasta confirmarlo en una prueba controlada.
