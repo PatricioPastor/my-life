@@ -157,3 +157,16 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
   - **Follow-ups:**
     - `reader.tsx`'s `details`, `logo` and `pages` props are now unused by projects (clean up later).
     - With a classic scrollbar, the case-study guides are slightly narrower than the list's guides.
+- 2026-10-07, **RDD for T4 and T5.**
+  - **Assessment:** high, because of a `hot_path` "auth" signal from the file name `public/tech/better-auth.svg`. The file is a logo, not auth code.
+  - **Lenses:** consent granted, four lenses (risk, resilience, readability, reliability), run concurrently.
+  - **Result:** lineage `review-5d44f274afd4bcb8` over `9380904..1cd4336` was **approved and acknowledged**; its authority is burned. The reviewed boundary is now `1cd4336`.
+  - **Correction to the T4 note above:** the candidate already includes a gradient fade and a `z-10` lift under the fixed back control (R2-004). The phone screenshot still shows a line of text through the fade, so the strength of the fade needs the user's visual check.
+  - **Advisory findings (all suggestions, follow-ups):**
+    - `R4-001`: every isotype is fetched up front even while collapsed, including Zod at 45 KB.
+    - `R2-001`: `CaseStudyTech` duplicates `FacetEntryTech`.
+    - `R2-002`: the `.tech-reveal` CSS timings copy the place-title constants, and only a regex test ties them together.
+    - `R2-003`: Reader's `details` prop and the `ReaderDetail` type are dead.
+    - `R3-001`: `svgHazards` does not check CSS `url()` or entity-encoded `javascript:` in non-href attributes. None of the shipped files has either.
+    - `R3-002`: the R3-001 canary depends on test order.
+- 2026-10-07, **All tasks done.** Next: the user's visual check, then their approval to fast-forward `main` and push.
