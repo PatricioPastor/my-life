@@ -156,8 +156,24 @@ const BY_NAME: ReadonlyMap<string, Tech> = new Map([
 
 /**
  * The technology a stack name stands for: the brand's own name or a spelling listed above, exactly as written. Anything
- * else, however close, has none (no guessing), and is shown as plain text.
+ * else, however close, has none (no guessing), and is shown as its name alone.
  */
 export function techFor(name: string): Tech | undefined {
   return BY_NAME.get(name)
+}
+
+/** One technology of a case study's stack: its name as written, and its isotype when the registry knows that name. */
+export interface StackItem {
+  name: string
+  /** A site path to the technology's mark (public/tech). A name the registry does not know has none. */
+  icon?: string
+}
+
+/**
+ * One category of a case study's stack (e.g. "Backend") and its technologies, both in the order the case study writes
+ * them. As parsed, an item is a name; as shown, a {@link StackItem}.
+ */
+export interface StackGroup<Item = StackItem> {
+  name: string
+  items: readonly Item[]
 }

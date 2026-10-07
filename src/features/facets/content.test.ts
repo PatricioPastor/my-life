@@ -74,18 +74,35 @@ describe("facetsWithProjects", () => {
       title: "Consola de prueba",
       summary: "Una consola de prueba.",
       stack: [
-        { name: "Next.js 16", icon: "/tech/nextjs.svg" },
-        { name: "React 19", icon: "/tech/react.svg" },
+        {
+          name: "Frontend",
+          items: [
+            { name: "Next.js 16", icon: "/tech/nextjs.svg" },
+            { name: "React 19", icon: "/tech/react.svg" },
+          ],
+        },
       ],
       blocks: PROJECT.blocks,
     })
   })
 
+  it("keeps the stack's categories and their technologies in the order the project writes them", () => {
+    const stack = [
+      { name: "Testing", items: ["Vitest"] },
+      { name: "Backend", items: ["Prisma 7", "Neon Postgres"] },
+    ]
+    const [entry] = facetsWithProjects([{ ...PROJECT, meta: { ...PROJECT.meta, stack } }]).find((f) => f.id === "projects")!.entries
+    expect(entry.stack?.map((g) => [g.name, g.items.map((t) => t.name)])).toEqual([
+      ["Testing", ["Vitest"]],
+      ["Backend", ["Prisma 7", "Neon Postgres"]],
+    ])
+  })
+
   it("keeps a stack name the registry does not know, as written, with no mark", () => {
-    const unknown = { ...PROJECT, meta: { ...PROJECT.meta, stack: ["Cobol", "React 19"] } }
+    const unknown = { ...PROJECT, meta: { ...PROJECT.meta, stack: [{ name: "Legado", items: ["Cobol", "React 19"] }] } }
     const [entry] = facetsWithProjects([unknown]).find((f) => f.id === "projects")!.entries
-    expect(entry.stack).toEqual([{ name: "Cobol" }, { name: "React 19", icon: "/tech/react.svg" }])
-    expect("icon" in entry.stack![0]!).toBe(false)
+    expect(entry.stack).toEqual([{ name: "Legado", items: [{ name: "Cobol" }, { name: "React 19", icon: "/tech/react.svg" }] }])
+    expect("icon" in entry.stack![0]!.items[0]!).toBe(false)
   })
 
   it("carries a project's logo and mark, as the site paths it gives", () => {

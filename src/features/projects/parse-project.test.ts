@@ -9,7 +9,7 @@ const FIELDS: Record<string, string> = {
   role: "role: Diseño y desarrollo",
   period: 'period: "2026"',
   summary: "summary: Una consola para vigilar una flota.",
-  stack: "stack: [Next.js 16, React 19]",
+  stack: "stack:\n  Frontend: [Next.js 16, React 19]\n  Testing: [Vitest]",
   order: "order: 1",
 }
 
@@ -39,7 +39,10 @@ describe("parseProject", () => {
       role: "Diseño y desarrollo",
       period: "2026",
       summary: "Una consola para vigilar una flota.",
-      stack: ["Next.js 16", "React 19"],
+      stack: [
+        { name: "Frontend", items: ["Next.js 16", "React 19"] },
+        { name: "Testing", items: ["Vitest"] },
+      ],
       order: 1,
     })
     expect(blocks.map((b) => b.type)).toEqual(["paragraph", "break", "subheading", "paragraph"])
@@ -70,12 +73,6 @@ describe("parseProject", () => {
     expect(failure(project({ summary: "summary: 42" })).message).toContain('"summary"')
   })
 
-  it("rejects a stack that is not a list of names", () => {
-    expect(failure(project({ stack: "stack: Next.js" })).message).toContain('"stack"')
-    expect(failure(project({ stack: "stack: []" })).message).toContain('"stack"')
-    expect(failure(project({ stack: 'stack: [Next.js, ""]' })).message).toContain('"stack"')
-  })
-
   it("rejects an order that is not a whole number", () => {
     expect(failure(project({ order: "order: 1.5" })).message).toContain('"order"')
     expect(failure(project({ order: 'order: "1"' })).message).toContain('"order"')
@@ -88,6 +85,63 @@ describe("parseProject", () => {
 
   it("rejects what the story subset rejects", () => {
     expect(failure(project({}, "- una lista")).construct).toBe("list")
+  })
+})
+
+describe("parseProject: the stack by category", () => {
+  const stack = (...lines: string[]) => parseProject(project({ stack: ["stack:", ...lines].join("\n") })).meta.stack
+  const stackFailure = (...lines: string[]) => failure(project({ stack: ["stack:", ...lines].join("\n") }))
+
+  it("keeps the categories in the order written, not sorted", () => {
+    expect(stack("  Zeta: [a]", "  Alfa: [b]", "  Media: [c]").map((g) => g.name)).toEqual(["Zeta", "Alfa", "Media"])
+  })
+
+  it("keeps each category's technologies in the order written, a list on one line or one per line", () => {
+    expect(stack("  Backend:", "    - Prisma 7", "    - Neon Postgres", "  Frontend: [React 19, Next.js 16]")).toEqual([
+      { name: "Backend", items: ["Prisma 7", "Neon Postgres"] },
+      { name: "Frontend", items: ["React 19", "Next.js 16"] },
+    ])
+  })
+
+  it("trims the names it reads", () => {
+    expect(stack('  " Backend ": [" Prisma 7 "]')).toEqual([{ name: "Backend", items: ["Prisma 7"] }])
+  })
+
+  it("rejects the old flat list and anything else that is not categories, naming the shape it wants", () => {
+    for (const lines of [["  - Next.js 16", "  - React 19"], [" Next.js"], [" {}"], [" []"]]) {
+      const error = stackFailure(...lines)
+      expect(error.construct).toBe("frontmatter")
+      expect(error.message).toContain('"stack"')
+      expect(error.message).toContain("Frontend: [Next.js, React]")
+    }
+  })
+
+  it("rejects a category with no technologies, or with something other than a list of names", () => {
+    for (const line of ["  Backend: []", "  Backend:", "  Backend: Prisma 7", '  Backend: [Prisma 7, ""]', "  Backend: [Prisma 7, 42]", "  Backend: [[Prisma 7]]"]) {
+      const error = stackFailure(line)
+      expect(error.message).toContain('"stack"')
+      expect(error.message).toContain('"Backend"')
+    }
+  })
+
+  it("rejects a category with no name", () => {
+    expect(stackFailure('  "": [Vitest]').message).toContain('"stack"')
+    expect(stackFailure('  "  ": [Vitest]').message).toContain('"stack"')
+  })
+
+  // A whole number as a key would be listed first whatever its place in the file, so the order could not be kept.
+  it("rejects a category named by a number alone", () => {
+    expect(stackFailure("  Backend: [Prisma 7]", "  2024: [Vitest]").message).toMatch(/"stack".*"2024"/)
+  })
+
+  it("rejects a category written twice", () => {
+    expect(stackFailure("  Backend: [Prisma 7]", "  Backend: [Neon Postgres]").construct).toBe("frontmatter")
+    expect(stackFailure("  Backend: [Prisma 7]", '  " Backend": [Neon Postgres]').message).toMatch(/"stack".*"Backend"/)
+  })
+
+  it("rejects a technology listed twice, in one category or in two", () => {
+    expect(stackFailure("  Backend: [Prisma 7, Prisma 7]").message).toMatch(/"stack".*"Prisma 7"/)
+    expect(stackFailure("  Backend: [Prisma 7]", "  Datos: [Neon Postgres, Prisma 7]").message).toMatch(/"stack".*"Prisma 7".*"Backend".*"Datos"/)
   })
 })
 
@@ -140,6 +194,9 @@ describe("collectProjects", () => {
 
   it("prefixes a failure with the file it came from", () => {
     expect(() => collectProjects([file("content/projects/a.md", { role: null })])).toThrow(/^content\/projects\/a\.md: .*"role"/)
+    expect(() => collectProjects([file("content/projects/a.md", { stack: "stack:\n  Backend: []" })])).toThrow(
+      /^content\/projects\/a\.md: .*"stack"/,
+    )
   })
 
   it("rejects two projects with one slug", () => {

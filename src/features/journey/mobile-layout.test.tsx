@@ -149,7 +149,7 @@ describe("facet entries on a phone", () => {
 describe("case study on a phone", () => {
   it("reads in one column on the grid's left axis, with no fixed width that could overflow a 360 px screen", () => {
     const { container } = render(
-      <CaseStudy meta="Diseño y desarrollo, 2026" title="Consola" stack={[{ name: "Next.js 16", icon: "/tech/nextjs.svg" }]} blocks={PROJECT.blocks} />,
+      <CaseStudy meta="Diseño y desarrollo, 2026" title="Consola" stack={[{ name: "Frontend", items: [{ name: "Next.js 16", icon: "/tech/nextjs.svg" }] }]} blocks={PROJECT.blocks} />,
     )
     const article = screen.getByRole("article")
     expect(classesOf(article).has("flex-col")).toBe(true)

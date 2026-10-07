@@ -151,12 +151,12 @@ describe("Journey after the gate", () => {
     expect(screen.queryByRole("button", { name: "Página siguiente" })).toBeNull()
     expect(screen.queryByText(/^\d+ de \d+$/)).toBeNull()
 
-    const [next] = screen.getAllByRole("button", { name: "Next.js 16" })
-    fireEvent.click(next!)
-    expect(next!.getAttribute("aria-expanded")).toBe("true")
-    expect(document.getElementById(next!.getAttribute("aria-controls")!)?.querySelector("img")?.getAttribute("src")).toBe(
-      "/tech/nextjs.svg",
-    )
+    const [frontend] = screen.getAllByRole("button", { name: "Frontend" })
+    fireEvent.click(frontend!)
+    expect(frontend!.getAttribute("aria-expanded")).toBe("true")
+    const panel = document.getElementById(frontend!.getAttribute("aria-controls")!)!
+    expect([...panel.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual(["/tech/nextjs.svg", "/tech/react.svg"])
+    expect(panel.textContent).toBe("Next.js 16React 19")
   })
 
   it("keeps the way back first, ahead of the stack, and above the panel the case study scrolls in", async () => {
@@ -164,7 +164,7 @@ describe("Journey after the gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
     fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))
     const back = screen.getByRole("button", { name: "Proyectos" })
-    const [firstItem] = screen.getAllByRole("button", { name: "Next.js 16" })
+    const [firstItem] = screen.getAllByRole("button", { name: "Frontend" })
     expect(back.compareDocumentPosition(firstItem!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const panel = screen.getByRole("region", { name: "Consola de prueba" }).closest(`[class~="overflow-y-auto"]`)!
     expect(panel.contains(back)).toBe(false)
@@ -344,10 +344,10 @@ describe("Journey work mode", () => {
     ]
     expect(track.mock.calls).toEqual(landing)
 
-    // Re-rendering, opening a stack item and walking back out report nothing more; opening a case study again is a
-    // click like any other.
+    // Re-rendering, opening a stack category and walking back out report nothing more; opening a case study again is
+    // a click like any other.
     rerender(<Journey projects={[PROJECT, second]} mode="work" openProject="otra" />)
-    fireEvent.click(screen.getAllByRole("button", { name: "React 19" })[0]!)
+    fireEvent.click(screen.getAllByRole("button", { name: "Frontend" })[0]!)
     fireEvent.click(screen.getByRole("button", { name: "Proyectos" }))
     expect(track.mock.calls).toEqual(landing)
     fireEvent.click(screen.getByRole("button", { name: /Consola de prueba/ }))

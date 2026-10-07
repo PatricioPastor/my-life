@@ -9,7 +9,7 @@ export const PROJECT: Project = {
     role: "Diseño y desarrollo",
     period: "2026",
     summary: "Una consola de prueba.",
-    stack: ["Next.js 16", "React 19"],
+    stack: [{ name: "Frontend", items: ["Next.js 16", "React 19"] }],
     order: 1,
   },
   blocks: [

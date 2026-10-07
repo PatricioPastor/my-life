@@ -319,9 +319,9 @@
       transform: translateX(10px);
     }
   }
-  /* A case study's stack item (src/features/reader/case-study.tsx) keeps its mark while it is open; the isotype it
-     discloses grows from no height on the interface's ease-out, in at the place title's fade-in pace and out at its
-     fade-out pace, then stops painting. Reduced motion shows and hides it at once. */
+  /* A case study's stack category (src/features/reader/case-study.tsx) keeps its mark while it is open; the chips it
+     discloses grow from no height on the interface's ease-out, in at the place title's fade-in pace and out at its
+     fade-out pace, then stop painting. Reduced motion shows and hides them at once. */
   .row[aria-expanded="true"] .mark {
     opacity: 1;
   }

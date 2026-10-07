@@ -8,8 +8,8 @@ import { loadProjects } from "./load-projects"
 import { svgHazards } from "./svg-guard"
 import { TECH, techFor } from "./tech"
 
-/** Every stack name the shipped case studies list, as they write it. */
-const stackNames = [...new Set(loadProjects().flatMap(({ meta }) => meta.stack))]
+/** Every stack name the shipped case studies list, in every category, as they write it. */
+const stackNames = [...new Set(loadProjects().flatMap(({ meta }) => meta.stack.flatMap((group) => group.items)))]
 
 const TECH_DIR = "public/tech"
 const marks = readdirSync(TECH_DIR).filter((name) => name.endsWith(".svg"))

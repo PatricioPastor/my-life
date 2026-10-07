@@ -1,44 +1,43 @@
 "use client"
 
 import { useId, useState } from "react"
+import type { StackGroup } from "@/features/projects"
 import type { Block } from "@/shared/content"
 import { cn } from "@/shared/lib/utils"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
 import { PageBlock } from "./page-block"
-
-/** One technology of the stack: its name, and its official isotype (a site path) when there is one. */
-export interface CaseStudyTech {
-  name: string
-  icon?: string
-}
 
 interface CaseStudyProps {
   meta: string
   title: string
   /** The full logo (a site path to an SVG) heading the case study in place of its title, which stays the heading's name. */
   logo?: string
-  stack: readonly CaseStudyTech[]
+  stack: readonly StackGroup[]
   blocks: readonly Block[]
 }
 
 /**
  * A case study on the place grid, in one panel that scrolls. The left zone (columns 1–2) holds still under the way back:
- * the logo, the meta and the stack, whose items open onto each technology's isotype. The content zone (columns 3–6)
+ * the logo, the meta and the stack, whose categories open onto their technologies. The content zone (columns 3–6)
  * holds the whole text, every block in order, a break drawn as a faint hairline: no pages, so nothing is ever laid on
  * top of anything else. A phone reads one column: the logo, the meta, the text, then the stack.
  */
 export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) {
   const id = useId()
   const titleId = `${id}-title`
-  // Indices of the open items. Both copies of the list (the left zone's, the phone's) read the same ones.
+  // Indices of the open categories, and of every one opened so far: a category's isotypes are fetched when it first
+  // opens, then stay, so that closing it can animate. Both copies of the stack (the left zone's, the phone's) read them.
   const [open, setOpen] = useState<ReadonlySet<number>>(() => new Set())
-  const toggle = (i: number) =>
+  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set())
+  const toggle = (i: number) => {
     setOpen((prev) => {
       const next = new Set(prev)
       if (!next.delete(i)) next.add(i)
       return next
     })
-  const list = { stack, open, onToggle: toggle }
+    setOpened((prev) => (prev.has(i) ? prev : new Set(prev).add(i)))
+  }
+  const list = { stack, open, opened, onToggle: toggle }
 
   return (
     <div className="absolute inset-0 overflow-y-auto overscroll-contain">
@@ -105,16 +104,19 @@ export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) 
 }
 
 interface StackListProps {
-  stack: readonly CaseStudyTech[]
+  stack: readonly StackGroup[]
+  /** The open categories, by index. */
   open: ReadonlySet<number>
+  /** Every category opened so far, by index: only these hold their technologies (and fetch their isotypes). */
+  opened: ReadonlySet<number>
   onToggle: (index: number) => void
-  /** Ids for this copy of the list: the left zone and the phone each render one, and only one shows. */
+  /** Ids for this copy of the stack: the left zone and the phone each render one, and only one shows. */
   idPrefix: string
   className?: string
 }
 
-/** The stack, one item per technology: a disclosure for each one with an isotype, plain text for any other. */
-function StackList({ stack, open, onToggle, idPrefix, className }: StackListProps) {
+/** The stack: its label, then one disclosure per category, in the order the case study gives them. */
+function StackList({ stack, open, opened, onToggle, idPrefix, className }: StackListProps) {
   const labelId = `${idPrefix}-label`
   return (
     <section className={className}>
@@ -122,13 +124,9 @@ function StackList({ stack, open, onToggle, idPrefix, className }: StackListProp
         Stack
       </h2>
       <ul aria-labelledby={labelId} className="m-0 mt-2 flex list-none flex-col p-0">
-        {stack.map((tech, i) => (
+        {stack.map((group, i) => (
           <li key={i}>
-            {tech.icon ? (
-              <TechItem name={tech.name} icon={tech.icon} id={`${idPrefix}-${i}`} open={open.has(i)} onToggle={() => onToggle(i)} />
-            ) : (
-              <span className="flex min-h-9 items-center text-xs tracking-[0.06em] text-ink">{tech.name}</span>
-            )}
+            <StackCategory group={group} id={`${idPrefix}-${i}`} open={open.has(i)} mounted={opened.has(i)} onToggle={() => onToggle(i)} />
           </li>
         ))}
       </ul>
@@ -136,33 +134,56 @@ function StackList({ stack, open, onToggle, idPrefix, className }: StackListProp
   )
 }
 
+interface StackCategoryProps {
+  group: StackGroup
+  id: string
+  open: boolean
+  /** Whether it has ever been opened: until then it holds no technologies, so no isotype is fetched. */
+  mounted: boolean
+  onToggle: () => void
+}
+
 /**
- * A technology's name, a button that opens its official isotype under it. The name says what it is, so the mark is
- * decoration. The square in the margin (the list rows' mark) shows on hover and focus, and stays while it is open.
+ * A category of the stack: its name, a button that opens its technologies under it as chips, each its isotype (when
+ * there is one) and its name. Closed, it is its name alone. The square in the margin (the list rows' mark) shows on
+ * hover and focus, and stays while it is open. The name in a chip says what it is, so the isotype is decoration.
  */
-function TechItem({ name, icon, id, open, onToggle }: { name: string; icon: string; id: string; open: boolean; onToggle: () => void }) {
-  const panelId = `${id}-icon`
+function StackCategory({ group, id, open, mounted, onToggle }: StackCategoryProps) {
+  const nameId = `${id}-name`
+  const panelId = `${id}-items`
   return (
     <>
       <button
+        id={nameId}
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={onToggle}
         data-magnetic="light"
-        data-cursor-label={open ? "Ocultar isotipo" : "Ver isotipo"}
         className="row press relative flex min-h-9 w-full items-center text-left text-xs tracking-[0.06em] text-ink"
       >
         <span aria-hidden="true" className="mark absolute top-1/2 -left-4 size-2 -translate-y-1/2 bg-signal" />
-        {name}
+        {group.name}
       </button>
-      {/* Grows from no height (globals.css, .tech-reveal); the image keeps a fixed height, so the size is known before it loads. */}
+      {/* Grows from no height (globals.css, .tech-reveal); each isotype keeps a fixed height, so the size is known
+          before it loads. */}
       <div id={panelId} data-open={open} className="tech-reveal">
         <div className="min-h-0 overflow-hidden">
-          <div className="pt-1 pb-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={icon} alt="" draggable={false} decoding="async" className="block h-10 w-auto max-w-full" />
-          </div>
+          {mounted && (
+            <div className="pt-1 pb-3">
+              <ul aria-labelledby={nameId} className="m-0 flex list-none flex-wrap gap-2 p-0">
+                {group.items.map((tech, j) => (
+                  <li key={j} className="flex h-8 items-center gap-2 border border-ink-faint/40 px-2.5 text-xs tracking-[0.06em] text-ink">
+                    {tech.icon && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={tech.icon} alt="" draggable={false} decoding="async" className="block h-5 w-auto shrink-0" />
+                    )}
+                    {tech.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -2,18 +2,25 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it } from "vitest"
+import type { StackGroup } from "@/features/projects"
 import { PROJECT } from "@/features/projects/project-fixture"
 import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
 import { TITLE_EASE, TITLE_FADE_IN_MS, TITLE_FADE_OUT_MS } from "@/shared/ui/place-title"
-import { CaseStudy, type CaseStudyTech } from "./case-study"
+import { CaseStudy } from "./case-study"
 
 afterEach(cleanup)
 
 const LOGO = "/projects/consola/logo.svg"
-const STACK: readonly CaseStudyTech[] = [
-  { name: "Next.js 16", icon: "/tech/nextjs.svg" },
-  { name: "React 19", icon: "/tech/react.svg" },
-  { name: "Cobol" },
+const STACK: readonly StackGroup[] = [
+  {
+    name: "Frontend",
+    items: [
+      { name: "Next.js 16", icon: "/tech/nextjs.svg" },
+      { name: "React 19", icon: "/tech/react.svg" },
+    ],
+  },
+  { name: "Legado", items: [{ name: "Cobol" }] },
+  { name: "Testing", items: [{ name: "Vitest", icon: "/tech/vitest.svg" }] },
 ]
 
 const show = (logo?: string) =>
@@ -128,58 +135,104 @@ describe("CaseStudy grid", () => {
 })
 
 describe("CaseStudy stack", () => {
-  const item = (name: string) => within(aside()).getByRole("button", { name })
-  const panelOf = (button: HTMLElement) => document.getElementById(button.getAttribute("aria-controls")!)
+  const category = (name: string) => within(aside()).getByRole("button", { name })
+  const panelOf = (button: HTMLElement) => document.getElementById(button.getAttribute("aria-controls")!)!
+  /** A category's technologies, as the chips its panel shows. */
+  const chipsOf = (button: HTMLElement) => within(panelOf(button)).getByRole("list", { name: button.textContent! })
+  const chipNames = (button: HTMLElement) => within(chipsOf(button)).getAllByRole("listitem").map((li) => li.textContent)
 
-  it("lists one item per technology, in the order given", () => {
+  it("heads the stack with its label, then one disclosure per category, in the order given", () => {
     show()
-    expect(within(aside()).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Next.js 16", "React 19", "Cobol"])
+    expect(screen.getAllByRole("heading", { level: 2, name: "Stack" })).toHaveLength(2)
+    expect(within(aside()).getAllByRole("button").map((b) => b.textContent)).toEqual(["Frontend", "Legado", "Testing"])
   })
 
-  it("opens an item to reveal the technology's isotype, and closes it again", () => {
+  it("starts with every category closed, showing only its label", () => {
     show()
-    const next = item("Next.js 16")
-    const panel = panelOf(next)
-    expect(next.getAttribute("aria-expanded")).toBe("false")
-    expect(panel?.getAttribute("data-open")).toBe("false")
-    fireEvent.click(next)
-    expect(next.getAttribute("aria-expanded")).toBe("true")
-    expect(panel?.getAttribute("data-open")).toBe("true")
+    for (const button of within(aside()).getAllByRole("button")) {
+      expect(button.getAttribute("aria-expanded")).toBe("false")
+      expect(panelOf(button).getAttribute("data-open")).toBe("false")
+    }
+    expect(within(aside()).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Frontend", "Legado", "Testing"])
+  })
+
+  // R4-001: every isotype was fetched up front, though the reader may open none.
+  it("loads no isotype until its category is opened", () => {
+    show()
+    for (const list of stacks()) expect(list.querySelectorAll("img")).toHaveLength(0)
+    fireEvent.click(category("Testing"))
+    expect(panelOf(category("Frontend")).querySelector("img")).toBeNull()
+    expect(panelOf(category("Testing")).querySelector("img")?.getAttribute("src")).toBe("/tech/vitest.svg")
+  })
+
+  it("opens a category onto its technologies as chips, each its isotype and its name, in the order given", () => {
+    show()
+    const frontend = category("Frontend")
+    fireEvent.click(frontend)
+    expect(frontend.getAttribute("aria-expanded")).toBe("true")
+    expect(panelOf(frontend).getAttribute("data-open")).toBe("true")
+    expect(chipNames(frontend)).toEqual(["Next.js 16", "React 19"])
+    const chips = within(chipsOf(frontend)).getAllByRole("listitem")
     // Decoration: the name beside it already says what it is.
-    const icon = panel?.querySelector("img")
-    expect(icon?.getAttribute("src")).toBe("/tech/nextjs.svg")
-    expect(icon?.getAttribute("alt")).toBe("")
-    fireEvent.click(next)
-    expect(next.getAttribute("aria-expanded")).toBe("false")
-    expect(panel?.getAttribute("data-open")).toBe("false")
+    expect(chips.map((chip) => [chip.querySelector("img")?.getAttribute("src"), chip.querySelector("img")?.getAttribute("alt")])).toEqual([
+      ["/tech/nextjs.svg", ""],
+      ["/tech/react.svg", ""],
+    ])
   })
 
-  it("keeps the isotype at its own aspect ratio, at a fixed height", () => {
+  it("keeps each isotype small, at its own aspect ratio", () => {
     show()
-    const icon = panelOf(item("React 19"))?.querySelector("img")
-    expect(classesOf(icon ?? null)).toContain("w-auto")
-    expect(classesOf(icon ?? null).some((c) => /^h-(10|11|12)$/.test(c))).toBe(true)
+    fireEvent.click(category("Frontend"))
+    const icon = panelOf(category("Frontend")).querySelector("img")
+    expect(classesOf(icon)).toContain("w-auto")
+    expect(classesOf(icon).some((c) => /^h-(5|6)$/.test(c))).toBe(true)
+  })
+
+  it("lays the chips in a row that wraps, with one gap between them", () => {
+    show()
+    fireEvent.click(category("Frontend"))
+    expect(hasAll(chipsOf(category("Frontend")), "flex flex-wrap")).toBe(true)
+    expect(classesOf(chipsOf(category("Frontend"))).some((c) => /^gap-\d+$/.test(c))).toBe(true)
+  })
+
+  it("shows a technology with no isotype by its name alone", () => {
+    show()
+    fireEvent.click(category("Legado"))
+    expect(chipNames(category("Legado"))).toEqual(["Cobol"])
+    expect(panelOf(category("Legado")).querySelector("img")).toBeNull()
+  })
+
+  it("never makes a technology a control, nor gives it a hover hint: the categories are the only buttons", () => {
+    show()
+    for (const name of ["Frontend", "Legado", "Testing"]) fireEvent.click(category(name))
+    expect(within(aside()).getAllByRole("button").map((b) => b.textContent)).toEqual(["Frontend", "Legado", "Testing"])
+    for (const list of stacks()) expect(list.querySelector("[data-cursor-label]")).toBeNull()
+  })
+
+  it("closes a category again, its chips kept so the close can animate", () => {
+    show()
+    const frontend = category("Frontend")
+    fireEvent.click(frontend)
+    fireEvent.click(frontend)
+    expect(frontend.getAttribute("aria-expanded")).toBe("false")
+    expect(panelOf(frontend).getAttribute("data-open")).toBe("false")
+    expect(panelOf(frontend).querySelectorAll("img")).toHaveLength(2)
   })
 
   it("lets several stay open at once", () => {
     show()
-    fireEvent.click(item("Next.js 16"))
-    fireEvent.click(item("React 19"))
-    expect(item("Next.js 16").getAttribute("aria-expanded")).toBe("true")
-    expect(item("React 19").getAttribute("aria-expanded")).toBe("true")
+    fireEvent.click(category("Frontend"))
+    fireEvent.click(category("Testing"))
+    expect(category("Frontend").getAttribute("aria-expanded")).toBe("true")
+    expect(category("Testing").getAttribute("aria-expanded")).toBe("true")
   })
 
-  it("shows a name with no isotype as plain text, never as a control", () => {
+  it("keeps the phone's copy of the stack in step, with ids of its own", () => {
     show()
-    expect(screen.queryByRole("button", { name: "Cobol" })).toBeNull()
-    expect(within(aside()).getByText("Cobol").closest("button")).toBeNull()
-  })
-
-  it("keeps the phone's copy of the list in step, with ids of its own", () => {
-    show()
-    fireEvent.click(item("React 19"))
-    const phone = within(stacks()[1]!).getByRole("button", { name: "React 19" })
+    fireEvent.click(category("Testing"))
+    const phone = within(stacks()[1]!).getByRole("button", { name: "Testing" })
     expect(phone.getAttribute("aria-expanded")).toBe("true")
+    expect(chipNames(phone)).toEqual(["Vitest"])
     const ids = [...document.querySelectorAll("[id]")].map((el) => el.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
@@ -196,7 +249,7 @@ describe("CaseStudy on a phone", () => {
   })
 })
 
-describe("the isotype's reveal", () => {
+describe("a category's reveal", () => {
   const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8")
   /** The body of every `@media (prefers-reduced-motion: reduce)` block, nested braces included. */
   const reducedBlocks = () => {

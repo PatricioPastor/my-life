@@ -6,18 +6,11 @@ role: Proyecto IoT · diseño y desarrollo
 period: "2026"
 summary: Monitor de UPS para electrodependientes.
 stack:
-  - Next.js 16
-  - React 19
-  - TypeScript
-  - Tailwind CSS 4
-  - Prisma 7
-  - Neon Postgres
-  - Better Auth
-  - Zod 4
-  - Vitest
-  - Testing Library
-  - GitHub Actions
-  - Vercel
+  Frontend: [Next.js 16, React 19, TypeScript, Tailwind CSS 4]
+  Backend: [Prisma 7, Neon Postgres]
+  Dependencias: [Better Auth, Zod 4]
+  Testing: [Vitest, Testing Library]
+  Infraestructura: [GitHub Actions, Vercel]
 order: 1
 logo: /projects/voltaicco/logo.svg
 mark: /projects/voltaicco/mark.svg
@@ -33,7 +26,11 @@ mark: /projects/voltaicco/mark.svg
     role:     qué clase de proyecto es y qué hice, en pocas palabras (se muestra junto al período)
     period:   cuándo, como se lee ("2026", "2024–2026")
     summary:  una oración sobre el proyecto
-    stack:    las herramientas principales, una por línea, con un guion delante
+    stack:    las herramientas principales, agrupadas por categoría. Cada categoría va en su propia línea, con
+              dos espacios delante, su nombre, dos puntos y sus herramientas entre corchetes, separadas por comas:
+                Frontend: [Next.js 16, React 19]
+              Las categorías se muestran en el orden en que están escritas, y las herramientas también. Una
+              herramienta va una sola vez en todo el stack. El nombre de una categoría no puede ser solo un número.
     order:    el lugar en la lista de Proyectos (1 va primero)
 
   Estos dos son opcionales; sin ellos, el nombre se muestra como texto:

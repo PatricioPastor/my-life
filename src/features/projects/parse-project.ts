@@ -1,4 +1,5 @@
 import { frontmatterError, parseContent, StoryParseError, type Block, type StoryMeta } from "@/shared/content"
+import type { StackGroup } from "./tech"
 
 /** A case study's structured fields, from its frontmatter; title and updated are a story's. */
 export interface ProjectMeta extends StoryMeta {
@@ -10,8 +11,8 @@ export interface ProjectMeta extends StoryMeta {
   period: string
   /** One sentence about the project. */
   summary: string
-  /** The main tools, in the order they read best. */
-  stack: string[]
+  /** The main tools by category, categories and tools in the order they read best; a tool appears once. */
+  stack: StackGroup<string>[]
   /** Place in the Proyectos list, lowest first. */
   order: number
   /** The full logo, mark and name, heading the case study in place of its title: a site path to an SVG in public/projects. */
@@ -58,6 +59,42 @@ function svgPath(fields: Readonly<Record<string, unknown>>, name: "logo" | "mark
   return { [name]: value }
 }
 
+const STACK_SHAPE = "one category per line, each with its list of names, e.g. Frontend: [Next.js, React]"
+
+// The YAML reads the categories into an object, which keeps the order written except for a name that is a whole
+// number: that one would be listed first. Such a name is refused rather than moved.
+const WHOLE_NUMBER = /^\d+$/
+
+/**
+ * The stack: a map of categories, in the order written, each a non-empty list of names. A category and a name each
+ * appear once, a name across the whole stack.
+ */
+function stackGroups(value: unknown): StackGroup<string>[] {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length === 0) {
+    throw invalid(`"stack" is required and must be ${STACK_SHAPE}.`)
+  }
+  const categoryOf = new Map<string, string>()
+  const groups: StackGroup<string>[] = []
+  for (const [key, items] of Object.entries(value)) {
+    const name = key.trim()
+    if (name === "") throw invalid(`"stack" has a category with no name; it must be ${STACK_SHAPE}.`)
+    if (WHOLE_NUMBER.test(name)) throw invalid(`"stack": a category's name cannot be a number alone, got ${JSON.stringify(name)}.`)
+    if (groups.some((g) => g.name === name)) throw invalid(`"stack" lists the category ${JSON.stringify(name)} twice.`)
+    if (!Array.isArray(items) || items.length === 0 || !items.every((s) => typeof s === "string" && s.trim() !== "")) {
+      throw invalid(`"stack": the category ${JSON.stringify(name)} must be a non-empty list of names, e.g. [Next.js, React].`)
+    }
+    const names = items.map((s: string) => s.trim())
+    for (const tech of names) {
+      const first = categoryOf.get(tech)
+      if (first === name) throw invalid(`"stack" lists ${JSON.stringify(tech)} twice in ${JSON.stringify(name)}.`)
+      if (first !== undefined) throw invalid(`"stack" lists ${JSON.stringify(tech)} in both ${JSON.stringify(first)} and ${JSON.stringify(name)}.`)
+      categoryOf.set(tech, name)
+    }
+    groups.push({ name, items: names })
+  }
+  return groups
+}
+
 /**
  * Parse a project file: a story (title, updated, the subset's blocks) whose frontmatter also carries the project's fields.
  * A missing or malformed field, or an empty body, throws a {@link StoryParseError} that fails the build, like a story.
@@ -74,10 +111,8 @@ export function parseProject(markdown: string): Project {
   const period = Number.isInteger(fields.period) ? String(fields.period) : text(fields, "period")
   const summary = text(fields, "summary")
 
-  const { stack, order } = fields
-  if (!Array.isArray(stack) || stack.length === 0 || !stack.every((s) => typeof s === "string" && s.trim() !== "")) {
-    throw invalid('"stack" is required and must be a list of names, e.g. [Next.js, React].')
-  }
+  const stack = stackGroups(fields.stack)
+  const { order } = fields
   if (typeof order !== "number" || !Number.isInteger(order)) {
     throw invalid(`"order" is required and must be a whole number, got ${JSON.stringify(order)}.`)
   }
@@ -88,7 +123,7 @@ export function parseProject(markdown: string): Project {
   }
 
   return {
-    meta: { ...meta, slug, role, period, summary, stack: stack.map((s: string) => s.trim()), order, ...pictures },
+    meta: { ...meta, slug, role, period, summary, stack, order, ...pictures },
     blocks,
   }
 }
