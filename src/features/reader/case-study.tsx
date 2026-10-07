@@ -3,7 +3,7 @@
 import { useId, useState } from "react"
 import type { Block } from "@/shared/content"
 import { cn } from "@/shared/lib/utils"
-import { GRID, GRID_ASIDE, GRID_CONTENT, GridGuides } from "@/shared/ui/grid"
+import { GRID, GRID_ASIDE, GRID_CONTENT } from "@/shared/ui/grid"
 import { PageBlock } from "./page-block"
 
 /** One technology of the stack: its name, and its official isotype (a site path) when there is one. */
@@ -42,12 +42,8 @@ export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) 
 
   return (
     <div className="absolute inset-0 overflow-y-auto overscroll-contain">
-      {/* One cell holds the guides and the text, so the guides span the panel's own width (a scrollbar's width less)
-          and line up with the text exactly; they stay put while the text scrolls. */}
+      {/* One cell holds the text and, on a phone, the fade under the way back that it scrolls beneath. */}
       <div className="grid min-h-full">
-        <div className="pointer-events-none sticky top-0 h-svh self-start [grid-area:1/1]">
-          <GridGuides />
-        </div>
         <article
           aria-labelledby={titleId}
           className={cn(
@@ -89,7 +85,7 @@ export function CaseStudy({ meta, title, logo, stack, blocks }: CaseStudyProps) 
           >
             {blocks.map((block, i) =>
               block.type === "break" ? (
-                // A section ends: space, and a hairline as faint as the guides, across the text's measure.
+                // A section ends: space, and a faint hairline across the text's measure.
                 <hr key={i} className="my-5 h-px border-0 bg-ink-faint/40" />
               ) : (
                 <PageBlock key={i} block={block} />

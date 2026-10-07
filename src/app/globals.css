@@ -181,9 +181,9 @@
 
   /*
    * The place grid (src/shared/ui/grid): six equal columns from md, with --grid-gap between them. Its first column
-   * starts on the back chevron's ink, the axis a title under the bar hangs from, so a place's label, its content and
-   * its guides share one left edge; the right inset mirrors it against its own notch. Built on the bar's tokens, it
-   * follows them to a desktop.
+   * starts on the back chevron's ink, the axis a title under the bar hangs from, so a place's label and its content
+   * share one left edge; the right inset mirrors it against its own notch. Built on the bar's tokens, it follows them
+   * to a desktop. It is never drawn.
    */
   --grid-left: calc(var(--bar-left) + var(--bar-pad) + var(--bar-ink));
   --grid-right: calc(var(--bar-right) + var(--bar-pad) + var(--bar-ink));

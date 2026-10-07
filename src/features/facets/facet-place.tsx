@@ -4,7 +4,7 @@ import { useId, useRef } from "react"
 import { useReducedMotion } from "@/features/onboarding/reader/use-reduced-motion"
 import { STAR_HEX } from "@/shared/lib/palette"
 import { cn } from "@/shared/lib/utils"
-import { GRID, GRID_ASIDE, GRID_CONTENT, GRID_X, GridGuides } from "@/shared/ui/grid"
+import { GRID, GRID_ASIDE, GRID_CONTENT, GRID_X } from "@/shared/ui/grid"
 import { TITLE_LABEL, usePlaceTitle } from "@/shared/ui/place-title"
 import type { Facet, FacetEntry } from "./content"
 
@@ -24,9 +24,9 @@ const TITLE_HERO =
 const LIST = `absolute ${GRID_X} top-[calc(108px+env(safe-area-inset-top))] m-0 flex list-none flex-col gap-1 p-0 md:top-[132px] [@media(max-height:520px)]:top-[112px]`
 
 /**
- * A facet's place: its entries on the six-column grid, with the grid's guides drawn faintly behind them, and its name
- * as the place's title: large on arrival, in the facet's pixel face and star color, then the small label under the
- * way back (the same motion as "Recuerdos").
+ * A facet's place: its entries on the six-column grid (a reference they line up on, never drawn), and its name as the
+ * place's title: large on arrival, in the facet's pixel face and star color, then the small label under the way back
+ * (the same motion as "Recuerdos").
  */
 export function FacetPlace({ facet, onOpenEntry }: FacetPlaceProps) {
   const reduced = useReducedMotion()
@@ -35,7 +35,6 @@ export function FacetPlace({ facet, onOpenEntry }: FacetPlaceProps) {
   const id = useId()
   return (
     <>
-      <GridGuides />
       <h1
         ref={titleRef}
         data-title={title.mode}

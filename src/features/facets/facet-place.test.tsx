@@ -108,11 +108,13 @@ describe("FacetPlace title's animate stub", () => {
 })
 
 describe("FacetPlace grid", () => {
-  it("draws the grid's guides as decoration", () => {
+  it("draws no guides: the grid is an invisible reference the rows line up on", () => {
     const { container } = show()
-    const guides = container.querySelector("[aria-hidden='true']")
-    expect(hasAll(guides, `${GRID} ${GRID_X}`)).toBe(true)
-    expect(guides?.children).toHaveLength(6)
+    // What the guides were: decoration hidden from assistive tech, a copy of the grid with a hairline on each column edge.
+    const guides = [...container.querySelectorAll("[aria-hidden='true'], [aria-hidden='true'] *")].filter(
+      (el) => hasAll(el, GRID) || classesOf(el).includes("border-l"),
+    )
+    expect(guides).toEqual([])
   })
 
   it("lays the list between the grid's insets: the rows start on the axis the small title hangs from", () => {

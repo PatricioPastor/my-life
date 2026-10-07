@@ -1,9 +1,9 @@
 /**
- * The place grid: six equal columns from md, as a reference to place things on rather than cells to fill. Its first
- * column starts on the ink of the way back's chevron, the axis a place's label hangs from (BAR_TITLE), so the label,
- * the content and the guides share one left edge; the right inset mirrors it. On a phone it is a single column on
- * that same axis. Every distance is a token in globals.css (`--grid-*`); each is a full Tailwind class, spelled out so
- * the compiler sees it.
+ * The place grid: six equal columns from md, as a reference to place things on rather than cells to fill. It is never
+ * drawn: only what lines up on it shows it. Its first column starts on the ink of the way back's chevron, the axis a
+ * place's label hangs from (BAR_TITLE), so the label and the content share one left edge; the right inset mirrors it.
+ * On a phone it is a single column on that same axis. Every distance is a token in globals.css (`--grid-*`); each is a
+ * full Tailwind class, spelled out so the compiler sees it.
  */
 
 /** One column on a phone, six equal ones from md, with the shared gutter. */
