@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 
 import { loadProjects } from "./load-projects"
+import { svgHazards } from "./svg-guard"
 
 const projects = loadProjects()
 
@@ -29,6 +30,7 @@ describe("the case studies' logos and marks", () => {
   it.each(pictures)("ships $path as a clean vector: a viewBox, no Figma ids or styles, nothing that runs", ({ file }) => {
     const svg = readFileSync(file, "utf8")
     expect(svg).toMatch(/<svg[^>]*\sviewBox="[^"]+"/)
-    expect(svg).not.toMatch(/preserveAspectRatio|\sid=|\sstyle=|<script|<foreignObject|\son\w+=|javascript:/i)
+    expect(svg).not.toMatch(/preserveAspectRatio|\sid=|\sstyle=/i)
+    expect(svgHazards(svg)).toEqual([])
   })
 })
