@@ -196,13 +196,32 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - **Image #6:** the hover/focus bracket frame around the "INFRAESTRUCTURA" stack category spans the whole aside column. The user's words: "No me gusta que ocupe todo el ancho, siendo que es mas chico el texto. Me parece impreciso."
   - **Image #7:** the Proyectos list row puts the meta on guide 1, the logo on guide 3 and the summary on guide 5, near the right edge. The user crossed out the meta and wrote: "Considero que la visualización así, lo deja MUY desequilibrado".
   - **The user's choice:** "Logo y resumen en línea". Drop the meta from the list. One line from the column-1 axis: logo, a fixed gap, then the summary. Across rows, the summaries start at the same x.
-- [ ] **T9 — Balanced list row.**
+- [x] **T9 — Balanced list row.** Done in `1009be5`.
   - Remove the meta from the list row. It still shows in the case study.
   - Put the logo and the summary on one line, starting at the column-1 axis, with a fixed gap.
   - The list is a `max-content 1fr` grid, so every summary starts at the same x.
   - The hover and focus frame hugs the row's content.
   - Phones stack the logo above the summary.
   - Route: delegated (writer G).
-- [ ] **T10 — Precise interactive boxes in the case study.**
+- [x] **T10 — Precise interactive boxes in the case study.** Done in `39ba7ab`.
   - Stack category buttons, index entries and any other control with the bracket frame size to their content, using padding for the hit area instead of full width.
   - Route: delegated (writer G).
+- 2026-10-07, **T10 done** in `39ba7ab` (`fix(reader): size case-study controls to their content`). Writer G.
+  - **Change:** stack category buttons and index entries now size to their content (`w-fit`). Categories keep `min-h-9` and index entries `min-h-8`, and the text stays on the axis. Section headings also use `w-fit`, so the focus ring after a jump hugs the words.
+  - **Measured:** the "Infraestructura" frame went from about 585px to 149px.
+- 2026-10-07, **T9 done** in `1009be5` (`fix(facets): put the project logo and summary on one balanced line`).
+  - **Change:** the meta and its `aria-describedby` are gone from the row. From md up, the list is a subgrid with columns `max-content minmax(0,max-content)`, which `1fr` would have stretched to full width.
+  - **Layout:**
+    - The summary starts after a 2rem gap and is baseline-aligned with the logo.
+    - Summaries align across rows. Checked with cloned rows: every summary starts at x 340.7, and a title-only row stays in column 1.
+    - On phones the logo sits above the summary.
+  - **Measured:** the frame went from 1,350px to 563px. The title, logo and frame share the same axis (x about 51).
+- **Checks:**
+  - `pnpm test`: 3,657 passing plus 1 expected fail.
+  - typecheck, lint and build: exit 0.
+  - Parent spot check: typecheck exit 0.
+- **Visual check:** shots in scratchpad `shots-balance/`. The parent viewed the list row hover at 1440 and the category hover: both frames hug their content.
+- **Caveats:**
+  - Each row's frame is as wide as the widest row.
+  - A future logo with a descender would sit the baseline-aligned summary low.
+  - Firefox may not apply a subgrid inside a `<button>`. If not, the row falls back to a single line without cross-row alignment.
