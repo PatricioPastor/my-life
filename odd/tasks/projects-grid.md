@@ -133,3 +133,6 @@ About 1,100 authored changed lines: T1 ~40, T2 ~150, T3 ~350, T4 ~450, T5 ~150 (
     - `typecheck`, `lint` and `build`: exit 0.
     - Parent spot check: facets, shared UI and mobile layout passed 78 of 78.
   - **Visual check by the writer** (headless Edge over CDP, at 1280, 1440 and 1920 wide, plus 390, 360 and 844×390): alignment measured exactly on the guides, and there is no horizontal overflow.
+- 2026-10-07, **RDD for T1–T3.** Assessed medium (`slice_budget_reached`, 1,118 lines). Consent granted, one lens (reliability).
+  - Lineage `review-9d9c8ebd6c3ef385` over `58444bf..9380904`: **approved and acknowledged**, authority burned. The reviewed boundary is now `9380904`.
+  - Advisory `R3-001` (suggestion): the `facet-place.test.tsx` FLIP tests stub `HTMLElement.prototype.animate` and remove it only at the end of each test, so a failing assertion leaks the stub into later tests. Folded into T4.
