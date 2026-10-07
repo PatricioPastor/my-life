@@ -15,6 +15,12 @@ export const PANEL_ATTRIBUTE = "data-case-panel"
 const panelOf = (el: Element | null) => el?.closest<HTMLElement>(`[${PANEL_ATTRIBUTE}]`) ?? null
 
 /**
+ * A section's heading, looked for within its own panel, never the whole document: the ids are readable slugs, so
+ * another case study on the page at the same time may use the same ones.
+ */
+const headingIn = (panel: HTMLElement, id: string) => panel.querySelector<HTMLElement>(`#${CSS.escape(id)}`)
+
+/**
  * The index of a case study's sections, held beside the text as it scrolls. Each entry jumps to its section: the panel
  * scrolls to it (at once under reduced motion), its heading landing under the bar, and focus moves to that heading
  * without a second scroll. The section being read is marked (`aria-current="location"`): the last whose heading has risen
@@ -35,7 +41,7 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
     const root = panelOf(nav.current)
     if (!root || typeof IntersectionObserver === "undefined") return
     const order = ids.split(" ")
-    const headings = order.map((id) => document.getElementById(id)).filter((h): h is HTMLElement => h !== null)
+    const headings = order.map((id) => headingIn(root, id)).filter((h): h is HTMLElement => h !== null)
     const risen = new Set<string>()
     let atEnd = false
     const update = () => {
@@ -45,11 +51,17 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
     // The watched area is everything above the line, however far: a heading in it has risen past the line. A heading
     // that leaps past it in one jump (a key, a dragged scrollbar, a jump at once) still crosses that area's edge, where
     // one watched only below the line would see it go from out of view to out of view, and never report it. The line
-    // is measured from the panel's top, so the area is rebuilt when the panel changes height.
+    // is measured from the panel's top, so the area is rebuilt when the panel changes size, whether the window resized
+    // or only the panel did (a ResizeObserver on it, where there is one, besides the window's resize), and only when
+    // the line has moved.
     let observer: IntersectionObserver | null = null
+    let margin = ""
     const watch = () => {
-      observer?.disconnect()
       const line = (headings[0] ? parseFloat(getComputedStyle(headings[0]).scrollMarginTop) || 0 : 0) + LINE
+      const next = `${ABOVE}px 0px ${Math.round(line - root.clientHeight)}px 0px`
+      if (observer && next === margin) return
+      observer?.disconnect()
+      margin = next
       observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -58,11 +70,13 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
           }
           update()
         },
-        { root, rootMargin: `${ABOVE}px 0px ${Math.round(line - root.clientHeight)}px 0px` },
+        { root, rootMargin: margin },
       )
       for (const heading of headings) observer.observe(heading)
     }
     watch()
+    const resizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(watch)
+    resizes?.observe(root)
     const onScroll = () => {
       const end = root.scrollHeight > root.clientHeight && root.scrollTop + root.clientHeight >= root.scrollHeight - 2
       if (end === atEnd) return
@@ -81,6 +95,7 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
     window.addEventListener("resize", watch)
     return () => {
       observer?.disconnect()
+      resizes?.disconnect()
       root.removeEventListener("scroll", onScroll)
       for (const type of takeovers) root.removeEventListener(type, release)
       window.removeEventListener("resize", watch)
@@ -89,7 +104,7 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
 
   const jump = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
     const root = panelOf(nav.current)
-    const heading = document.getElementById(id)
+    const heading = root && headingIn(root, id)
     if (!root || !heading) return
     event.preventDefault()
     const margin = parseFloat(getComputedStyle(heading).scrollMarginTop) || 0

@@ -13,6 +13,11 @@ import { useHeadlineProgress } from "./use-headline-progress"
 
 /** The bar's backdrop: the place's void, ending in a short fade, so what scrolls beneath it fades out instead of being cut. */
 const BACKDROP = "bg-[linear-gradient(to_bottom,var(--void)_calc(100%_-_1rem),transparent)]"
+/**
+ * The compact line's backdrop, deeper: solid for a line of the text under it (2rem, more than its 28.8px), then a fade
+ * of 24px, so the line of text just beneath the compact one is gone, never left legible against it.
+ */
+const BAND = "bg-[linear-gradient(to_bottom,var(--void)_calc(100%_-_1.5rem),transparent)]"
 
 interface CaseStudyProps {
   meta: string
@@ -56,13 +61,14 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
 
   return (
     // --case-top: where the content starts, right under the way back's row; the compact line holds there too.
-    // --case-anchor: where a section's heading lands after a jump, and where the index holds: under the compact line.
+    // --case-anchor: where the index holds, under the compact line.
+    // --case-land: where a section's heading lands after a jump, just clear of the compact line's backdrop (5.5rem).
     // Isolated, so the bar over the text stays under the way back, which is drawn above the panel. Its scrollbar's room
     // is always kept, so the grid never shifts when the text is short enough not to scroll.
     <div
       ref={panel}
       {...{ [PANEL_ATTRIBUTE]: "" }}
-      className="absolute inset-0 isolate overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [--case-anchor:calc(var(--case-top)+2rem+var(--space-3))] [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]"
+      className="absolute inset-0 isolate overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [--case-anchor:calc(var(--case-top)+2rem+var(--space-3))] [--case-land:calc(var(--case-top)+6rem)] [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]"
     >
       <NarrativeFont />
       {/* One cell holds the text and the bar it scrolls beneath. */}
@@ -110,12 +116,12 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
                 </h2>
               )}
               {/* The text scrolls with the panel; focusable and named, so the keyboard can scroll it too. A jump from the
-                  index lands a section's heading under the bar, and focuses it. */}
+                  index lands a section's heading under the bar, clear of its backdrop, and focuses it. */}
               <div
                 role="region"
                 aria-labelledby={titleId}
                 tabIndex={0}
-                className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1 [&>h2]:scroll-mt-(--case-anchor) [&>h2]:focus-visible:outline-1 [&>h2]:focus-visible:outline-offset-8 [&>h2]:focus-visible:outline-ink-faint"
+                className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1 [&>h2]:scroll-mt-(--case-land) [&>h2]:focus-visible:outline-1 [&>h2]:focus-visible:outline-offset-8 [&>h2]:focus-visible:outline-ink-faint"
               >
                 {blocks.map((block, i) =>
                   block.type === "break" ? (
@@ -137,7 +143,9 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
         {/* The bar the text scrolls beneath, held at the top of the panel. The way back's row is always covered, across
             the panel, the text fading out just above where it starts, so it never shows under the label. In the content
             zone (the whole column on a phone), the headline's compact line comes in under that row, on a backdrop that
-            reaches up over it, so nothing shows between the two. */}
+            reaches up over it, so nothing shows between the two. Over the text it reaches further down, solid for a
+            line of the text and then a short fade, so no text is legible right under the compact line; from xl that
+            deeper part stops at the text's column, leaving the index's as it was. */}
         <div className="pointer-events-none sticky top-0 z-10 h-0 self-start [grid-area:1/1]">
           <div className={cn(BACKDROP, "absolute inset-x-0 top-0 h-(--case-top)")} />
           {summary && (
@@ -147,6 +155,12 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
                   className={cn(
                     BACKDROP,
                     "case-bar absolute top-0 right-[calc(var(--grid-right)*-1)] left-[calc(var(--grid-left)*-1)] h-[calc(var(--case-top)+3rem)] md:left-[calc(var(--grid-gap)*-1)]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    BAND,
+                    "case-bar absolute top-0 right-[calc(var(--grid-right)*-1)] left-[calc(var(--grid-left)*-1)] h-[calc(var(--case-top)+5.5rem)] md:left-[calc(var(--grid-gap)*-1)] xl:right-[calc((100%-3*var(--grid-gap))/4+var(--grid-gap))]",
                   )}
                 />
                 {/* The headline's words again: decoration, since the headline stays the heading. */}

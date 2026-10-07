@@ -55,8 +55,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${doto.variable} ${silkscreen.variable} ${spectral.variable} dark h-full antialiased`}
     >
       <head>
-        {/* Gambarino's stylesheet is injected by the onboarding, off the critical path. */}
-        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
+        {/* Gambarino's stylesheet is injected by the onboarding, off the critical path. A stylesheet link is a no-CORS
+            request, so its host's connection is opened plain (one opened for CORS would go unused); the font files are
+            always fetched with CORS, so theirs is opened for it. */}
+        <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="anonymous" />
       </head>
       <body className="h-full">

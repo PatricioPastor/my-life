@@ -227,6 +227,51 @@ describe("CaseStudy headline", () => {
     expect(classesOf(cap!).some((c) => c.includes("var(--void)"))).toBe(true)
   })
 
+  describe("the backdrop under its compact line", () => {
+    /** The first capture of `pattern` among an element's classes, as a number. */
+    const valueOf = (el: Element | null, pattern: RegExp) => Number(classesOf(el).map((c) => pattern.exec(c)?.[1]).find(Boolean))
+    /** The layers of the backdrop the compact line sits on, in the content zone (the whole column on a phone). */
+    const layers = () => [...compactLine().parentElement!.querySelectorAll(".case-bar")]
+    /** How far a layer reaches below --case-top, in rem. */
+    const depthOf = (layer: Element) => valueOf(layer, /^h-\[calc\(var\(--case-top\)\+([\d.]+)rem\)\]$/)
+    /** The layer reaching furthest down: the one over the text. */
+    const band = () => layers().reduce((a, b) => (depthOf(b) > depthOf(a) ? b : a))
+    const depth = () => depthOf(band())
+    /** How long its fade to nothing is, at its foot, in rem. */
+    const fade = () => valueOf(band(), /calc\(100%_-_([\d.]+)rem\)/)
+
+    it("hides the text scrolling under the compact line: solid for a body line beneath it, then a short fade", () => {
+      show(LOGO, SUMMARY)
+      const line = valueOf(compactLine(), /^h-(\d+)$/) / 4
+      // The text's largest size (a desktop's) at its leading, in rem: the height of one of its lines.
+      const sizes = classesOf(body()).map((c) => /^(?:md:)?text-\[(\d+)px\]$/.exec(c)?.[1]).filter(Boolean).map(Number)
+      const bodyLine = (Math.max(...sizes) * valueOf(body(), /^leading-\[([\d.]+)\]$/)) / 16
+      expect(depth() - line - fade()).toBeGreaterThanOrEqual(bodyLine)
+      expect(fade() * 16).toBeGreaterThanOrEqual(24)
+      expect(fade() * 16).toBeLessThanOrEqual(32)
+    })
+
+    it("lands a section's heading after a jump clear of it, on the text's own anchor", () => {
+      show(LOGO, SUMMARY)
+      expect(classesOf(body())).toContain("[&>h2]:scroll-mt-(--case-land)")
+      expect(valueOf(panel(), /^\[--case-land:calc\(var\(--case-top\)\+([\d.]+)rem\)\]$/)).toBeGreaterThan(depth())
+    })
+
+    // The index is drawn in the text's layer, under the bar: a backdrop over its column would hide it.
+    it("leaves the index where it holds: from xl, what reaches down to it stops at the text's column", () => {
+      render(<CaseStudy meta="m" title="Consola de prueba" summary={SUMMARY} stack={STACK} blocks={[{ type: "subheading", text: "Uno" }]} />)
+      const index = screen.getByRole("navigation", { name: "Índice" })
+      expect(hasAll(index, "xl:top-(--case-anchor) xl:col-start-4")).toBe(true)
+      // Where the index holds, below --case-top: the compact line's 2rem, then --space-3 (24px).
+      const anchor = 2 + 24 / 16
+      const deep = layers().filter((layer) => depthOf(layer) > anchor)
+      expect(deep).toContain(band())
+      // Its right edge, from xl, one column and one gap in from the content zone's: the index's.
+      for (const layer of deep) expect(classesOf(layer)).toContain("xl:right-[calc((100%-3*var(--grid-gap))/4+var(--grid-gap))]")
+      expect(layers().some((layer) => depthOf(layer) <= anchor && !classesOf(layer).some((c) => c.startsWith("xl:right-")))).toBe(true)
+    })
+  })
+
   describe("its motion", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8")
     const rule = (name: string) => new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? ""
@@ -304,9 +349,29 @@ describe("CaseStudy index", () => {
     }
   }
 
+  /** A stand-in for the browser's resize observer: it records what is watched, and a test says when that changed size. */
+  class FakeResizeObserver {
+    static last: FakeResizeObserver | undefined
+    observed: Element[] = []
+    constructor(readonly callback: ResizeObserverCallback) {
+      FakeResizeObserver.last = this
+    }
+    observe(el: Element) {
+      this.observed.push(el)
+    }
+    unobserve() {}
+    disconnect() {
+      this.observed = []
+    }
+    resize() {
+      act(() => this.callback([], this as unknown as ResizeObserver))
+    }
+  }
+
   let reduced = false
   beforeEach(() => {
     reduced = false
+    FakeResizeObserver.last = undefined
     vi.stubGlobal("IntersectionObserver", FakeObserver)
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: reduced && query.includes("prefers-reduced-motion"),
@@ -374,6 +439,38 @@ describe("CaseStudy index", () => {
     const [top, , bottom] = (FakeObserver.last.options?.rootMargin ?? "").split(" ").map((m) => parseFloat(m))
     expect(top).toBeGreaterThanOrEqual(10000)
     expect(bottom).toBeLessThanOrEqual(48)
+  })
+
+  it("moves that line with the panel when the panel alone changes size, and stops watching it once gone", () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    const { unmount } = showSections()
+    const bottom = () => parseFloat((FakeObserver.last.options?.rootMargin ?? "").split(" ")[2]!)
+    const resizes = FakeResizeObserver.last!
+    expect(resizes.observed).toEqual([panel()])
+    Object.defineProperty(panel(), "clientHeight", { configurable: true, value: 900 })
+    resizes.resize()
+    expect(bottom()).toBe(48 - 900)
+    Object.defineProperty(panel(), "clientHeight", { configurable: true, value: 600 })
+    resizes.resize()
+    expect(bottom()).toBe(48 - 600)
+    expect(FakeObserver.last.observed.map((el) => el.id)).toEqual(IDS)
+    unmount()
+    expect(resizes.observed).toEqual([])
+  })
+
+  it("finds its headings within its own panel, though another case study on the page uses the same ids", () => {
+    showSections()
+    showSections()
+    const [, second] = screen.getAllByRole("region", { name: "Consola de prueba" }).map((r) => r.closest<HTMLElement>(`[class~="overflow-y-auto"]`)!)
+    // The second index watches the second panel's headings, never the first's.
+    expect(FakeObserver.last.options?.root).toBe(second)
+    expect(FakeObserver.last.observed.map((h) => second!.contains(h))).toEqual([true, true, true])
+    // A jump from the second index lands in the second panel.
+    second!.scrollTo = vi.fn()
+    const [, nav] = screen.getAllByRole("navigation", { name: "Índice" })
+    fireEvent.click(within(nav!).getAllByRole("link")[1]!)
+    expect(second!.scrollTo).toHaveBeenCalled()
+    expect(document.activeElement).toBe(within(second!).getByRole("heading", { level: 2, name: "Dónde está hoy" }))
   })
 
   it("marks nothing while the intro is read, before the first section", () => {
