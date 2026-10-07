@@ -252,6 +252,53 @@
   }
 }
 
+/*
+ * Scrollbars, site-wide: quiet and square, like the chips and the hairlines. A narrow track with nothing on it, and a
+ * square thumb in the ink's faint token (read where each scrollbar is, so it follows the sky's ink; the portal's ink
+ * elsewhere), mixed thinner at rest and full under the pointer or while dragged. A base style, so a component can still
+ * set or hide its own.
+ * Chromium and Safari draw them from the ::-webkit-scrollbar pseudo-elements, the only way to a square thumb there.
+ * Setting scrollbar-width or scrollbar-color switches those off in Chromium (from 121), so the standard properties are
+ * only set where the pseudo-elements do not exist (Firefox), which cannot square or brighten the thumb, only thin and
+ * tint it. Forced colors keep the system's own.
+ */
+@layer base {
+  :root {
+    --scrollbar-size: 6px;
+  }
+  @media (forced-colors: none) {
+    ::-webkit-scrollbar {
+      width: var(--scrollbar-size);
+      height: var(--scrollbar-size);
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    /* A 1px clear edge on each side: a 4px bar, square, off the screen's edge. */
+    ::-webkit-scrollbar-thumb {
+      border: 1px solid transparent;
+      border-radius: 0;
+      background-clip: padding-box;
+      background-color: color-mix(in oklab, var(--ink-faint, rgba(246, 226, 232, 0.24)) 60%, transparent);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: var(--ink-faint, rgba(246, 226, 232, 0.24));
+    }
+    ::-webkit-scrollbar-thumb:active {
+      background-color: var(--ink-faint, rgba(246, 226, 232, 0.24));
+    }
+    @supports not selector(::-webkit-scrollbar) {
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in oklab, var(--ink-faint, rgba(246, 226, 232, 0.24)) 60%, transparent) transparent;
+      }
+    }
+  }
+}
+
 /* Landing motion, ported from the design canvas. Curves and durations are exact. */
 @layer components {
   .ui button {

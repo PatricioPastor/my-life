@@ -114,6 +114,11 @@ describe("CaseStudy text", () => {
     expect(scroller).not.toBeNull()
     expect(scroller?.contains(aside())).toBe(true)
   })
+
+  it("keeps the panel's width whether or not it has a scrollbar, so the grid never shifts", () => {
+    show()
+    expect(classesOf(body().closest(`[class~="overflow-y-auto"]`))).toContain("[scrollbar-gutter:stable]")
+  })
 })
 
 describe("CaseStudy headline", () => {

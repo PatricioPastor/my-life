@@ -57,11 +57,12 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
   return (
     // --case-top: where the content starts, right under the way back's row; the compact line holds there too.
     // --case-anchor: where a section's heading lands after a jump, and where the index holds: under the compact line.
-    // Isolated, so the bar over the text stays under the way back, which is drawn above the panel.
+    // Isolated, so the bar over the text stays under the way back, which is drawn above the panel. Its scrollbar's room
+    // is always kept, so the grid never shifts when the text is short enough not to scroll.
     <div
       ref={panel}
       {...{ [PANEL_ATTRIBUTE]: "" }}
-      className="absolute inset-0 isolate overflow-y-auto overscroll-contain [--case-anchor:calc(var(--case-top)+2rem+var(--space-3))] [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]"
+      className="absolute inset-0 isolate overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [--case-anchor:calc(var(--case-top)+2rem+var(--space-3))] [--case-top:calc(var(--bar-top)+var(--bar-row)+var(--bar-gap))]"
     >
       <NarrativeFont />
       {/* One cell holds the text and the bar it scrolls beneath. */}
