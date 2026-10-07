@@ -225,3 +225,10 @@ About 900 authored changed lines: T1 ~60, T2 ~300, T3 ~30, T4 ~250, T5 ~200, T6 
   - Each row's frame is as wide as the widest row.
   - A future logo with a descender would sit the baseline-aligned summary low.
   - Firefox may not apply a subgrid inside a `<button>`. If not, the row falls back to a single line without cross-row alignment.
+- 2026-10-07, **RDD for T8–T10.**
+  - Assessed medium (`slice_budget_reached`, 548 lines). Consent was granted and one lens (reliability) ran.
+  - Lineage `review-0a8afc528a523922` over `a7ed826..4ed6042`: **approved and acknowledged**, authority burned. The reviewed boundary is now `4ed6042`.
+  - **Advisory follow-ups:**
+    - `R3-font-guard-flags-ignored-local-output` (warning): the filesystem walk skips a fixed list of folders, unlike the old `--exclude-standard`. A font sitting in some other gitignored local folder would fail the test even though it could never be committed.
+    - `R3-spy-margin-dedupe-unproved` (suggestion): no test covers the early return in `watch()` when the margin is unchanged.
+- Next: the user's approval to fast-forward `main` and push.
