@@ -124,12 +124,14 @@ export function SectionIndex({ sections, className }: { sections: readonly Secti
       <ol className="m-0 mt-2 list-none p-0">
         {sections.map((section) => (
           <li key={section.id}>
+            {/* As wide as its title (a long one still wraps at the column), so the cursor's frame hugs the words; its
+                padding and least height keep a hit area 32px tall, the title on the column's axis. */}
             <a
               href={`#${section.id}`}
               aria-current={current === section.id ? "location" : undefined}
               onClick={(event) => jump(event, section.id)}
               data-magnetic="light"
-              className="row relative block py-1.5 font-narrative text-[14px] leading-[1.35] text-ink-muted transition-colors duration-200 ease-out hover:text-ink aria-[current=location]:text-ink"
+              className="row relative block min-h-8 w-fit py-1.5 font-narrative text-[14px] leading-[1.35] text-ink-muted transition-colors duration-200 ease-out hover:text-ink aria-[current=location]:text-ink"
             >
               {/* The list rows' square, in the margin: on hover and focus, and on the current section. */}
               <span aria-hidden="true" className="mark absolute top-[calc(0.375rem+0.675em)] -left-4 size-2 -translate-y-1/2 bg-signal" />

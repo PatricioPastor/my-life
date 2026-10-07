@@ -32,6 +32,8 @@ const show = (logo?: string, summary?: string) =>
 const classesOf = (el: Element | null) => (el?.getAttribute("class") ?? "").split(/\s+/).filter(Boolean)
 const hasAll = (el: Element | null, classes: string) => classes.split(" ").every((c) => classesOf(el).includes(c))
 const follows = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+/** A horizontal padding or margin, at any width: it would move a control's text off the column's axis. */
+const INSET = (c: string) => /^(?:[a-z0-9-]+:)*-?[pm][xlsre]?-/.test(c)
 /** The text, as a named region the keyboard can scroll. */
 const body = () => screen.getByRole("region", { name: "Consola de prueba" })
 /** The two copies of the stack: the left zone's (desktop), then the one after the text (phone). */
@@ -395,6 +397,21 @@ describe("CaseStudy index", () => {
     expect(headings().map((h) => h.textContent)).toEqual(["El problema", "Dónde está hoy", "El problema"])
   })
 
+  it("sizes each entry to its title, so the cursor's frame hugs the words, never the column's width", () => {
+    showSections()
+    for (const entry of entries()) {
+      expect(classesOf(entry)).toContain("w-fit")
+      expect(classesOf(entry).some(INSET)).toBe(false)
+      // Its padding, not its width, gives it a hit area at least 32px tall.
+      expect(hasAll(entry, "min-h-8 py-1.5")).toBe(true)
+    }
+  })
+
+  it("sizes each section's heading to its words too, so the focus a jump leaves there rings the words alone", () => {
+    showSections()
+    expect(classesOf(body())).toContain("[&>h2]:w-fit")
+  })
+
   it("links each entry to its heading, by an id that is readable, unique and the same on every render", () => {
     const { rerender } = showSections()
     expect(headings().map((h) => h.id)).toEqual(IDS)
@@ -666,6 +683,29 @@ describe("CaseStudy stack", () => {
     fireEvent.click(category("Testing"))
     expect(category("Frontend").getAttribute("aria-expanded")).toBe("true")
     expect(category("Testing").getAttribute("aria-expanded")).toBe("true")
+  })
+
+  // The owner's screenshot: the frame around "INFRAESTRUCTURA" spanned the whole left zone, the word a fraction of it.
+  it("sizes each category to its name, so the cursor's frame and the focus ring hug the word, never the zone's width", () => {
+    show()
+    for (const list of stacks()) {
+      for (const button of within(list).getAllByRole("button")) {
+        expect(classesOf(button)).not.toContain("w-full")
+        expect(classesOf(button)).toContain("w-fit")
+      }
+    }
+  })
+
+  it("keeps a category's hit area at least 32px tall, on a phone too, and its name on the column's axis", () => {
+    show()
+    for (const list of stacks()) {
+      for (const button of within(list).getAllByRole("button")) {
+        const height = classesOf(button).map((c) => /^min-h-(\d+)$/.exec(c)?.[1]).find(Boolean)
+        expect(Number(height) * 4).toBeGreaterThanOrEqual(32)
+        expect(classesOf(button).some((c) => /^max-md:min-h-/.test(c))).toBe(false)
+        expect(classesOf(button).some(INSET)).toBe(false)
+      }
+    }
   })
 
   it("keeps the phone's copy of the stack in step, with ids of its own", () => {

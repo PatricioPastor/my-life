@@ -116,12 +116,13 @@ export function CaseStudy({ meta, title, summary, logo, stack, blocks }: CaseStu
                 </h2>
               )}
               {/* The text scrolls with the panel; focusable and named, so the keyboard can scroll it too. A jump from the
-                  index lands a section's heading under the bar, clear of its backdrop, and focuses it. */}
+                  index lands a section's heading under the bar, clear of its backdrop, and focuses it: each heading is as
+                  wide as its words, so the focus ring it then shows hugs them. */}
               <div
                 role="region"
                 aria-labelledby={titleId}
                 tabIndex={0}
-                className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1 [&>h2]:scroll-mt-(--case-land) [&>h2]:focus-visible:outline-1 [&>h2]:focus-visible:outline-offset-8 [&>h2]:focus-visible:outline-ink-faint"
+                className="flex max-w-[66ch] flex-col gap-5 font-narrative text-[17px] leading-[1.6] text-ink focus-visible:outline-1 focus-visible:outline-offset-8 focus-visible:outline-ink-faint md:text-[18px] [@media(max-height:520px)]:text-[16px] [&_strong]:font-semibold [&>h2]:mt-1 [&>h2]:w-fit [&>h2]:scroll-mt-(--case-land) [&>h2]:focus-visible:outline-1 [&>h2]:focus-visible:outline-offset-8 [&>h2]:focus-visible:outline-ink-faint"
               >
                 {blocks.map((block, i) =>
                   block.type === "break" ? (
@@ -223,7 +224,9 @@ interface StackCategoryProps {
 /**
  * A category of the stack: its name, a button that opens its technologies under it as chips, each its isotype (when
  * there is one) and its name. Closed, it is its name alone. The square in the margin (the list rows' mark) shows on
- * hover and focus, and stays while it is open. The name in a chip says what it is, so the isotype is decoration.
+ * hover and focus, and stays while it is open. The name in a chip says what it is, so the isotype is decoration. The
+ * button is as wide as its name, so the cursor's frame and the focus ring hug the word rather than the whole zone; its
+ * height (36px) keeps the hit area, and no side padding moves the word off the column's axis.
  */
 function StackCategory({ group, id, open, mounted, onToggle }: StackCategoryProps) {
   const nameId = `${id}-name`
@@ -237,7 +240,7 @@ function StackCategory({ group, id, open, mounted, onToggle }: StackCategoryProp
         aria-controls={panelId}
         onClick={onToggle}
         data-magnetic="light"
-        className="row press relative flex min-h-9 w-full items-center text-left text-xs tracking-[0.06em] text-ink"
+        className="row press relative flex min-h-9 w-fit items-center text-left text-xs tracking-[0.06em] text-ink"
       >
         <span aria-hidden="true" className="mark absolute top-1/2 -left-4 size-2 -translate-y-1/2 bg-signal" />
         {group.name}
